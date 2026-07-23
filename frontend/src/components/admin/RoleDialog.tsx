@@ -1,0 +1,102 @@
+import { FormEvent, useMemo, useState } from 'react'
+import type { Permission, Role } from '../../types'
+import { Modal } from './Modal'
+
+type RoleFormValue = {
+  name: string
+  code: string
+  description: string
+  permission_codes: string[]
+}
+
+function permissionGroup(code: string) {
+  return code.split('.')[0]
+}
+
+export function RoleDialog({
+  role,
+  permissions,
+  busy,
+  canEdit,
+  onClose,
+  onSubmit,
+}: {
+  role?: Role
+  permissions: Permission[]
+  busy: boolean
+  canEdit: boolean
+  onClose: () => void
+  onSubmit: (value: RoleFormValue) => Promise<void>
+}) {
+  const [value, setValue] = useState<RoleFormValue>({
+    name: role?.name ?? '',
+    code: role?.code ?? '',
+    description: role?.description ?? '',
+    permission_codes: role?.permissions ?? ['dashboard.view'],
+  })
+  const groups = useMemo(() => permissions.reduce<Record<string, Permission[]>>((result, permission) => {
+    const group = permissionGroup(permission.code)
+    result[group] = [...(result[group] ?? []), permission]
+    return result
+  }, {}), [permissions])
+
+  function togglePermission(code: string) {
+    setValue((current) => ({
+      ...current,
+      permission_codes: current.permission_codes.includes(code)
+        ? current.permission_codes.filter((permissionCode) => permissionCode !== code)
+        : [...current.permission_codes, code],
+    }))
+  }
+
+  async function submit(event: FormEvent) {
+    event.preventDefault()
+    await onSubmit(value)
+  }
+
+  return (
+    <Modal title={role ? `Manage ${role.name}` : 'Create custom role'} subtitle="Permissions are always limited to the current company." onClose={onClose}>
+      <form className="admin-form" onSubmit={submit}>
+        <div className="admin-form__grid">
+          <label className="field">
+            <span>Role name</span>
+            <div className="field__control"><input disabled={!canEdit} required minLength={2} value={value.name} onChange={(event) => setValue({ ...value, name: event.target.value })} placeholder="Project Coordinator" /></div>
+          </label>
+          <label className="field">
+            <span>Role code</span>
+            <div className="field__control"><input disabled={Boolean(role) || !canEdit} required pattern="[a-z][a-z0-9_]{1,39}" value={value.code} onChange={(event) => setValue({ ...value, code: event.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_') })} placeholder="project_coordinator" /></div>
+          </label>
+        </div>
+        <label className="field">
+          <span>Description</span>
+          <textarea disabled={!canEdit} value={value.description} onChange={(event) => setValue({ ...value, description: event.target.value })} maxLength={240} placeholder="Explain when this role should be assigned." />
+        </label>
+
+        <section className="permission-editor">
+          <div className="permission-editor__heading">
+            <div><strong>Permissions</strong><span>{value.permission_codes.length} selected</span></div>
+            {canEdit && <button type="button" className="text-button" onClick={() => setValue({ ...value, permission_codes: permissions.map((permission) => permission.code) })}>Select all</button>}
+          </div>
+          <div className="permission-groups">
+            {Object.entries(groups).map(([group, items]) => (
+              <section className="permission-group" key={group}>
+                <h3>{group}</h3>
+                {items?.map((permission) => (
+                  <label key={permission.id}>
+                    <input disabled={!canEdit} type="checkbox" checked={value.permission_codes.includes(permission.code)} onChange={() => togglePermission(permission.code)} />
+                    <span><strong>{permission.name}</strong><small>{permission.description}</small></span>
+                  </label>
+                ))}
+              </section>
+            ))}
+          </div>
+        </section>
+
+        <footer className="modal-actions">
+          <button type="button" className="secondary-button" onClick={onClose}>{canEdit ? 'Cancel' : 'Close'}</button>
+          {canEdit && <button type="submit" className="primary-button primary-button--compact" disabled={busy}>{busy ? 'Saving…' : role ? 'Save role' : 'Create role'}</button>}
+        </footer>
+      </form>
+    </Modal>
+  )
+}
