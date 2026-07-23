@@ -20,6 +20,7 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)) -> SessionRespon
 @router.get("/me", response_model=MeResponse)
 def me(session: CurrentSession = Depends(get_current_session)) -> MeResponse:
     return MeResponse(
+        membership_id=session.membership.id,
         user=UserSummary(
             id=session.user.id,
             email=session.user.email,

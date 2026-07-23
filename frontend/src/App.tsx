@@ -4,6 +4,7 @@ import { AppShell } from './components/AppShell'
 import { Dashboard } from './components/Dashboard'
 import { LoginPage } from './components/LoginPage'
 import { AdminPage } from './components/admin/AdminPage'
+import { AgentOverviewPage } from './components/agents/AgentOverviewPage'
 import { clearSession, loadSession } from './lib/auth-storage'
 import type { Session } from './types'
 
@@ -30,6 +31,7 @@ export default function App() {
       <Route path="/app" element={session ? <AppShell session={session} onLogout={handleLogout} /> : <Navigate to="/login" replace />}>
         <Route index element={session ? <Dashboard session={session} /> : null} />
         <Route path="administration" element={session && canViewAdministration ? <AdminPage session={session} /> : <Navigate to="/app" replace />} />
+        <Route path="agents" element={session?.permissions.includes('agents.view') ? <AgentOverviewPage session={session} /> : <Navigate to="/app" replace />} />
       </Route>
       <Route path="*" element={<Navigate to={session ? '/app' : '/login'} replace />} />
     </Routes>

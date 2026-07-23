@@ -1,10 +1,15 @@
 import type {
+  AgentListItem,
+  AgentOverview,
+  AgentTransaction,
+  CreateAgentTransactionInput,
   CreateRoleInput,
   CreateUserInput,
   ManagedUser,
   Permission,
   Role,
   Session,
+  UpdateAgentProfileInput,
   UpdateRoleInput,
   UpdateUserInput,
 } from '../types'
@@ -107,4 +112,35 @@ export function updateRole(token: string, roleId: string, input: UpdateRoleInput
 
 export function deleteRole(token: string, roleId: string): Promise<void> {
   return authorizedRequest(token, `/admin/roles/${roleId}`, { method: 'DELETE' })
+}
+
+
+export function getAgents(token: string): Promise<AgentListItem[]> {
+  return authorizedRequest(token, '/agents')
+}
+
+export function getAgentOverview(token: string, membershipId: string): Promise<AgentOverview> {
+  return authorizedRequest(token, `/agents/${membershipId}/overview`)
+}
+
+export function updateAgentProfile(
+  token: string,
+  membershipId: string,
+  input: UpdateAgentProfileInput,
+): Promise<AgentOverview> {
+  return authorizedRequest(token, `/agents/${membershipId}/profile`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  })
+}
+
+export function createAgentTransaction(
+  token: string,
+  membershipId: string,
+  input: CreateAgentTransactionInput,
+): Promise<AgentTransaction> {
+  return authorizedRequest(token, `/agents/${membershipId}/transactions`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
 }

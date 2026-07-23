@@ -1,4 +1,4 @@
-import { ArrowUpRight, PackageSearch, ReceiptText, ShieldCheck, SunMedium } from 'lucide-react'
+import { ArrowUpRight, ContactRound, PackageSearch, ReceiptText, ShieldCheck, SunMedium } from 'lucide-react'
 import { motion } from 'motion/react'
 import { Link } from 'react-router-dom'
 import type { Session } from '../types'
@@ -17,7 +17,7 @@ export function Dashboard({ session }: { session: Session }) {
       <div className="dashboard-hero">
         <div className="eyebrow">Authenticated workspace</div>
         <h1>Good to see you, {session.user.full_name.split(' ')[0]}.</h1>
-        <p>Your company identity and access layer are ready. User and role administration is now the first working ERP module.</p>
+        <p>Your company workspace now includes identity, role administration and a working agent relationship module.</p>
       </div>
 
       <div className="module-grid module-grid--dashboard">
@@ -44,6 +44,22 @@ export function Dashboard({ session }: { session: Session }) {
           initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.18 }}
+        >
+          <div className="module-card__icon"><ContactRound size={22} /></div>
+          <h2>Agent network</h2>
+          <p>Review agent contacts, assigned customers, balances and transaction history.</p>
+          {session.permissions.includes('agents.view') ? (
+            <Link to="/app/agents">Open module <ArrowUpRight size={15} /></Link>
+          ) : (
+            <span>No access assigned</span>
+          )}
+        </motion.article>
+
+        <motion.article
+          className="module-card module-card--active"
+          initial={{ opacity: 0, y: 14 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.24 }}
         >
           <div className="module-card__icon"><ShieldCheck size={22} /></div>
           <h2>Administration</h2>

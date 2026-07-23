@@ -56,6 +56,13 @@ def test_seeded_roles_and_user_lifecycle() -> None:
         user = created.json()
         assert user["roles"] == ["agent"]
 
+        agent_overview = client.get(
+            f"/api/v1/agents/{user['membership_id']}/overview",
+            headers=headers,
+        )
+        assert agent_overview.status_code == 200
+        assert agent_overview.json()["customer_count"] == 0
+
         updated = client.patch(
             f"/api/v1/admin/users/{user['membership_id']}",
             json={"role_codes": ["accounts_admin"], "is_active": True},
@@ -77,6 +84,11 @@ def test_seeded_roles_and_user_lifecycle() -> None:
         )
         assert user_login.status_code == 200
         assert user_login.json()["roles"] == ["accounts_admin"]
+
+        accounts_headers = {"Authorization": f"Bearer {user_login.json()['access_token']}"}
+        visible_agents = client.get("/api/v1/agents", headers=accounts_headers)
+        assert visible_agents.status_code == 200
+        assert any(agent["email"] == "agent@solarerp.dev" for agent in visible_agents.json())
 
 
 def test_custom_role_and_super_admin_guard() -> None:

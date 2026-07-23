@@ -25,6 +25,7 @@ class SessionResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     expires_at: datetime
+    membership_id: str
     user: UserSummary
     company: CompanySummary
     roles: list[str]
@@ -32,6 +33,7 @@ class SessionResponse(BaseModel):
 
 
 class MeResponse(BaseModel):
+    membership_id: str
     user: UserSummary
     company: CompanySummary
     roles: list[str]

@@ -58,6 +58,7 @@ def authenticate(db: Session, payload: LoginRequest) -> SessionResponse:
     return SessionResponse(
         access_token=token,
         expires_at=expires_at,
+        membership_id=membership.id,
         user=UserSummary(id=user.id, email=user.email, full_name=user.full_name),
         company=CompanySummary(
             id=membership.company.id,

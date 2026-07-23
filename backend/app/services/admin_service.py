@@ -14,6 +14,7 @@ from app.schemas.admin import (
     UpdateUserRequest,
     UserAdminSummary,
 )
+from app.services.agent_service import ensure_agent_profile
 
 
 class AdminServiceError(Exception):
@@ -143,6 +144,9 @@ def create_user(db: Session, actor: CurrentSession, payload: CreateUserRequest) 
     membership = Membership(company_id=company_id, user=user, is_active=payload.is_active)
     membership.roles = roles
     db.add(membership)
+    db.flush()
+    if "agent" in payload.role_codes:
+        ensure_agent_profile(db, membership)
     db.commit()
     db.refresh(membership)
     return _to_user_summary(_get_membership(db, company_id, membership.id))
@@ -167,6 +171,8 @@ def update_user(
         _assert_super_admin_change_allowed(actor, payload.role_codes)
         membership.roles = _load_company_roles(db, company_id, payload.role_codes)
         membership.user.is_super_admin = "super_admin" in payload.role_codes
+        if "agent" in payload.role_codes:
+            ensure_agent_profile(db, membership)
 
     if payload.email is not None:
         email = str(payload.email).strip().lower()
