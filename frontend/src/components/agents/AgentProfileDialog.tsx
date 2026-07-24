@@ -30,7 +30,7 @@ export function AgentProfileDialog({
   }
 
   return (
-    <Modal title="Edit agent profile" subtitle="Contact and address details stay scoped to the current company." onClose={onClose}>
+    <Modal title="Edit agent profile" onClose={onClose}>
       <form className="admin-form" onSubmit={submit}>
         <div className="admin-form__grid">
           <label className="field">

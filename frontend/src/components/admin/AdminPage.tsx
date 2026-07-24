@@ -1,5 +1,5 @@
 import { KeyRound, Pencil, Plus, Search, ShieldCheck, Trash2, UserCheck, UserX, Users } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   createRole,
   createUser,
@@ -12,6 +12,8 @@ import {
   updateUser,
 } from '../../lib/api'
 import type { ManagedUser, Permission, Role, Session } from '../../types'
+import { AlertDialog } from '../ui/AlertDialog'
+import { useToast } from '../ui/ToastProvider'
 import { RoleDialog } from './RoleDialog'
 import { UserDialog } from './UserDialog'
 
@@ -25,6 +27,10 @@ const roleLabels: Record<string, string> = {
   super_admin: 'Super Admin',
 }
 
+function errorMessage(reason: unknown, fallback: string) {
+  return reason instanceof Error ? reason.message : fallback
+}
+
 export function AdminPage({ session }: { session: Session }) {
   const [tab, setTab] = useState<Tab>('users')
   const [users, setUsers] = useState<ManagedUser[]>([])
@@ -33,16 +39,16 @@ export function AdminPage({ session }: { session: Session }) {
   const [search, setSearch] = useState('')
   const [editingUser, setEditingUser] = useState<ManagedUser | null | undefined>(undefined)
   const [editingRole, setEditingRole] = useState<Role | null | undefined>(undefined)
+  const [roleToDelete, setRoleToDelete] = useState<Role | null>(null)
   const [busy, setBusy] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
+  const { toast } = useToast()
   const canManageUsers = session.permissions.includes('users.manage')
   const canManageRoles = session.permissions.includes('roles.manage')
   const isSuperAdmin = session.roles.includes('super_admin')
 
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true)
-    setError('')
     try {
       const [nextUsers, nextRoles, nextPermissions] = await Promise.all([
         getUsers(session.access_token),
@@ -53,13 +59,13 @@ export function AdminPage({ session }: { session: Session }) {
       setRoles(nextRoles)
       setPermissions(nextPermissions)
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Could not load administration data')
+      toast({ message: errorMessage(reason, 'Could not load administration data'), variant: 'error' })
     } finally {
       setLoading(false)
     }
-  }
+  }, [session.access_token, toast])
 
-  useEffect(() => { void load() }, [])
+  useEffect(() => { void load() }, [load])
 
   const filteredUsers = useMemo(() => {
     const term = search.trim().toLowerCase()
@@ -68,8 +74,8 @@ export function AdminPage({ session }: { session: Session }) {
   }, [search, users])
 
   async function saveUser(value: { full_name: string; email: string; password: string; role_codes: string[]; is_active: boolean }) {
+    const isEditing = Boolean(editingUser)
     setBusy(true)
-    setError('')
     try {
       if (editingUser) {
         await updateUser(session.access_token, editingUser.membership_id, {
@@ -84,8 +90,9 @@ export function AdminPage({ session }: { session: Session }) {
       }
       setEditingUser(undefined)
       await load()
+      toast({ message: isEditing ? 'User updated' : 'User created', variant: 'success' })
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Could not save user')
+      toast({ message: errorMessage(reason, 'Could not save user'), variant: 'error' })
     } finally {
       setBusy(false)
     }
@@ -93,20 +100,21 @@ export function AdminPage({ session }: { session: Session }) {
 
   async function toggleUser(user: ManagedUser) {
     setBusy(true)
-    setError('')
     try {
-      await updateUser(session.access_token, user.membership_id, { is_active: !user.is_active })
+      const nextActive = !user.is_active
+      await updateUser(session.access_token, user.membership_id, { is_active: nextActive })
       await load()
+      toast({ message: `${user.full_name} ${nextActive ? 'activated' : 'deactivated'}`, variant: 'success' })
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Could not update user')
+      toast({ message: errorMessage(reason, 'Could not update user'), variant: 'error' })
     } finally {
       setBusy(false)
     }
   }
 
   async function saveRole(value: { name: string; code: string; description: string; permission_codes: string[] }) {
+    const isEditing = Boolean(editingRole)
     setBusy(true)
-    setError('')
     try {
       if (editingRole) {
         await updateRole(session.access_token, editingRole.id, {
@@ -119,22 +127,25 @@ export function AdminPage({ session }: { session: Session }) {
       }
       setEditingRole(undefined)
       await load()
+      toast({ message: isEditing ? 'Role updated' : 'Role created', variant: 'success' })
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Could not save role')
+      toast({ message: errorMessage(reason, 'Could not save role'), variant: 'error' })
     } finally {
       setBusy(false)
     }
   }
 
-  async function removeRole(role: Role) {
-    if (!window.confirm(`Delete the ${role.name} role?`)) return
+  async function removeRole() {
+    if (!roleToDelete) return
     setBusy(true)
-    setError('')
     try {
-      await deleteRole(session.access_token, role.id)
+      await deleteRole(session.access_token, roleToDelete.id)
+      const deletedName = roleToDelete.name
+      setRoleToDelete(null)
       await load()
+      toast({ message: `${deletedName} deleted`, variant: 'success' })
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Could not delete role')
+      toast({ message: errorMessage(reason, 'Could not delete role'), variant: 'error' })
     } finally {
       setBusy(false)
     }
@@ -146,33 +157,30 @@ export function AdminPage({ session }: { session: Session }) {
         <div>
           <div className="eyebrow">Identity & access</div>
           <h1>Users and roles</h1>
-          <p>Control who can enter {session.company.name} and which ERP actions they can perform.</p>
         </div>
         {tab === 'users' && canManageUsers && <button className="primary-button primary-button--compact" onClick={() => setEditingUser(null)}><Plus size={17} /> Create user</button>}
         {tab === 'roles' && canManageRoles && <button className="primary-button primary-button--compact" onClick={() => setEditingRole(null)}><Plus size={17} /> Create role</button>}
       </header>
 
       <div className="admin-stats">
-        <article><Users size={19} /><span>Company users</span><strong>{users.length}</strong></article>
-        <article><UserCheck size={19} /><span>Active users</span><strong>{users.filter((user) => user.is_active).length}</strong></article>
-        <article><ShieldCheck size={19} /><span>Available roles</span><strong>{roles.length}</strong></article>
+        <article><Users size={19} /><span>Users</span><strong>{users.length}</strong></article>
+        <article><UserCheck size={19} /><span>Active</span><strong>{users.filter((user) => user.is_active).length}</strong></article>
+        <article><ShieldCheck size={19} /><span>Roles</span><strong>{roles.length}</strong></article>
       </div>
 
       <nav className="segmented-tabs">
         <button className={tab === 'users' ? 'active' : ''} onClick={() => setTab('users')}>Users</button>
-        <button className={tab === 'roles' ? 'active' : ''} onClick={() => setTab('roles')}>Roles & permissions</button>
+        <button className={tab === 'roles' ? 'active' : ''} onClick={() => setTab('roles')}>Roles</button>
       </nav>
-
-      {error && <div className="admin-alert">{error}</div>}
 
       {tab === 'users' ? (
         <section className="data-panel">
           <div className="data-panel__toolbar">
-            <div className="search-control"><Search size={17} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search users, email or role" /></div>
-            <span>{filteredUsers.length} user{filteredUsers.length === 1 ? '' : 's'}</span>
+            <div className="search-control"><Search size={17} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search users" /></div>
+            <span>{filteredUsers.length}</span>
           </div>
 
-          {loading ? <div className="empty-state">Loading company users…</div> : filteredUsers.length === 0 ? <div className="empty-state">No users match this search.</div> : (
+          {loading ? <div className="empty-state">Loading…</div> : filteredUsers.length === 0 ? <div className="empty-state">No users found</div> : (
             <div className="user-table-wrap">
               <table className="user-table">
                 <thead><tr><th>User</th><th>Roles</th><th>Status</th><th>Created</th><th aria-label="Actions" /></tr></thead>
@@ -200,14 +208,14 @@ export function AdminPage({ session }: { session: Session }) {
             const canEditRole = canManageRoles && !['company_admin', 'super_admin'].includes(role.code)
             return (
               <article className="role-card" key={role.id}>
-                <div className="role-card__top"><div className="role-card__icon"><KeyRound size={19} /></div><span>{role.is_system ? 'System role' : 'Custom role'}</span></div>
+                <div className="role-card__top"><div className="role-card__icon"><KeyRound size={19} /></div><span>{role.is_system ? 'System' : 'Custom'}</span></div>
                 <h2>{role.name}</h2>
                 <code>{role.code}</code>
-                <p>{role.description}</p>
+                {role.description && <p>{role.description}</p>}
                 <div className="role-card__meta"><span>{role.member_count} members</span><span>{role.permissions.length} permissions</span></div>
                 <footer>
-                  <button className="secondary-button" onClick={() => setEditingRole(role)}>{canEditRole ? 'Manage role' : 'View role'}</button>
-                  {!role.is_system && canManageRoles && <button className="danger-icon-button" disabled={busy || role.member_count > 0} onClick={() => void removeRole(role)} aria-label={`Delete ${role.name}`}><Trash2 size={16} /></button>}
+                  <button className="secondary-button" onClick={() => setEditingRole(role)}>{canEditRole ? 'Manage' : 'View'}</button>
+                  {!role.is_system && canManageRoles && <button className="danger-icon-button" disabled={busy || role.member_count > 0} onClick={() => setRoleToDelete(role)} aria-label={`Delete ${role.name}`}><Trash2 size={16} /></button>}
                 </footer>
               </article>
             )
@@ -221,6 +229,15 @@ export function AdminPage({ session }: { session: Session }) {
       {editingRole !== undefined && (
         <RoleDialog role={editingRole ?? undefined} permissions={permissions} busy={busy} canEdit={canManageRoles && (!editingRole || !['company_admin', 'super_admin'].includes(editingRole.code))} onClose={() => setEditingRole(undefined)} onSubmit={saveRole} />
       )}
+      <AlertDialog
+        open={Boolean(roleToDelete)}
+        title={`Delete ${roleToDelete?.name ?? 'role'}?`}
+        confirmLabel="Delete role"
+        icon="delete"
+        loading={busy}
+        onCancel={() => setRoleToDelete(null)}
+        onConfirm={removeRole}
+      />
     </section>
   )
 }

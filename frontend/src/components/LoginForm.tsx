@@ -1,9 +1,10 @@
 import { FormEvent, useState } from 'react'
-import { ArrowRight, Building2, Eye, EyeOff, LockKeyhole, Mail, ShieldCheck } from 'lucide-react'
+import { ArrowRight, Building2, Eye, EyeOff, LockKeyhole, Mail } from 'lucide-react'
 import { motion } from 'motion/react'
 import { login } from '../lib/api'
 import { saveSession } from '../lib/auth-storage'
 import type { Session } from '../types'
+import { useToast } from './ui/ToastProvider'
 
 export function LoginForm({ onAuthenticated }: { onAuthenticated: (session: Session) => void }) {
   const [email, setEmail] = useState('admin@solarerp.dev')
@@ -11,12 +12,11 @@ export function LoginForm({ onAuthenticated }: { onAuthenticated: (session: Sess
   const [companyCode, setCompanyCode] = useState('SHREE')
   const [remember, setRemember] = useState(true)
   const [showPassword, setShowPassword] = useState(false)
-  const [error, setError] = useState('')
+  const { toast } = useToast()
   const [loading, setLoading] = useState(false)
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    setError('')
     setLoading(true)
 
     try {
@@ -26,9 +26,10 @@ export function LoginForm({ onAuthenticated }: { onAuthenticated: (session: Sess
         company_code: companyCode.trim() || undefined,
       })
       saveSession(session, remember)
+      toast({ message: 'Signed in successfully', variant: 'success' })
       onAuthenticated(session)
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Unable to sign in')
+      toast({ message: caught instanceof Error ? caught.message : 'Unable to sign in', variant: 'error' })
     } finally {
       setLoading(false)
     }
@@ -42,9 +43,7 @@ export function LoginForm({ onAuthenticated }: { onAuthenticated: (session: Sess
       transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
     >
       <div className="login-card__header">
-        <div className="eyebrow">Secure company workspace</div>
         <h1>Welcome back <span aria-hidden="true">☀</span></h1>
-        <p>Sign in to continue to your Solar ERP workspace.</p>
       </div>
 
       <form onSubmit={handleSubmit} className="login-form">
@@ -94,7 +93,7 @@ export function LoginForm({ onAuthenticated }: { onAuthenticated: (session: Sess
             <input
               value={companyCode}
               onChange={(event) => setCompanyCode(event.target.value.toUpperCase())}
-              placeholder="Optional for single-company users"
+              placeholder="SHREE"
               maxLength={32}
             />
           </div>
@@ -109,12 +108,7 @@ export function LoginForm({ onAuthenticated }: { onAuthenticated: (session: Sess
             />
             <span>Remember me</span>
           </label>
-          <button type="button" className="text-button" disabled>
-            Forgot password?
-          </button>
         </div>
-
-        {error && <div className="form-error" role="alert">{error}</div>}
 
         <motion.button
           className="primary-button"
@@ -127,14 +121,6 @@ export function LoginForm({ onAuthenticated }: { onAuthenticated: (session: Sess
           <ArrowRight size={18} />
         </motion.button>
       </form>
-
-      <div className="security-note">
-        <ShieldCheck size={22} />
-        <div>
-          <strong>Protected ERP access</strong>
-          <span>Company-scoped roles and permissions are ready for expansion.</span>
-        </div>
-      </div>
     </motion.div>
   )
 }

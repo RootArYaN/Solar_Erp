@@ -55,7 +55,7 @@ export function RoleDialog({
   }
 
   return (
-    <Modal title={role ? `Manage ${role.name}` : 'Create custom role'} subtitle="Permissions are always limited to the current company." onClose={onClose}>
+    <Modal title={role ? `Manage ${role.name}` : 'Create role'} onClose={onClose}>
       <form className="admin-form" onSubmit={submit}>
         <div className="admin-form__grid">
           <label className="field">
@@ -69,7 +69,7 @@ export function RoleDialog({
         </div>
         <label className="field">
           <span>Description</span>
-          <textarea disabled={!canEdit} value={value.description} onChange={(event) => setValue({ ...value, description: event.target.value })} maxLength={240} placeholder="Explain when this role should be assigned." />
+          <textarea disabled={!canEdit} value={value.description} onChange={(event) => setValue({ ...value, description: event.target.value })} maxLength={240} placeholder="Role description" />
         </label>
 
         <section className="permission-editor">
@@ -84,7 +84,7 @@ export function RoleDialog({
                 {items?.map((permission) => (
                   <label key={permission.id}>
                     <input disabled={!canEdit} type="checkbox" checked={value.permission_codes.includes(permission.code)} onChange={() => togglePermission(permission.code)} />
-                    <span><strong>{permission.name}</strong><small>{permission.description}</small></span>
+                    <span><strong>{permission.name}</strong></span>
                   </label>
                 ))}
               </section>

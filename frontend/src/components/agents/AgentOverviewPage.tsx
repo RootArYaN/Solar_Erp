@@ -26,6 +26,7 @@ import type {
   Session,
   UpdateAgentProfileInput,
 } from '../../types'
+import { useToast } from '../ui/ToastProvider'
 import { AgentProfileDialog } from './AgentProfileDialog'
 import { AgentTransactionDialog } from './AgentTransactionDialog'
 
@@ -58,7 +59,7 @@ export function AgentOverviewPage({ session }: { session: Session }) {
   const [searchScope, setSearchScope] = useState<'all' | 'agents' | 'customers'>('all')
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
+  const { toast } = useToast()
   const [editingProfile, setEditingProfile] = useState(false)
   const [postingTransaction, setPostingTransaction] = useState(false)
 
@@ -73,7 +74,6 @@ export function AgentOverviewPage({ session }: { session: Session }) {
 
   async function loadAgentList() {
     setLoading(true)
-    setError('')
     try {
       const nextAgents = await getAgents(session.access_token)
       setAgents(nextAgents)
@@ -84,7 +84,7 @@ export function AgentOverviewPage({ session }: { session: Session }) {
       if (nextAgents.length === 0) setOverview(null)
       setLoading(false)
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Could not load agents')
+      toast({ message: reason instanceof Error ? reason.message : 'Could not load agents', variant: 'error' })
       setLoading(false)
     }
   }
@@ -92,11 +92,10 @@ export function AgentOverviewPage({ session }: { session: Session }) {
   async function loadOverview(membershipId: string) {
     if (!membershipId) return
     setLoading(true)
-    setError('')
     try {
       setOverview(await getAgentOverview(session.access_token, membershipId))
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Could not load agent overview')
+      toast({ message: reason instanceof Error ? reason.message : 'Could not load agent overview', variant: 'error' })
     } finally {
       setLoading(false)
     }
@@ -146,7 +145,6 @@ export function AgentOverviewPage({ session }: { session: Session }) {
   async function saveProfile(value: UpdateAgentProfileInput) {
     if (!overview) return
     setBusy(true)
-    setError('')
     try {
       const nextOverview = await updateAgentProfile(
         session.access_token,
@@ -156,8 +154,9 @@ export function AgentOverviewPage({ session }: { session: Session }) {
       setOverview(nextOverview)
       setEditingProfile(false)
       await loadAgentList()
+      toast({ message: 'Agent profile updated', variant: 'success' })
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Could not update agent profile')
+      toast({ message: reason instanceof Error ? reason.message : 'Could not update agent profile', variant: 'error' })
     } finally {
       setBusy(false)
     }
@@ -166,13 +165,13 @@ export function AgentOverviewPage({ session }: { session: Session }) {
   async function postTransaction(value: CreateAgentTransactionInput) {
     if (!overview) return
     setBusy(true)
-    setError('')
     try {
       await createAgentTransaction(session.access_token, overview.profile.membership_id, value)
       setPostingTransaction(false)
       await Promise.all([loadOverview(overview.profile.membership_id), loadAgentList()])
+      toast({ message: 'Transaction posted', variant: 'success' })
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Could not post transaction')
+      toast({ message: reason instanceof Error ? reason.message : 'Could not post transaction', variant: 'error' })
     } finally {
       setBusy(false)
     }
@@ -279,15 +278,13 @@ export function AgentOverviewPage({ session }: { session: Session }) {
         </div>
       </header>
 
-      {error && <div className="admin-alert">{error}</div>}
 
       {loading && !overview ? (
-        <div className="agent-loading">Loading agent workspace…</div>
+        <div className="agent-loading">Loading…</div>
       ) : !overview ? (
         <div className="empty-state agent-empty-state">
           <UsersRound size={28} />
           <strong>No agent profiles available</strong>
-          <span>Create a user with the Agent role to initialize an agent workspace.</span>
         </div>
       ) : (
         <>
@@ -298,7 +295,6 @@ export function AgentOverviewPage({ session }: { session: Session }) {
                 <div>
                   <span className={`status-badge ${overview.profile.is_active ? 'status-badge--active' : ''}`}>{overview.profile.is_active ? 'Active agent' : 'Inactive agent'}</span>
                   <h2>{overview.profile.full_name}</h2>
-                  <p>Agent ID · {overview.profile.membership_id.slice(0, 8).toUpperCase()}</p>
                 </div>
               </div>
 
@@ -313,7 +309,7 @@ export function AgentOverviewPage({ session }: { session: Session }) {
             <div className="agent-kpi-grid">
               <motion.article initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.04 }}>
                 <div className="agent-kpi__icon"><UsersRound size={20} /></div>
-                <span>Customers handling</span>
+                <span>Customers</span>
                 <strong>{overview.customer_count}</strong>
                 <small>{overview.active_customer_count} currently active</small>
               </motion.article>
@@ -325,9 +321,8 @@ export function AgentOverviewPage({ session }: { session: Session }) {
               </motion.article>
               <motion.article initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12 }}>
                 <div className="agent-kpi__icon"><BriefcaseBusiness size={20} /></div>
-                <span>Customer outstanding</span>
+                <span>Outstanding</span>
                 <strong>{currency.format(overview.customer_outstanding)}</strong>
-                <small>Across assigned accounts</small>
               </motion.article>
             </div>
           </section>
@@ -335,7 +330,7 @@ export function AgentOverviewPage({ session }: { session: Session }) {
           <div className="agent-tables-grid">
             <section className="data-panel agent-data-panel">
               <div className="agent-section-heading">
-                <div><UsersRound size={19} /><span><strong>Customer list</strong><small>Customers currently handled by {overview.profile.full_name}</small></span></div>
+                <div><UsersRound size={19} /><span><strong>Customers</strong></span></div>
                 <div className="search-control agent-search"><Search size={16} /><input value={customerSearch} onChange={(event) => setCustomerSearch(event.target.value)} placeholder="Search customers or projects" /></div>
               </div>
               {filteredCustomers.length === 0 ? <div className="empty-state">No customers match this search.</div> : (
@@ -360,7 +355,7 @@ export function AgentOverviewPage({ session }: { session: Session }) {
 
             <section className="data-panel agent-data-panel">
               <div className="agent-section-heading">
-                <div><CircleDollarSign size={19} /><span><strong>Transaction history</strong><small>Agent ledger movements and running balance</small></span></div>
+                <div><CircleDollarSign size={19} /><span><strong>Transactions</strong></span></div>
                 <div className="agent-section-actions">
                   <div className="search-control agent-search transaction-search">
                     <Search size={16} />

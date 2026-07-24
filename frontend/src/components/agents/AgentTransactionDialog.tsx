@@ -35,7 +35,7 @@ export function AgentTransactionDialog({
   }
 
   return (
-    <Modal title="Post agent transaction" subtitle="Credits increase the agent balance; debits reduce it." onClose={onClose}>
+    <Modal title="Post transaction" onClose={onClose}>
       <form className="admin-form" onSubmit={submit}>
         <div className="admin-form__grid">
           <label className="field">
@@ -79,7 +79,7 @@ export function AgentTransactionDialog({
 
         <label className="field">
           <span>Description</span>
-          <textarea required value={description} onChange={(event) => setDescription(event.target.value)} maxLength={240} placeholder="Explain why this movement is being posted." />
+          <textarea required value={description} onChange={(event) => setDescription(event.target.value)} maxLength={240} placeholder="Transaction note" />
         </label>
 
         <footer className="modal-actions">

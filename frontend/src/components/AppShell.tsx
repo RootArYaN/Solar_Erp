@@ -1,4 +1,4 @@
-import { Building2, ContactRound, LayoutDashboard, LogOut, Menu, PanelLeftClose, PanelLeftOpen, Users, X } from 'lucide-react'
+import { BadgeIndianRupee, Boxes, Building2, ContactRound, FileUp, ImageUp, LayoutDashboard, LogOut, Menu, PanelLeftClose, PanelLeftOpen, Users, X } from 'lucide-react'
 import { useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import type { Session } from '../types'
@@ -39,6 +39,22 @@ export function AppShell({ session, onLogout }: { session: Session; onLogout: ()
               <span>Agents</span>
             </NavLink>
           )}
+          <NavLink to="/app/inventory" onClick={() => setMobileOpen(false)} title="Solar inventory">
+            <Boxes size={19} />
+            <span>Inventory</span>
+          </NavLink>
+          <NavLink to="/app/customer-documents" onClick={() => setMobileOpen(false)} title="Customer data upload">
+            <FileUp size={19} />
+            <span>Customer data</span>
+          </NavLink>
+          <NavLink to="/app/posters" onClick={() => setMobileOpen(false)} title="Poster upload">
+            <ImageUp size={19} />
+            <span>Posters</span>
+          </NavLink>
+          <NavLink to="/app/solar-pricing" onClick={() => setMobileOpen(false)} title="Today's solar pricing">
+            <BadgeIndianRupee size={19} />
+            <span>Solar pricing</span>
+          </NavLink>
           {canViewAdministration && (
             <NavLink to="/app/administration" onClick={() => setMobileOpen(false)} title="Users & roles">
               <Users size={19} />

@@ -5,12 +5,18 @@ import { Dashboard } from './components/Dashboard'
 import { LoginPage } from './components/LoginPage'
 import { AdminPage } from './components/admin/AdminPage'
 import { AgentOverviewPage } from './components/agents/AgentOverviewPage'
+import { CustomerDataUploadPage } from './components/documents/CustomerDataUploadPage'
+import { PosterUploadPage } from './components/posters/PosterUploadPage'
+import { SolarPricingPage } from './components/pricing/SolarPricingPage'
+import { InventoryPage } from './components/inventory/InventoryPage'
+import { useToast } from './components/ui/ToastProvider'
 import { clearSession, loadSession } from './lib/auth-storage'
 import type { Session } from './types'
 
 export default function App() {
   const [session, setSession] = useState<Session | null>(() => loadSession())
   const navigate = useNavigate()
+  const { toast } = useToast()
 
   function handleAuthenticated(nextSession: Session) {
     setSession(nextSession)
@@ -21,6 +27,7 @@ export default function App() {
     clearSession()
     setSession(null)
     navigate('/login', { replace: true })
+    toast({ message: 'Signed out', variant: 'success' })
   }
 
   const canViewAdministration = Boolean(session?.permissions.includes('users.view') && session?.permissions.includes('roles.view'))
@@ -32,6 +39,10 @@ export default function App() {
         <Route index element={session ? <Dashboard session={session} /> : null} />
         <Route path="administration" element={session && canViewAdministration ? <AdminPage session={session} /> : <Navigate to="/app" replace />} />
         <Route path="agents" element={session?.permissions.includes('agents.view') ? <AgentOverviewPage session={session} /> : <Navigate to="/app" replace />} />
+        <Route path="customer-documents" element={<CustomerDataUploadPage />} />
+        <Route path="posters" element={<PosterUploadPage />} />
+        <Route path="solar-pricing" element={<SolarPricingPage />} />
+        <Route path="inventory" element={<InventoryPage />} />
       </Route>
       <Route path="*" element={<Navigate to={session ? '/app' : '/login'} replace />} />
     </Routes>

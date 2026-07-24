@@ -50,11 +50,7 @@ export function UserDialog({
   }
 
   return (
-    <Modal
-      title={user ? 'Edit user' : 'Create user'}
-      subtitle={user ? 'Update company access and account status.' : 'Create a secure account inside this company.'}
-      onClose={onClose}
-    >
+    <Modal title={user ? 'Edit user' : 'Create user'} onClose={onClose}>
       <form className="admin-form" onSubmit={submit}>
         <div className="admin-form__grid">
           <label className="field">
@@ -78,17 +74,14 @@ export function UserDialog({
             {visibleRoles.map((role) => (
               <label className={`role-option ${value.role_codes.includes(role.code) ? 'role-option--selected' : ''}`} key={role.id}>
                 <input type="checkbox" checked={value.role_codes.includes(role.code)} onChange={() => toggleRole(role.code)} />
-                <span>
-                  <strong>{role.name}</strong>
-                  <small>{role.description}</small>
-                </span>
+                <span><strong>{role.name}</strong></span>
               </label>
             ))}
           </div>
         </fieldset>
 
         <label className="switch-row">
-          <span><strong>Active account</strong><small>User can sign in and access assigned modules.</small></span>
+          <span><strong>Active account</strong></span>
           <input type="checkbox" checked={value.is_active} onChange={(event) => setValue({ ...value, is_active: event.target.checked })} />
         </label>
 
