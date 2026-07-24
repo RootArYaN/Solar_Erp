@@ -17,7 +17,7 @@ bearer_scheme = HTTPBearer(auto_error=False)
 class CurrentSession:
     user: User
     membership: Membership
-    roles: list[str]
+    role: str
     permissions: list[str]
 
 
@@ -49,7 +49,7 @@ def get_current_session(
         .options(
             selectinload(Membership.user),
             selectinload(Membership.company),
-            selectinload(Membership.roles).selectinload(Role.permissions),
+            selectinload(Membership.role).selectinload(Role.permissions),
         )
     )
     membership = db.scalar(statement)
@@ -62,13 +62,13 @@ def get_current_session(
     ):
         raise unauthorized
 
-    roles = sorted({role.code for role in membership.roles})
-    permissions = sorted({permission.code for role in membership.roles for permission in role.permissions})
+    role = membership.role.code
+    permissions = sorted({permission.code for permission in membership.role.permissions})
 
     return CurrentSession(
         user=membership.user,
         membership=membership,
-        roles=roles,
+        role=role,
         permissions=permissions,
     )
 

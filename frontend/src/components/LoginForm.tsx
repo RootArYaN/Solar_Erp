@@ -1,15 +1,15 @@
 import { FormEvent, useState } from 'react'
-import { ArrowRight, Building2, Eye, EyeOff, LockKeyhole, Mail } from 'lucide-react'
+import { ArrowRight, Eye, EyeOff, LockKeyhole, UserRound } from 'lucide-react'
 import { motion } from 'motion/react'
-import { login } from '../lib/api'
+import { ApiError, login } from '../lib/api'
 import { saveSession } from '../lib/auth-storage'
 import type { Session } from '../types'
 import { useToast } from './ui/ToastProvider'
 
-export function LoginForm({ onAuthenticated }: { onAuthenticated: (session: Session) => void }) {
-  const [email, setEmail] = useState('admin@solarerp.dev')
-  const [password, setPassword] = useState('ChangeMe123!')
-  const [companyCode, setCompanyCode] = useState('SHREE')
+export function LoginForm({ onAuthenticated, notice }: { onAuthenticated: (session: Session) => void; notice?: string }) {
+  const [username, setUsername] = useState(import.meta.env.DEV ? 'admin' : '')
+  const [password, setPassword] = useState(import.meta.env.DEV ? 'ChangeMe123!' : '')
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({})
   const [remember, setRemember] = useState(true)
   const [showPassword, setShowPassword] = useState(false)
   const { toast } = useToast()
@@ -18,17 +18,18 @@ export function LoginForm({ onAuthenticated }: { onAuthenticated: (session: Sess
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setLoading(true)
+    setFieldErrors({})
 
     try {
       const session = await login({
-        email: email.trim(),
+        username: username.trim(),
         password,
-        company_code: companyCode.trim() || undefined,
       })
       saveSession(session, remember)
       toast({ message: 'Signed in successfully', variant: 'success' })
       onAuthenticated(session)
     } catch (caught) {
+      if (caught instanceof ApiError) setFieldErrors(caught.fieldErrors)
       toast({ message: caught instanceof Error ? caught.message : 'Unable to sign in', variant: 'error' })
     } finally {
       setLoading(false)
@@ -46,20 +47,23 @@ export function LoginForm({ onAuthenticated }: { onAuthenticated: (session: Sess
         <h1>Welcome back <span aria-hidden="true">☀</span></h1>
       </div>
 
+      {notice && <div className="login-session-notice">{notice}</div>}
       <form onSubmit={handleSubmit} className="login-form">
         <label className="field">
-          <span>Email address</span>
+          <span>Username</span>
           <div className="field__control">
-            <Mail size={18} />
+            <UserRound size={18} />
             <input
-              type="email"
-              autoComplete="email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              placeholder="name@company.com"
+              autoComplete="username"
+              value={username}
+              onChange={(event) => setUsername(event.target.value)}
+              placeholder="Enter your username"
               required
+              minLength={3}
+              maxLength={50}
             />
           </div>
+          {fieldErrors.username?.map((message) => <small className="field-error" key={message}>{message}</small>)}
         </label>
 
         <label className="field">
@@ -84,19 +88,7 @@ export function LoginForm({ onAuthenticated }: { onAuthenticated: (session: Sess
               {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
             </button>
           </div>
-        </label>
-
-        <label className="field">
-          <span>Company code</span>
-          <div className="field__control">
-            <Building2 size={18} />
-            <input
-              value={companyCode}
-              onChange={(event) => setCompanyCode(event.target.value.toUpperCase())}
-              placeholder="SHREE"
-              maxLength={32}
-            />
-          </div>
+          {fieldErrors.password?.map((message) => <small className="field-error" key={message}>{message}</small>)}
         </label>
 
         <div className="login-form__options">

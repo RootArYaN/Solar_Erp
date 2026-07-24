@@ -45,13 +45,13 @@ def ensure_agent_profile(db: Session, membership: Membership) -> AgentProfile:
 def _load_agent_membership(db: Session, company_id: str, membership_id: str) -> Membership:
     membership = db.scalar(
         select(Membership)
-        .join(Membership.roles)
+        .join(Membership.role)
         .where(
             Membership.id == membership_id,
             Membership.company_id == company_id,
             Role.code == "agent",
         )
-        .options(selectinload(Membership.user), selectinload(Membership.roles))
+        .options(selectinload(Membership.user), selectinload(Membership.role))
     )
     if not membership:
         raise AgentNotFoundError("Agent not found")
@@ -110,7 +110,7 @@ def _current_balance(profile: AgentProfile) -> Decimal:
 def list_agents(db: Session, actor: CurrentSession) -> list[AgentListItem]:
     statement = (
         select(Membership)
-        .join(Membership.roles)
+        .join(Membership.role)
         .join(Membership.user)
         .where(Membership.company_id == actor.membership.company_id, Role.code == "agent")
         .options(selectinload(Membership.user))

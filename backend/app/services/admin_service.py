@@ -33,19 +33,16 @@ class AdminForbiddenError(AdminServiceError):
     status_code = 403
 
 
-def _role_codes(membership: Membership) -> list[str]:
-    return sorted({role.code for role in membership.roles})
-
-
 def _to_user_summary(membership: Membership) -> UserAdminSummary:
     return UserAdminSummary(
         id=membership.user.id,
         membership_id=membership.id,
+        username=membership.user.username,
         email=membership.user.email,
         full_name=membership.user.full_name,
         is_active=membership.user.is_active and membership.is_active,
         is_super_admin=membership.user.is_super_admin,
-        roles=_role_codes(membership),
+        role=membership.role.code,
         created_at=membership.user.created_at,
     )
 
@@ -62,19 +59,15 @@ def _to_role_summary(role: Role, member_count: int | None = None) -> RoleSummary
     )
 
 
-def _load_company_roles(db: Session, company_id: str, role_codes: list[str]) -> list[Role]:
-    roles = list(
-        db.scalars(
-            select(Role)
-            .where(Role.company_id == company_id, Role.code.in_(role_codes))
-            .options(selectinload(Role.permissions))
-        ).all()
+def _load_company_role(db: Session, company_id: str, role_code: str) -> Role:
+    role = db.scalar(
+        select(Role)
+        .where(Role.company_id == company_id, Role.code == role_code)
+        .options(selectinload(Role.permissions))
     )
-    found = {role.code for role in roles}
-    missing = sorted(set(role_codes) - found)
-    if missing:
-        raise AdminNotFoundError(f"Unknown roles: {', '.join(missing)}")
-    return roles
+    if not role:
+        raise AdminNotFoundError(f"Unknown role: {role_code}")
+    return role
 
 
 def _load_permissions(db: Session, permission_codes: list[str]) -> list[Permission]:
@@ -92,15 +85,15 @@ def _get_membership(db: Session, company_id: str, membership_id: str) -> Members
     membership = db.scalar(
         select(Membership)
         .where(Membership.id == membership_id, Membership.company_id == company_id)
-        .options(selectinload(Membership.user), selectinload(Membership.roles))
+        .options(selectinload(Membership.user), selectinload(Membership.role))
     )
     if not membership:
         raise AdminNotFoundError("User membership not found")
     return membership
 
 
-def _assert_super_admin_change_allowed(actor: CurrentSession, role_codes: list[str]) -> None:
-    if "super_admin" in role_codes and not actor.user.is_super_admin:
+def _assert_super_admin_change_allowed(actor: CurrentSession, role_code: str) -> None:
+    if role_code == "super_admin" and not actor.user.is_super_admin:
         raise AdminForbiddenError("Only a super administrator can assign the super admin role")
 
 
@@ -114,38 +107,49 @@ def list_users(db: Session, actor: CurrentSession, query: str | None = None) -> 
         select(Membership)
         .join(Membership.user)
         .where(Membership.company_id == actor.membership.company_id)
-        .options(selectinload(Membership.user), selectinload(Membership.roles))
+        .options(selectinload(Membership.user), selectinload(Membership.role))
         .order_by(User.full_name.asc())
     )
     if query and query.strip():
         term = f"%{query.strip().lower()}%"
         statement = statement.where(
-            or_(func.lower(User.full_name).like(term), func.lower(User.email).like(term))
+            or_(
+                func.lower(User.full_name).like(term),
+                func.lower(User.username).like(term),
+                func.lower(User.email).like(term),
+            )
         )
     return [_to_user_summary(membership) for membership in db.scalars(statement).all()]
 
 
 def create_user(db: Session, actor: CurrentSession, payload: CreateUserRequest) -> UserAdminSummary:
     company_id = actor.membership.company_id
-    _assert_super_admin_change_allowed(actor, payload.role_codes)
-    roles = _load_company_roles(db, company_id, payload.role_codes)
+    _assert_super_admin_change_allowed(actor, payload.role_code)
+    role = _load_company_role(db, company_id, payload.role_code)
 
     email = str(payload.email).strip().lower()
+    if db.scalar(select(User).where(User.username == payload.username)):
+        raise AdminConflictError("A user with this username already exists")
     if db.scalar(select(User).where(User.email == email)):
         raise AdminConflictError("A user with this email already exists")
 
     user = User(
+        username=payload.username,
         email=email,
         full_name=payload.full_name,
         hashed_password=hash_password(payload.password),
         is_active=True,
-        is_super_admin="super_admin" in payload.role_codes,
+        is_super_admin=payload.role_code == "super_admin",
     )
-    membership = Membership(company_id=company_id, user=user, is_active=payload.is_active)
-    membership.roles = roles
+    membership = Membership(
+        company_id=company_id,
+        user=user,
+        role=role,
+        is_active=payload.is_active,
+    )
     db.add(membership)
     db.flush()
-    if "agent" in payload.role_codes:
+    if payload.role_code == "agent":
         ensure_agent_profile(db, membership)
     db.commit()
     db.refresh(membership)
@@ -165,13 +169,13 @@ def update_user(
     if payload.is_active is False and membership.user_id == actor.user.id:
         raise AdminForbiddenError("You cannot deactivate your own account")
 
-    if payload.role_codes is not None:
+    if payload.role_code is not None:
         if membership.user_id == actor.user.id:
-            raise AdminForbiddenError("You cannot change your own roles")
-        _assert_super_admin_change_allowed(actor, payload.role_codes)
-        membership.roles = _load_company_roles(db, company_id, payload.role_codes)
-        membership.user.is_super_admin = "super_admin" in payload.role_codes
-        if "agent" in payload.role_codes:
+            raise AdminForbiddenError("You cannot change your own role")
+        _assert_super_admin_change_allowed(actor, payload.role_code)
+        membership.role = _load_company_role(db, company_id, payload.role_code)
+        membership.user.is_super_admin = payload.role_code == "super_admin"
+        if payload.role_code == "agent":
             ensure_agent_profile(db, membership)
 
     if payload.email is not None:
@@ -180,6 +184,17 @@ def update_user(
         if duplicate:
             raise AdminConflictError("A user with this email already exists")
         membership.user.email = email
+
+    if payload.username is not None:
+        duplicate = db.scalar(
+            select(User).where(
+                User.username == payload.username,
+                User.id != membership.user_id,
+            )
+        )
+        if duplicate:
+            raise AdminConflictError("A user with this username already exists")
+        membership.user.username = payload.username
 
     if payload.full_name is not None:
         membership.user.full_name = payload.full_name

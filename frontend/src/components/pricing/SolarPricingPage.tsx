@@ -10,7 +10,12 @@ import {
   TrendingUp,
 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { createBrowserStateRepository } from '../../lib/repositories/browser-state-repository'
+import { getModuleAccess } from '../../lib/permissions'
+import { useOnlineStatus } from '../../lib/use-online-status'
+import type { Session } from '../../types'
 import { AlertDialog } from '../ui/AlertDialog'
+import { DataFreshness, ReadOnlyNotice } from '../ui/PageState'
 import { useToast } from '../ui/ToastProvider'
 
 type Formula = 'normal' | 'panelPerWatt' | 'fittingPerKw' | 'multiplier' | 'fixedFinal'
@@ -35,7 +40,6 @@ type PricingState = {
   items: PricingItem[]
 }
 
-const storageKey = 'shreeSolarPricingV1'
 const loanOutputBase = 33898
 
 const defaultState: PricingState = {
@@ -101,14 +105,14 @@ function cloneState(value: PricingState): PricingState {
   return JSON.parse(JSON.stringify(value)) as PricingState
 }
 
-function loadState() {
-  try {
-    const saved = JSON.parse(localStorage.getItem(storageKey) ?? '') as PricingState
-    if (saved && Array.isArray(saved.items)) return saved
-  } catch {
-    localStorage.removeItem(storageKey)
-  }
-  return cloneState(defaultState)
+const pricingRepository = createBrowserStateRepository<PricingState>(
+  'shreeSolarPricingV1',
+  () => cloneState(defaultState),
+)
+
+function loadState(): PricingState {
+  const saved = pricingRepository.load()
+  return saved && Array.isArray(saved.items) ? saved : cloneState(defaultState)
 }
 
 function numeric(value: unknown) {
@@ -151,18 +155,20 @@ function formatMoney(value: number) {
   return money.format(Math.round(numeric(value)))
 }
 
-export function SolarPricingPage() {
+export function SolarPricingPage({ session }: { session: Session }) {
   const [state, setState] = useState<PricingState>(loadState)
   const [view, setView] = useState<PricingView>('setup')
   const [itemToDelete, setItemToDelete] = useState<{ index: number; name: string } | null>(null)
   const [resetOpen, setResetOpen] = useState(false)
   const { toast } = useToast()
+  const access = getModuleAccess(session, 'pricing')
+  const online = useOnlineStatus()
   const storageErrorShown = useRef(false)
   const totals = useMemo(() => calculatePricing(state), [state])
 
   useEffect(() => {
     try {
-      localStorage.setItem(storageKey, JSON.stringify(state))
+      pricingRepository.save(state)
       storageErrorShown.current = false
     } catch {
       if (!storageErrorShown.current) {
@@ -217,14 +223,16 @@ export function SolarPricingPage() {
 
   return (
     <section className="pricing-desk-page">
+      <DataFreshness offline={!online} stale updatedAt={null} />
+      {access.readOnly && <ReadOnlyNotice />}
       <header className="pricing-desk-header">
         <div>
           <span>Updated {priceDate}</span>
           <h1>Solar pricing</h1>
         </div>
         <div className="pricing-desk-project">
-          <label><span>Customer / Project</span><input value={state.projectName} onChange={(event) => setState((current) => ({ ...current, projectName: event.target.value }))} placeholder="Customer name" /></label>
-          <label><span>System size</span><input type="number" min="0" step="0.01" value={state.systemKw} onChange={(event) => setState((current) => ({ ...current, systemKw: numeric(event.target.value) }))} /><b>kW</b></label>
+          <label><span>Customer / Project</span><input disabled={!access.canEdit} value={state.projectName} onChange={(event) => setState((current) => ({ ...current, projectName: event.target.value }))} placeholder="Customer name" /></label>
+          <label><span>System size</span><input disabled={!access.canEdit} type="number" min="0" step="0.01" value={state.systemKw} onChange={(event) => setState((current) => ({ ...current, systemKw: numeric(event.target.value) }))} /><b>kW</b></label>
         </div>
         <button className="secondary-button pricing-print-button" onClick={() => { window.print(); toast({ message: 'Print dialog opened', variant: 'info' }) }}><Printer size={14} /> Print</button>
       </header>
@@ -240,9 +248,9 @@ export function SolarPricingPage() {
             <header>
               <div><Calculator size={16} /><strong>Components</strong><span>{state.items.length} items</span></div>
               <div>
-                <button onClick={addItem}><Plus size={13} /> Add item</button>
+                <button disabled={!access.canCreate} onClick={addItem}><Plus size={13} /> Add item</button>
                 <button onClick={exportBackup}><Download size={13} /> Backup</button>
-                <button className="danger" onClick={() => setResetOpen(true)}><RotateCcw size={13} /> Reset</button>
+                <button className="danger" disabled={!access.canEdit} onClick={() => setResetOpen(true)}><RotateCcw size={13} /> Reset</button>
               </div>
             </header>
             <div className="pricing-components-table-wrap">
@@ -263,8 +271,8 @@ export function SolarPricingPage() {
                   {state.items.map((item, index) => (
                     <tr key={index}>
                       <td><span className="pricing-item-number">{index + 1}</span></td>
-                      <td><input className="component-name-input" value={item.name} onChange={(event) => updateItem(index, { name: event.target.value })} /></td>
-                      <td><select value={item.formula} onChange={(event) => {
+                      <td><input disabled={!access.canEdit} className="component-name-input" value={item.name} onChange={(event) => updateItem(index, { name: event.target.value })} /></td>
+                      <td><select disabled={!access.canEdit} value={item.formula} onChange={(event) => {
                         const formula = event.target.value as Formula
                         updateItem(index, {
                           formula,
@@ -272,14 +280,15 @@ export function SolarPricingPage() {
                           ...(formula === 'fixedFinal' && item.final === undefined ? { final: item.price * item.qty } : {}),
                         })
                       }}>{formulaOptions.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}</select></td>
-                      <td><input type="number" step=".01" value={item.price} onChange={(event) => updateItem(index, { price: numeric(event.target.value) })} /></td>
-                      <td><input type="number" step=".01" value={item.qty} onChange={(event) => updateItem(index, { qty: numeric(event.target.value) })} /></td>
-                      <td><input value={item.tax} onChange={(event) => {
+                      <td><input disabled={!access.canEdit} type="number" step=".01" value={item.price} onChange={(event) => updateItem(index, { price: numeric(event.target.value) })} /></td>
+                      <td><input disabled={!access.canEdit} type="number" step=".01" value={item.qty} onChange={(event) => updateItem(index, { qty: numeric(event.target.value) })} /></td>
+                      <td><input disabled={!access.canEdit} value={item.tax} onChange={(event) => {
                         const value = event.target.value.trim().toUpperCase()
                         updateItem(index, { tax: value.startsWith('N') ? 'NON' : numeric(value) })
                       }} /></td>
                       <td>
                         <input
+                          disabled={!access.canEdit}
                           type="number"
                           step=".01"
                           value={item.formula === 'fixedFinal' ? item.final ?? 0 : item.multiplier ?? ''}
@@ -299,6 +308,7 @@ export function SolarPricingPage() {
                         <div className={`pricing-final-field ${item.manualFinal !== undefined ? 'is-overridden' : ''}`}>
                           <span>₹</span>
                           <input
+                            disabled={!access.canEdit}
                             type="number"
                             step=".01"
                             value={item.manualFinal ?? Math.round(totals.lines[index]?.final ?? 0)}
@@ -312,7 +322,7 @@ export function SolarPricingPage() {
                           />
                         </div>
                       </td>
-                      <td><button className="pricing-remove-item" onClick={() => setItemToDelete({ index, name: item.name })} aria-label={`Delete ${item.name}`} title="Delete row"><Trash2 size={13} /></button></td>
+                      <td><button className="pricing-remove-item" disabled={!access.canArchive} onClick={() => setItemToDelete({ index, name: item.name })} aria-label={`Delete ${item.name}`} title="Delete row"><Trash2 size={13} /></button></td>
                     </tr>
                   ))}
                 </tbody>

@@ -36,9 +36,8 @@ uvicorn app.main:app --reload --port 8000
 
 The local seed user is created from `.env`:
 
-- Email: `admin@solarerp.dev`
+- Username: `admin`
 - Password: `ChangeMe123!`
-- Company code: `SHREE`
 
 Change these values before sharing or deploying the application.
 

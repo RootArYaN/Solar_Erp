@@ -18,6 +18,11 @@ import {
 import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Modal } from '../admin/Modal'
+import { createBrowserStateRepository } from '../../lib/repositories/browser-state-repository'
+import { getModuleAccess } from '../../lib/permissions'
+import { useOnlineStatus } from '../../lib/use-online-status'
+import type { Session } from '../../types'
+import { DataFreshness, ReadOnlyNotice } from '../ui/PageState'
 import { useToast } from '../ui/ToastProvider'
 
 type Category =
@@ -67,7 +72,6 @@ type InventoryState = {
   movements: StockMovement[]
 }
 
-const storageKey = 'solarErpInventoryV1'
 const categories: Category[] = ['Solar Panels', 'Inverters', 'Mounting', 'Protection', 'Cables', 'Earthing', 'Batteries', 'Consumables']
 const locations = ['Main Warehouse', 'Secondary Store', 'Project Site', 'Customer Site']
 
@@ -105,14 +109,16 @@ const blankItem: Omit<StockItem, 'id'> = {
   supplier: '',
 }
 
+const inventoryRepository = createBrowserStateRepository<InventoryState>(
+  'solarErpInventoryV1',
+  () => ({ items: defaultItems, movements: seedMovements }),
+)
+
 function loadInventory(): InventoryState {
-  try {
-    const saved = JSON.parse(localStorage.getItem(storageKey) ?? '') as InventoryState
-    if (saved && Array.isArray(saved.items) && Array.isArray(saved.movements)) return saved
-  } catch {
-    localStorage.removeItem(storageKey)
-  }
-  return { items: defaultItems, movements: seedMovements }
+  const saved = inventoryRepository.load()
+  return Array.isArray(saved.items) && Array.isArray(saved.movements)
+    ? saved
+    : { items: defaultItems, movements: seedMovements }
 }
 
 function money(value: number) {
@@ -131,7 +137,7 @@ function available(item: StockItem) {
   return Math.max(0, item.stock - item.reserved)
 }
 
-export function InventoryPage() {
+export function InventoryPage({ session }: { session: Session }) {
   const [state, setState] = useState<InventoryState>(loadInventory)
   const [search, setSearch] = useState('')
   const [category, setCategory] = useState<'All' | Category>('All')
@@ -147,10 +153,16 @@ export function InventoryPage() {
   const [note, setNote] = useState('')
   const [newItem, setNewItem] = useState(blankItem)
   const { toast } = useToast()
+  const access = getModuleAccess(session, 'inventory')
+  const online = useOnlineStatus()
 
   useEffect(() => {
-    localStorage.setItem(storageKey, JSON.stringify(state))
-  }, [state])
+    try {
+      inventoryRepository.save(state)
+    } catch {
+      toast({ message: 'Could not save the inventory prototype in this browser', variant: 'error' })
+    }
+  }, [state, toast])
 
   const filteredItems = useMemo(() => {
     const term = search.trim().toLowerCase()
@@ -245,6 +257,8 @@ export function InventoryPage() {
 
   return (
     <section className="inventory-page">
+      <DataFreshness offline={!online} stale updatedAt={null} />
+      {access.readOnly && <ReadOnlyNotice />}
       <header className="inventory-header">
         <div>
           <span className="inventory-eyebrow"><Warehouse size={14} /> Stock control</span>
@@ -252,8 +266,8 @@ export function InventoryPage() {
           <p>Manage supply, stock availability and site dispatches from one place.</p>
         </div>
         <div className="inventory-header__actions">
-          <button className="inventory-secondary-button" onClick={() => setItemOpen(true)}><Plus size={15} /> Add item</button>
-          <button className="inventory-primary-button" onClick={() => beginMovement()}><PackagePlus size={16} /> Record movement</button>
+          <button className="inventory-secondary-button" disabled={!access.canCreate} onClick={() => setItemOpen(true)}><Plus size={15} /> Add item</button>
+          <button className="inventory-primary-button" disabled={!access.canEdit} onClick={() => beginMovement()}><PackagePlus size={16} /> Record movement</button>
         </div>
       </header>
 
@@ -289,7 +303,7 @@ export function InventoryPage() {
                       <td>{item.reserved}</td>
                       <td>{item.reorderLevel}</td>
                       <td>{money(item.stock * item.unitCost)}</td>
-                      <td><button className="inventory-row-action" onClick={() => beginMovement(item.id, 'outward')} title="Move stock"><ArrowRight size={15} /></button></td>
+                      <td><button className="inventory-row-action" disabled={!access.canEdit} onClick={() => beginMovement(item.id, 'outward')} title="Move stock"><ArrowRight size={15} /></button></td>
                     </tr>
                   )
                 })}
@@ -300,7 +314,7 @@ export function InventoryPage() {
         </section>
 
         <aside className="inventory-flow-panel">
-          <header><div><Truck size={17} /><span><strong>Stock flow</strong><small>Latest supply and dispatches</small></span></div><button onClick={() => beginMovement(undefined, 'transfer')}><Plus size={14} /> Transfer</button></header>
+          <header><div><Truck size={17} /><span><strong>Stock flow</strong><small>Latest supply and dispatches</small></span></div><button disabled={!access.canEdit} onClick={() => beginMovement(undefined, 'transfer')}><Plus size={14} /> Transfer</button></header>
           <div className="inventory-flow-list">
             {state.movements.map((movement) => {
               const Icon = movement.type === 'inward' ? ArrowDownLeft : movement.type === 'outward' ? ArrowUpRight : movement.type === 'transfer' ? Truck : ClipboardList
@@ -315,7 +329,7 @@ export function InventoryPage() {
                       <b>{movement.quantity} units</b>
                       <small>{movement.reference}</small>
                       {movement.status === 'in-transit'
-                        ? <button onClick={() => completeTransfer(movement.id)}>Mark delivered</button>
+                        ? <button disabled={!access.canEdit} onClick={() => completeTransfer(movement.id)}>Mark delivered</button>
                         : <em><CircleCheck size={11} /> Completed</em>}
                     </footer>
                   </div>

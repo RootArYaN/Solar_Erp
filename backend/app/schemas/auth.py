@@ -1,16 +1,21 @@
 from datetime import datetime
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
 class LoginRequest(BaseModel):
-    email: EmailStr
+    username: str = Field(min_length=3, max_length=50, pattern=r"^[a-zA-Z0-9._-]+$")
     password: str = Field(min_length=8, max_length=128)
-    company_code: str | None = Field(default=None, max_length=32)
+
+    @field_validator("username")
+    @classmethod
+    def clean_username(cls, value: str) -> str:
+        return value.strip().lower()
 
 
 class UserSummary(BaseModel):
     id: str
+    username: str
     email: EmailStr
     full_name: str
 
@@ -28,7 +33,7 @@ class SessionResponse(BaseModel):
     membership_id: str
     user: UserSummary
     company: CompanySummary
-    roles: list[str]
+    role: str
     permissions: list[str]
 
 
@@ -36,5 +41,5 @@ class MeResponse(BaseModel):
     membership_id: str
     user: UserSummary
     company: CompanySummary
-    roles: list[str]
+    role: str
     permissions: list[str]

@@ -45,7 +45,7 @@ export function AdminPage({ session }: { session: Session }) {
   const { toast } = useToast()
   const canManageUsers = session.permissions.includes('users.manage')
   const canManageRoles = session.permissions.includes('roles.manage')
-  const isSuperAdmin = session.roles.includes('super_admin')
+  const isSuperAdmin = session.role === 'super_admin'
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -70,18 +70,19 @@ export function AdminPage({ session }: { session: Session }) {
   const filteredUsers = useMemo(() => {
     const term = search.trim().toLowerCase()
     if (!term) return users
-    return users.filter((user) => `${user.full_name} ${user.email} ${user.roles.join(' ')}`.toLowerCase().includes(term))
+    return users.filter((user) => `${user.full_name} ${user.username} ${user.email} ${user.role}`.toLowerCase().includes(term))
   }, [search, users])
 
-  async function saveUser(value: { full_name: string; email: string; password: string; role_codes: string[]; is_active: boolean }) {
+  async function saveUser(value: { full_name: string; username: string; email: string; password: string; role_code: string; is_active: boolean }) {
     const isEditing = Boolean(editingUser)
     setBusy(true)
     try {
       if (editingUser) {
         await updateUser(session.access_token, editingUser.membership_id, {
           full_name: value.full_name,
+          username: value.username,
           email: value.email,
-          role_codes: value.role_codes,
+          role_code: value.role_code,
           is_active: value.is_active,
         })
         if (value.password) await resetUserPassword(session.access_token, editingUser.membership_id, value.password)
@@ -187,8 +188,8 @@ export function AdminPage({ session }: { session: Session }) {
                 <tbody>
                   {filteredUsers.map((user) => (
                     <tr key={user.membership_id}>
-                      <td><div className="user-identity"><div className="avatar avatar--small">{user.full_name.slice(0, 1).toUpperCase()}</div><span><strong>{user.full_name}</strong><small>{user.email}</small></span></div></td>
-                      <td><div className="badge-list">{user.roles.map((role) => <span className={`role-badge role-badge--${role}`} key={role}>{roleLabels[role] ?? role.replaceAll('_', ' ')}</span>)}</div></td>
+                      <td><div className="user-identity"><div className="avatar avatar--small">{user.full_name.slice(0, 1).toUpperCase()}</div><span><strong>{user.full_name}</strong><small>@{user.username} · {user.email}</small></span></div></td>
+                      <td><div className="badge-list"><span className={`role-badge role-badge--${user.role}`}>{roleLabels[user.role] ?? user.role.replaceAll('_', ' ')}</span></div></td>
                       <td><span className={`status-badge ${user.is_active ? 'status-badge--active' : ''}`}>{user.is_active ? 'Active' : 'Inactive'}</span></td>
                       <td>{new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium' }).format(new Date(user.created_at))}</td>
                       <td><div className="row-actions">

@@ -7,9 +7,8 @@ def admin_login(client: TestClient) -> dict:
     response = client.post(
         "/api/v1/auth/login",
         json={
-            "email": "admin@solarerp.dev",
+            "username": "admin",
             "password": "ChangeMe123!",
-            "company_code": "SHREE",
         },
     )
     assert response.status_code == 200
@@ -58,9 +57,8 @@ def test_agent_can_view_and_update_only_own_profile() -> None:
         response = client.post(
             "/api/v1/auth/login",
             json={
-                "email": "agent@solarerp.dev",
+                "username": "agent",
                 "password": "AgentPass123!",
-                "company_code": "SHREE",
             },
         )
         assert response.status_code == 200, response.text

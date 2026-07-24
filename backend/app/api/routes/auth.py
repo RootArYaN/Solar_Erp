@@ -23,6 +23,7 @@ def me(session: CurrentSession = Depends(get_current_session)) -> MeResponse:
         membership_id=session.membership.id,
         user=UserSummary(
             id=session.user.id,
+            username=session.user.username,
             email=session.user.email,
             full_name=session.user.full_name,
         ),
@@ -31,6 +32,6 @@ def me(session: CurrentSession = Depends(get_current_session)) -> MeResponse:
             name=session.membership.company.name,
             code=session.membership.company.code,
         ),
-        roles=session.roles,
+        role=session.role,
         permissions=session.permissions,
     )

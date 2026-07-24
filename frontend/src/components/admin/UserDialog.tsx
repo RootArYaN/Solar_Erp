@@ -5,9 +5,10 @@ import { Modal } from './Modal'
 
 type UserFormValue = {
   full_name: string
+  username: string
   email: string
   password: string
-  role_codes: string[]
+  role_code: string
   is_active: boolean
 }
 
@@ -29,20 +30,12 @@ export function UserDialog({
   const visibleRoles = roles.filter((role) => role.code !== 'super_admin' || allowSuperAdmin || user?.is_super_admin)
   const [value, setValue] = useState<UserFormValue>({
     full_name: user?.full_name ?? '',
+    username: user?.username ?? '',
     email: user?.email ?? '',
     password: '',
-    role_codes: user?.roles ?? [visibleRoles[0]?.code ?? 'customer'],
+    role_code: user?.role ?? visibleRoles[0]?.code ?? 'customer',
     is_active: user?.is_active ?? true,
   })
-
-  function toggleRole(code: string) {
-    setValue((current) => ({
-      ...current,
-      role_codes: current.role_codes.includes(code)
-        ? current.role_codes.filter((roleCode) => roleCode !== code)
-        : [...current.role_codes, code],
-    }))
-  }
 
   async function submit(event: FormEvent) {
     event.preventDefault()
@@ -58,6 +51,10 @@ export function UserDialog({
             <div className="field__control"><UserRound size={17} /><input required minLength={2} value={value.full_name} onChange={(event) => setValue({ ...value, full_name: event.target.value })} placeholder="User name" /></div>
           </label>
           <label className="field">
+            <span>Username</span>
+            <div className="field__control"><UserRound size={17} /><input required minLength={3} maxLength={50} value={value.username} onChange={(event) => setValue({ ...value, username: event.target.value.toLowerCase() })} placeholder="username" /></div>
+          </label>
+          <label className="field">
             <span>Email address</span>
             <div className="field__control"><Mail size={17} /><input required type="email" value={value.email} onChange={(event) => setValue({ ...value, email: event.target.value })} placeholder="name@company.com" /></div>
           </label>
@@ -69,11 +66,11 @@ export function UserDialog({
         </label>
 
         <fieldset className="role-selector">
-          <legend>Assigned roles</legend>
+          <legend>Assigned role</legend>
           <div className="role-selector__grid">
             {visibleRoles.map((role) => (
-              <label className={`role-option ${value.role_codes.includes(role.code) ? 'role-option--selected' : ''}`} key={role.id}>
-                <input type="checkbox" checked={value.role_codes.includes(role.code)} onChange={() => toggleRole(role.code)} />
+              <label className={`role-option ${value.role_code === role.code ? 'role-option--selected' : ''}`} key={role.id}>
+                <input type="radio" name="role" checked={value.role_code === role.code} onChange={() => setValue({ ...value, role_code: role.code })} />
                 <span><strong>{role.name}</strong></span>
               </label>
             ))}
@@ -87,7 +84,7 @@ export function UserDialog({
 
         <footer className="modal-actions">
           <button type="button" className="secondary-button" onClick={onClose}>Cancel</button>
-          <button type="submit" className="primary-button primary-button--compact" disabled={busy || value.role_codes.length === 0}>
+          <button type="submit" className="primary-button primary-button--compact" disabled={busy || !value.role_code}>
             {busy ? 'Saving…' : user ? 'Save changes' : 'Create user'}
           </button>
         </footer>

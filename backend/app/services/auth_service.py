@@ -13,10 +13,10 @@ class AuthenticationError(Exception):
 def authenticate(db: Session, payload: LoginRequest) -> SessionResponse:
     statement = (
         select(User)
-        .where(User.email == payload.email.lower())
+        .where(User.username == payload.username)
         .options(
             selectinload(User.memberships)
-            .selectinload(Membership.roles)
+            .selectinload(Membership.role)
             .selectinload(Role.permissions),
             selectinload(User.memberships).selectinload(Membership.company),
         )
@@ -24,7 +24,7 @@ def authenticate(db: Session, payload: LoginRequest) -> SessionResponse:
     user = db.scalar(statement)
 
     if not user or not user.is_active or not verify_password(payload.password, user.hashed_password):
-        raise AuthenticationError("Invalid email or password")
+        raise AuthenticationError("Invalid username or password")
 
     memberships = [
         membership
@@ -32,25 +32,19 @@ def authenticate(db: Session, payload: LoginRequest) -> SessionResponse:
         if membership.is_active and membership.company.is_active
     ]
 
-    if payload.company_code:
-        company_code = payload.company_code.strip().upper()
-        memberships = [m for m in memberships if m.company.code.upper() == company_code]
-
     if not memberships:
         raise AuthenticationError("No active company access found")
 
     membership = memberships[0]
-    role_codes = sorted({role.code for role in membership.roles})
-    permission_codes = sorted(
-        {permission.code for role in membership.roles for permission in role.permissions}
-    )
+    role_code = membership.role.code
+    permission_codes = sorted({permission.code for permission in membership.role.permissions})
 
     token, expires_at = create_access_token(
         subject=user.id,
         claims={
             "membership_id": membership.id,
             "company_id": membership.company.id,
-            "roles": role_codes,
+            "role": role_code,
             "permissions": permission_codes,
         },
     )
@@ -59,12 +53,17 @@ def authenticate(db: Session, payload: LoginRequest) -> SessionResponse:
         access_token=token,
         expires_at=expires_at,
         membership_id=membership.id,
-        user=UserSummary(id=user.id, email=user.email, full_name=user.full_name),
+        user=UserSummary(
+            id=user.id,
+            username=user.username,
+            email=user.email,
+            full_name=user.full_name,
+        ),
         company=CompanySummary(
             id=membership.company.id,
             name=membership.company.name,
             code=membership.company.code,
         ),
-        roles=role_codes,
+        role=role_code,
         permissions=permission_codes,
     )

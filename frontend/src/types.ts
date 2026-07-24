@@ -5,6 +5,7 @@ export type Session = {
   membership_id?: string
   user: {
     id: string
+    username: string
     email: string
     full_name: string
   }
@@ -13,18 +14,19 @@ export type Session = {
     name: string
     code: string
   }
-  roles: string[]
+  role: string
   permissions: string[]
 }
 
 export type ManagedUser = {
   id: string
   membership_id: string
+  username: string
   email: string
   full_name: string
   is_active: boolean
   is_super_admin: boolean
-  roles: string[]
+  role: string
   created_at: string
 }
 
@@ -47,9 +49,10 @@ export type Role = {
 
 export type CreateUserInput = {
   full_name: string
+  username: string
   email: string
   password: string
-  role_codes: string[]
+  role_code: string
   is_active: boolean
 }
 

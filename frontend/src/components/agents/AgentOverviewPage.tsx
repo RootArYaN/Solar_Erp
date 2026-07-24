@@ -67,7 +67,7 @@ export function AgentOverviewPage({ session }: { session: Session }) {
   const canEditSelectedProfile = Boolean(
     overview && (
       overview.profile.membership_id === session.membership_id
-      || (agents.length === 1 && session.roles.includes('agent'))
+      || (agents.length === 1 && session.role === 'agent')
       || session.permissions.includes('agents.manage')
     ),
   )

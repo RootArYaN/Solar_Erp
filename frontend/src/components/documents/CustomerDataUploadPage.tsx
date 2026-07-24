@@ -1,6 +1,15 @@
-import { Download, Eye, FileDown, FileSpreadsheet, FileText, Pencil, Printer, RotateCcw, Save, Trash2, Upload, X } from 'lucide-react'
+import { Archive, Download, Eye, FileDown, FileSpreadsheet, FileText, Pencil, Printer, RotateCcw, Save, Upload, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import type { UploadStatus as UploadState } from '../../contracts/api-contracts'
+import { validateUpload } from '../../lib/file-validation'
+import { createBrowserStateRepository } from '../../lib/repositories/browser-state-repository'
+import { getModuleAccess } from '../../lib/permissions'
+import { useOnlineStatus } from '../../lib/use-online-status'
+import { useUnsavedChanges } from '../../lib/use-unsaved-changes'
+import type { Session } from '../../types'
+import { UploadStatus } from '../files/UploadStatus'
 import { AlertDialog } from '../ui/AlertDialog'
+import { DataFreshness, ReadOnlyNotice } from '../ui/PageState'
 import { useToast } from '../ui/ToastProvider'
 
 type CustomerDocumentData = {
@@ -46,6 +55,11 @@ type SupportingDocument = {
   size: number
   mimeType: string
   url: string
+  status: UploadState
+  progress: number
+  failureMessage: string | null
+  previewExpiresAt: string | null
+  archivedAt: string | null
 }
 
 const supportingDocumentTypes = [
@@ -132,13 +146,14 @@ const defaultTemplate: TemplateSettings = {
   },
 }
 
-function loadSavedTemplate() {
-  try {
-    const saved = localStorage.getItem(templateStorageKey)
-    return saved ? { ...defaultTemplate, ...JSON.parse(saved) as TemplateSettings } : defaultTemplate
-  } catch {
-    return defaultTemplate
-  }
+const templateRepository = createBrowserStateRepository<TemplateSettings>(
+  templateStorageKey,
+  () => structuredClone(defaultTemplate),
+)
+
+function loadSavedTemplate(): TemplateSettings {
+  const saved = templateRepository.load()
+  return { ...structuredClone(defaultTemplate), ...saved }
 }
 
 const printStyles = `
@@ -392,7 +407,7 @@ function QuotationPreview({ data, template }: { data: CustomerDocumentData; temp
   )
 }
 
-export function CustomerDataUploadPage() {
+export function CustomerDataUploadPage({ session }: { session: Session }) {
   const [data, setData] = useState(initialData)
   const [template, setTemplate] = useState<TemplateSettings>(loadSavedTemplate)
   const [templateDraft, setTemplateDraft] = useState<TemplateSettings>(() => structuredClone(loadSavedTemplate()))
@@ -401,12 +416,17 @@ export function CustomerDataUploadPage() {
   const [activeTab, setActiveTab] = useState<DocumentTab>('feasibility')
   const [mergeMode, setMergeMode] = useState<MergeMode>('all')
   const [signature, setSignature] = useState('')
-  const [documentToDelete, setDocumentToDelete] = useState<SupportingDocument | null>(null)
+  const [documentToArchive, setDocumentToArchive] = useState<SupportingDocument | null>(null)
   const [resetTemplateOpen, setResetTemplateOpen] = useState(false)
+  const [dirty, setDirty] = useState(false)
   const { toast } = useToast()
+  const access = getModuleAccess(session, 'documents')
+  const online = useOnlineStatus()
+  const canModify = access.canCreate || access.canEdit
   const [supportingType, setSupportingType] = useState('aadhaar_front')
   const [customDocumentLabel, setCustomDocumentLabel] = useState('')
   const [supportingDocuments, setSupportingDocuments] = useState<SupportingDocument[]>([])
+  useUnsavedChanges(dirty || supportingDocuments.length > 0 || Boolean(signature))
   const fileInputRef = useRef<HTMLInputElement>(null)
   const signatureInputRef = useRef<HTMLInputElement>(null)
   const supportingInputRef = useRef<HTMLInputElement>(null)
@@ -427,6 +447,7 @@ export function CustomerDataUploadPage() {
   )
 
   function setField(field: keyof CustomerDocumentData, value: string) {
+    setDirty(true)
     setData((current) => ({ ...current, [field]: value }))
   }
 
@@ -461,7 +482,7 @@ export function CustomerDataUploadPage() {
 
   function saveTemplatePermanently() {
     try {
-      localStorage.setItem(templateStorageKey, JSON.stringify(templateDraft))
+      templateRepository.save(templateDraft)
       setTemplate(structuredClone(templateDraft))
       setTemplateEditorOpen(false)
       toast({ message: 'Default template saved', variant: 'success' })
@@ -494,13 +515,15 @@ export function CustomerDataUploadPage() {
 
   function handleSignature(file?: File) {
     if (!file) return
-    if (!file.type.startsWith('image/')) {
-      toast({ message: 'Select an image for the signature', variant: 'error' })
+    const validation = validateUpload(file, { maxBytes: 2 * 1024 * 1024, allowedMimeTypes: ['image/png', 'image/jpeg', 'image/webp'] })
+    if ('message' in validation) {
+      toast({ message: validation.message, variant: 'error' })
       return
     }
     const reader = new FileReader()
     reader.onload = () => {
       setSignature(String(reader.result ?? ''))
+      setDirty(true)
       toast({ message: 'Signature added', variant: 'success' })
     }
     reader.onerror = () => toast({ message: 'Could not read the signature image', variant: 'error' })
@@ -517,9 +540,9 @@ export function CustomerDataUploadPage() {
     const rejected: string[] = []
 
     Array.from(files).forEach((file) => {
-      const supported = file.type.startsWith('image/') || file.type === 'application/pdf'
-      if (!supported || file.size > 10 * 1024 * 1024) {
-        rejected.push(file.name)
+      const validation = validateUpload(file, { maxBytes: 10 * 1024 * 1024, allowedMimeTypes: ['image/*', 'application/pdf'] })
+      if ('message' in validation) {
+        rejected.push(validation.message)
         return
       }
       accepted.push({
@@ -530,23 +553,40 @@ export function CustomerDataUploadPage() {
         size: file.size,
         mimeType: file.type,
         url: URL.createObjectURL(file),
+        status: 'pending',
+        progress: 0,
+        failureMessage: null,
+        previewExpiresAt: null,
+        archivedAt: null,
       })
     })
 
     if (accepted.length) {
       setSupportingDocuments((current) => [...current, ...accepted])
+      setDirty(true)
       toast({ message: `${accepted.length} document${accepted.length === 1 ? '' : 's'} added`, variant: 'success' })
     }
-    if (rejected.length) toast({ message: `Skipped: ${rejected.join(', ')}`, variant: 'warning' })
+    if (rejected.length) toast({ message: `Skipped: ${rejected.join('; ')}`, variant: 'warning' })
     if (supportingInputRef.current) supportingInputRef.current.value = ''
   }
 
-  function removeSupportingDocument() {
-    if (!documentToDelete) return
-    setSupportingDocuments((current) => current.filter((item) => item.id !== documentToDelete.id))
-    URL.revokeObjectURL(documentToDelete.url)
-    toast({ message: `${documentToDelete.label} deleted`, variant: 'success' })
-    setDocumentToDelete(null)
+
+  function retrySupportingDocument(id: string) {
+    setSupportingDocuments((current) => current.map((document) => document.id === id
+      ? { ...document, status: 'pending', progress: 0, failureMessage: null }
+      : document))
+    toast({ message: 'Upload queued for retry when the secure upload endpoint is connected', variant: 'info' })
+  }
+
+  function toggleSupportingDocumentArchive() {
+    if (!documentToArchive) return
+    const restoring = Boolean(documentToArchive.archivedAt)
+    setSupportingDocuments((current) => current.map((item) => item.id === documentToArchive.id
+      ? { ...item, archivedAt: restoring ? null : new Date().toISOString(), status: restoring ? 'pending' : 'cancelled', progress: restoring ? 0 : item.progress }
+      : item))
+    setDirty(true)
+    toast({ message: `${documentToArchive.label} ${restoring ? 'restored' : 'archived'}`, variant: 'success' })
+    setDocumentToArchive(null)
   }
 
   function downloadTemplate() {
@@ -595,65 +635,67 @@ export function CustomerDataUploadPage() {
   return (
     <>
     <section className="customer-doc-page">
-      <aside className="customer-doc-form-panel">
+      <DataFreshness offline={!online} stale updatedAt={null} />
+      {access.readOnly && <ReadOnlyNotice />}
+      <section className="customer-doc-form-panel customer-doc-form-fieldset" aria-disabled={!canModify}>
         <header className="customer-doc-form-header">
           <div><strong>Customer documents</strong></div>
           <small>{completedFields}/{Object.keys(initialData).length} fields</small>
         </header>
         <div className="customer-upload-actions">
-          <button className="secondary-button" onClick={() => fileInputRef.current?.click()}><Upload size={13} /> Import data</button>
+          <button className="secondary-button" disabled={!canModify} onClick={() => fileInputRef.current?.click()}><Upload size={13} /> Import data</button>
           <button className="secondary-button" onClick={downloadTemplate}><Download size={13} /> CSV template</button>
           <input ref={fileInputRef} type="file" accept=".csv,.json,text/csv,application/json" hidden onChange={(event) => void handleCustomerFile(event.target.files?.[0])} />
         </div>
 
         <div className="customer-doc-form-scroll">
           <FormSection title="Customer Information">
-            <DocField label="Full Name of Consumer *" value={data.name} onChange={(value) => setField('name', value)} />
-            <DocField label="Address of Installation *" value={data.address} multiline onChange={(value) => setField('address', value)} />
+            <DocField disabled={!canModify} label="Full Name of Consumer *" value={data.name} onChange={(value) => setField('name', value)} />
+            <DocField disabled={!canModify} label="Address of Installation *" value={data.address} multiline onChange={(value) => setField('address', value)} />
             <div className="customer-doc-field-row">
-              <DocField label="Consumer No. (PGVCL)" value={data.consumerNo} onChange={(value) => setField('consumerNo', value)} />
-              <DocField label="District" value={data.district} onChange={(value) => setField('district', value)} />
+              <DocField disabled={!canModify} label="Consumer No. (PGVCL)" value={data.consumerNo} onChange={(value) => setField('consumerNo', value)} />
+              <DocField disabled={!canModify} label="District" value={data.district} onChange={(value) => setField('district', value)} />
             </div>
           </FormSection>
           <FormSection title="Quotation Details">
             <div className="customer-doc-field-row">
-              <DocField label="Customer / Quote No." value={data.customerNo} onChange={(value) => setField('customerNo', value)} />
-              <DocField label="Quotation Amount (₹)" value={data.quotationAmount} inputMode="decimal" onChange={(value) => setField('quotationAmount', value)} />
+              <DocField disabled={!canModify} label="Customer / Quote No." value={data.customerNo} onChange={(value) => setField('customerNo', value)} />
+              <DocField disabled={!canModify} label="Quotation Amount (₹)" value={data.quotationAmount} inputMode="decimal" onChange={(value) => setField('quotationAmount', value)} />
             </div>
           </FormSection>
           <FormSection title="System Specifications">
             <div className="customer-doc-field-row">
-              <DocField label="Plant Capacity (kW)" value={data.plantCapacity} inputMode="decimal" onChange={(value) => setField('plantCapacity', value)} />
-              <DocField label="Panel Size (WP)" value={data.panelSize} inputMode="numeric" onChange={(value) => setField('panelSize', value)} />
+              <DocField disabled={!canModify} label="Plant Capacity (kW)" value={data.plantCapacity} inputMode="decimal" onChange={(value) => setField('plantCapacity', value)} />
+              <DocField disabled={!canModify} label="Panel Size (WP)" value={data.panelSize} inputMode="numeric" onChange={(value) => setField('panelSize', value)} />
             </div>
             <div className="customer-doc-field-row">
-              <DocField label="No. of Panels" value={data.noOfPanels} inputMode="numeric" onChange={(value) => setField('noOfPanels', value)} />
-              <DocField label="Panel Brand" value={data.panelBrand} onChange={(value) => setField('panelBrand', value)} />
+              <DocField disabled={!canModify} label="No. of Panels" value={data.noOfPanels} inputMode="numeric" onChange={(value) => setField('noOfPanels', value)} />
+              <DocField disabled={!canModify} label="Panel Brand" value={data.panelBrand} onChange={(value) => setField('panelBrand', value)} />
             </div>
-            <DocField label="Inverter Brand" value={data.inverterBrand} onChange={(value) => setField('inverterBrand', value)} />
+            <DocField disabled={!canModify} label="Inverter Brand" value={data.inverterBrand} onChange={(value) => setField('inverterBrand', value)} />
           </FormSection>
           <FormSection title="Customer Signature">
-            <button className="customer-signature-upload" onClick={() => signatureInputRef.current?.click()}>
+            <button className="customer-signature-upload" disabled={!canModify} onClick={() => signatureInputRef.current?.click()}>
               {signature ? <img src={signature} alt="Uploaded customer signature" /> : <><Upload size={18} /><span>Upload signature</span></>}
             </button>
             <input ref={signatureInputRef} type="file" accept="image/*" hidden onChange={(event) => handleSignature(event.target.files?.[0])} />
           </FormSection>
 
-          <FormSection title={`Supporting documents (${supportingDocuments.length})`}>
+          <FormSection title={`Supporting documents (${supportingDocuments.filter((document) => !document.archivedAt).length})`}>
             <div className="supporting-doc-upload">
               <label>
                 <span>Document type</span>
-                <select value={supportingType} onChange={(event) => setSupportingType(event.target.value)}>
+                <select disabled={!access.canCreate} value={supportingType} onChange={(event) => setSupportingType(event.target.value)}>
                   {supportingDocumentTypes.map((type) => <option value={type.value} key={type.value}>{type.label}</option>)}
                 </select>
               </label>
               {supportingType === 'other' && (
                 <label>
                   <span>Document name</span>
-                  <input value={customDocumentLabel} onChange={(event) => setCustomDocumentLabel(event.target.value)} placeholder="e.g. Passport" />
+                  <input disabled={!access.canCreate} value={customDocumentLabel} onChange={(event) => setCustomDocumentLabel(event.target.value)} placeholder="e.g. Passport" />
                 </label>
               )}
-              <button className="customer-supporting-upload-button" onClick={() => supportingInputRef.current?.click()}>
+              <button className="customer-supporting-upload-button" disabled={!access.canCreate} onClick={() => supportingInputRef.current?.click()}>
                 <Upload size={15} /> Upload files
               </button>
               <input
@@ -670,8 +712,8 @@ export function CustomerDataUploadPage() {
             {supportingDocuments.length > 0 && (
               <div className="supporting-doc-list">
                 {supportingDocuments.map((document) => (
-                  <article key={document.id}>
-                    <button className="supporting-doc-thumbnail" onClick={() => window.open(document.url, '_blank')}>
+                  <article className={document.archivedAt ? 'is-archived' : ''} key={document.id}>
+                    <button className="supporting-doc-thumbnail" disabled={Boolean(document.archivedAt)} onClick={() => window.open(document.url, '_blank')}>
                       {document.mimeType.startsWith('image/')
                         ? <img src={document.url} alt={document.label} />
                         : <FileText size={20} />}
@@ -680,11 +722,12 @@ export function CustomerDataUploadPage() {
                       <strong>{document.label}</strong>
                       <span title={document.name}>{document.name}</span>
                       <small>{(document.size / 1024).toFixed(0)} KB</small>
+                      {document.archivedAt ? <small>Archived · restorable</small> : <UploadStatus status={document.status} progress={document.progress} failureMessage={document.failureMessage} onRetry={() => retrySupportingDocument(document.id)} onCancel={access.canArchive ? () => setDocumentToArchive(document) : undefined} />}
                     </div>
                     <div className="supporting-doc-actions">
-                      <button onClick={() => window.open(document.url, '_blank')} aria-label={`Preview ${document.name}`} title="Preview"><Eye size={13} /></button>
-                      <a href={document.url} download={document.name} onClick={() => toast({ message: `Downloading ${document.name}`, variant: 'info' })} aria-label={`Download ${document.name}`} title="Download"><Download size={13} /></a>
-                      <button onClick={() => setDocumentToDelete(document)} aria-label={`Delete ${document.name}`} title="Delete"><Trash2 size={13} /></button>
+                      {!document.archivedAt && <button onClick={() => window.open(document.url, '_blank')} aria-label={`Preview ${document.name}`} title="Preview"><Eye size={13} /></button>}
+                      {!document.archivedAt && <a href={document.url} download={document.name} onClick={() => toast({ message: `Downloading ${document.name}`, variant: 'info' })} aria-label={`Download ${document.name}`} title="Download"><Download size={13} /></a>}
+                      <button disabled={!access.canArchive} onClick={() => setDocumentToArchive(document)} aria-label={`${document.archivedAt ? 'Restore' : 'Archive'} ${document.name}`} title={document.archivedAt ? 'Restore' : 'Archive'}>{document.archivedAt ? <RotateCcw size={13} /> : <Archive size={13} />}</button>
                     </div>
                   </article>
                 ))}
@@ -692,7 +735,7 @@ export function CustomerDataUploadPage() {
             )}
           </FormSection>
         </div>
-      </aside>
+      </section>
 
       <section className="customer-doc-preview-panel">
         <header className="customer-doc-preview-toolbar">
@@ -700,7 +743,7 @@ export function CustomerDataUploadPage() {
             {tabs.map((tab) => <button key={tab.id} className={activeTab === tab.id ? 'active' : ''} onClick={() => setActiveTab(tab.id)}>{tab.label}</button>)}
           </nav>
           <div>
-            <button className="secondary-button" onClick={openTemplateEditor}><Pencil size={14} /> Edit template</button>
+            <button className="secondary-button" disabled={!access.canEdit} onClick={openTemplateEditor}><Pencil size={14} /> Edit template</button>
             {activeTab === 'merged' && (
               <select className="document-merge-mode" value={mergeMode} onChange={(event) => setMergeMode(event.target.value as MergeMode)}>
                 <option value="all">All documents</option>
@@ -733,7 +776,7 @@ export function CustomerDataUploadPage() {
                     <article className="doc-maker-preview-page"><QuotationPreview data={data} template={template} /></article>
                   </>
                 )}
-                {supportingDocuments.map((document) => (
+                {supportingDocuments.filter((document) => !document.archivedAt).map((document) => (
                   <article className="doc-maker-preview-page doc-maker-supporting-page" key={document.id}>
                     <Letterhead title={document.label} detail={`Customer supporting document · ${document.name}`} company={template.company} />
                     <div className="doc-maker-supporting-content">
@@ -751,7 +794,7 @@ export function CustomerDataUploadPage() {
                     </footer>
                   </article>
                 ))}
-                {mergeMode === 'customer' && supportingDocuments.length === 0 && (
+                {mergeMode === 'customer' && supportingDocuments.every((document) => Boolean(document.archivedAt)) && (
                   <div className="merged-documents-empty">
                     <FileText size={28} />
                     <strong>No documents uploaded</strong>
@@ -815,12 +858,12 @@ export function CustomerDataUploadPage() {
       </div>
     )}
     <AlertDialog
-      open={Boolean(documentToDelete)}
-      title={`Delete ${documentToDelete?.label ?? 'document'}?`}
-      confirmLabel="Delete document"
-      icon="delete"
-      onCancel={() => setDocumentToDelete(null)}
-      onConfirm={removeSupportingDocument}
+      open={Boolean(documentToArchive)}
+      title={`${documentToArchive?.archivedAt ? 'Restore' : 'Archive'} ${documentToArchive?.label ?? 'document'}?`}
+      confirmLabel={documentToArchive?.archivedAt ? 'Restore document' : 'Archive document'}
+      icon="warning"
+      onCancel={() => setDocumentToArchive(null)}
+      onConfirm={toggleSupportingDocumentArchive}
     />
     <AlertDialog
       open={resetTemplateOpen}
@@ -848,20 +891,22 @@ function DocField({
   value,
   multiline = false,
   inputMode,
+  disabled = false,
   onChange,
 }: {
   label: string
   value: string
   multiline?: boolean
   inputMode?: React.HTMLAttributes<HTMLInputElement>['inputMode']
+  disabled?: boolean
   onChange: (value: string) => void
 }) {
   return (
     <label className="customer-doc-field">
       <span>{label}</span>
       {multiline
-        ? <textarea value={value} onChange={(event) => onChange(event.target.value)} />
-        : <input value={value} inputMode={inputMode} onChange={(event) => onChange(event.target.value)} />}
+        ? <textarea disabled={disabled} value={value} onChange={(event) => onChange(event.target.value)} />
+        : <input disabled={disabled} value={value} inputMode={inputMode} onChange={(event) => onChange(event.target.value)} />}
     </label>
   )
 }

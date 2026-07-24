@@ -23,19 +23,21 @@ class RoleSummary(BaseModel):
 class UserAdminSummary(BaseModel):
     id: str
     membership_id: str
+    username: str
     email: EmailStr
     full_name: str
     is_active: bool
     is_super_admin: bool
-    roles: list[str]
+    role: str
     created_at: datetime
 
 
 class CreateUserRequest(BaseModel):
     full_name: str = Field(min_length=2, max_length=120)
+    username: str = Field(min_length=3, max_length=50, pattern=r"^[a-zA-Z0-9._-]+$")
     email: EmailStr
     password: str = Field(min_length=8, max_length=128)
-    role_codes: list[str] = Field(min_length=1, max_length=10)
+    role_code: str = Field(pattern=r"^[a-z][a-z0-9_]{1,39}$")
     is_active: bool = True
 
     @field_validator("full_name")
@@ -43,19 +45,27 @@ class CreateUserRequest(BaseModel):
     def clean_full_name(cls, value: str) -> str:
         return " ".join(value.split())
 
-    @field_validator("role_codes")
+    @field_validator("username")
     @classmethod
-    def clean_role_codes(cls, values: list[str]) -> list[str]:
-        cleaned = sorted({value.strip().lower() for value in values if value.strip()})
-        if not cleaned:
-            raise ValueError("At least one role is required")
-        return cleaned
+    def clean_username(cls, value: str) -> str:
+        return value.strip().lower()
+
+    @field_validator("role_code")
+    @classmethod
+    def clean_role_code(cls, value: str) -> str:
+        return value.strip().lower()
 
 
 class UpdateUserRequest(BaseModel):
     full_name: str | None = Field(default=None, min_length=2, max_length=120)
+    username: str | None = Field(
+        default=None,
+        min_length=3,
+        max_length=50,
+        pattern=r"^[a-zA-Z0-9._-]+$",
+    )
     email: EmailStr | None = None
-    role_codes: list[str] | None = Field(default=None, min_length=1, max_length=10)
+    role_code: str | None = Field(default=None, pattern=r"^[a-z][a-z0-9_]{1,39}$")
     is_active: bool | None = None
 
     @field_validator("full_name")
@@ -63,15 +73,15 @@ class UpdateUserRequest(BaseModel):
     def clean_full_name(cls, value: str | None) -> str | None:
         return " ".join(value.split()) if value is not None else None
 
-    @field_validator("role_codes")
+    @field_validator("username")
     @classmethod
-    def clean_role_codes(cls, values: list[str] | None) -> list[str] | None:
-        if values is None:
-            return None
-        cleaned = sorted({value.strip().lower() for value in values if value.strip()})
-        if not cleaned:
-            raise ValueError("At least one role is required")
-        return cleaned
+    def clean_username(cls, value: str | None) -> str | None:
+        return value.strip().lower() if value is not None else None
+
+    @field_validator("role_code")
+    @classmethod
+    def clean_role_code(cls, value: str | None) -> str | None:
+        return value.strip().lower() if value is not None else None
 
 
 class ResetPasswordRequest(BaseModel):

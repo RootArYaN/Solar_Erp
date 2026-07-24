@@ -7,9 +7,8 @@ def login(client: TestClient) -> dict:
     response = client.post(
         "/api/v1/auth/login",
         json={
-            "email": "admin@solarerp.dev",
+            "username": "admin",
             "password": "ChangeMe123!",
-            "company_code": "SHREE",
         },
     )
     assert response.status_code == 200
@@ -32,6 +31,7 @@ def test_seeded_roles_and_user_lifecycle() -> None:
         }
 
         email = "agent.user@solarerp.dev"
+        username = "agent.user"
         existing = client.get("/api/v1/admin/users", params={"q": email}, headers=headers)
         for user in existing.json():
             if user["email"] == email:
@@ -46,15 +46,16 @@ def test_seeded_roles_and_user_lifecycle() -> None:
             "/api/v1/admin/users",
             json={
                 "full_name": "Agent User",
+                "username": username,
                 "email": email,
                 "password": "AgentPass123!",
-                "role_codes": ["agent"],
+                "role_code": "agent",
             },
             headers=headers,
         )
         assert created.status_code == 201, created.text
         user = created.json()
-        assert user["roles"] == ["agent"]
+        assert user["role"] == "agent"
 
         agent_overview = client.get(
             f"/api/v1/agents/{user['membership_id']}/overview",
@@ -65,11 +66,11 @@ def test_seeded_roles_and_user_lifecycle() -> None:
 
         updated = client.patch(
             f"/api/v1/admin/users/{user['membership_id']}",
-            json={"role_codes": ["accounts_admin"], "is_active": True},
+            json={"role_code": "accounts_admin", "is_active": True},
             headers=headers,
         )
         assert updated.status_code == 200
-        assert updated.json()["roles"] == ["accounts_admin"]
+        assert updated.json()["role"] == "accounts_admin"
 
         reset = client.post(
             f"/api/v1/admin/users/{user['membership_id']}/reset-password",
@@ -80,10 +81,10 @@ def test_seeded_roles_and_user_lifecycle() -> None:
 
         user_login = client.post(
             "/api/v1/auth/login",
-            json={"email": email, "password": "NewAgentPass123!", "company_code": "SHREE"},
+            json={"username": username, "password": "NewAgentPass123!"},
         )
         assert user_login.status_code == 200
-        assert user_login.json()["roles"] == ["accounts_admin"]
+        assert user_login.json()["role"] == "accounts_admin"
 
         accounts_headers = {"Authorization": f"Bearer {user_login.json()['access_token']}"}
         visible_agents = client.get("/api/v1/agents", headers=accounts_headers)
@@ -126,13 +127,15 @@ def test_custom_role_and_super_admin_guard() -> None:
         assert "documents.view" in updated_role.json()["permissions"]
 
         company_admin_email = "company.admin@solarerp.dev"
+        company_admin_username = "company.admin"
         created_admin = client.post(
             "/api/v1/admin/users",
             json={
                 "full_name": "Company Administrator",
+                "username": company_admin_username,
                 "email": company_admin_email,
                 "password": "CompanyAdmin123!",
-                "role_codes": ["company_admin"],
+                "role_code": "company_admin",
             },
             headers=headers,
         )
@@ -141,9 +144,8 @@ def test_custom_role_and_super_admin_guard() -> None:
         company_admin_login = client.post(
             "/api/v1/auth/login",
             json={
-                "email": company_admin_email,
+                "username": company_admin_username,
                 "password": "CompanyAdmin123!",
-                "company_code": "SHREE",
             },
         )
         assert company_admin_login.status_code == 200
@@ -155,9 +157,10 @@ def test_custom_role_and_super_admin_guard() -> None:
             "/api/v1/admin/users",
             json={
                 "full_name": "Forbidden Super Admin",
+                "username": "forbidden.super",
                 "email": "forbidden.super@solarerp.dev",
                 "password": "Forbidden123!",
-                "role_codes": ["super_admin"],
+                "role_code": "super_admin",
             },
             headers=company_admin_headers,
         )

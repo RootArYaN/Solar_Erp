@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     seed_company_name: str = "Shree Enterprise"
     seed_company_code: str = "SHREE"
     seed_admin_name: str = "Local Administrator"
+    seed_admin_username: str = "admin"
     seed_admin_email: EmailStr = "admin@solarerp.dev"
     seed_admin_password: str = "ChangeMe123!"
 

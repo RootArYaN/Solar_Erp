@@ -17,13 +17,6 @@ def utc_now() -> datetime:
     return datetime.now(UTC)
 
 
-membership_roles = Table(
-    "membership_roles",
-    Base.metadata,
-    Column("membership_id", ForeignKey("memberships.id", ondelete="CASCADE"), primary_key=True),
-    Column("role_id", ForeignKey("roles.id", ondelete="CASCADE"), primary_key=True),
-)
-
 role_permissions = Table(
     "role_permissions",
     Base.metadata,
@@ -43,6 +36,7 @@ class User(TimestampMixin, Base):
     __tablename__ = "users"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    username: Mapped[str] = mapped_column(String(50), unique=True, index=True, nullable=False)
     email: Mapped[str] = mapped_column(String(320), unique=True, index=True, nullable=False)
     full_name: Mapped[str] = mapped_column(String(120), nullable=False)
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -71,11 +65,12 @@ class Membership(TimestampMixin, Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     company_id: Mapped[str] = mapped_column(ForeignKey("companies.id", ondelete="CASCADE"), nullable=False)
+    role_id: Mapped[str] = mapped_column(ForeignKey("roles.id", ondelete="RESTRICT"), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     user: Mapped[User] = relationship(back_populates="memberships")
     company: Mapped[Company] = relationship(back_populates="memberships")
-    roles: Mapped[list[Role]] = relationship(secondary=membership_roles, back_populates="memberships")
+    role: Mapped[Role] = relationship(back_populates="memberships")
 
 
 class Role(TimestampMixin, Base):
@@ -90,7 +85,7 @@ class Role(TimestampMixin, Base):
     is_system: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     company: Mapped[Company] = relationship(back_populates="roles")
-    memberships: Mapped[list[Membership]] = relationship(secondary=membership_roles, back_populates="roles")
+    memberships: Mapped[list[Membership]] = relationship(back_populates="role")
     permissions: Mapped[list[Permission]] = relationship(secondary=role_permissions, back_populates="roles")
 
 

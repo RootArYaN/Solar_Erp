@@ -74,10 +74,12 @@ ROLE_BLUEPRINTS = {
 
 
 def _seed_agent_workspace(db: Session, company: Company, agent_role: Role) -> None:
+    username = "agent"
     email = "agent@solarerp.dev"
-    user = db.scalar(select(User).where(User.email == email))
+    user = db.scalar(select(User).where(User.username == username))
     if not user:
         user = User(
+            username=username,
             email=email,
             full_name="Ravi Shah",
             hashed_password=hash_password("AgentPass123!"),
@@ -90,11 +92,11 @@ def _seed_agent_workspace(db: Session, company: Company, agent_role: Role) -> No
         select(Membership).where(Membership.user_id == user.id, Membership.company_id == company.id)
     )
     if not membership:
-        membership = Membership(user_id=user.id, company_id=company.id)
+        membership = Membership(user_id=user.id, company_id=company.id, role=agent_role)
         db.add(membership)
         db.flush()
-    if agent_role not in membership.roles:
-        membership.roles.append(agent_role)
+    else:
+        membership.role = agent_role
 
     profile = db.scalar(select(AgentProfile).where(AgentProfile.membership_id == membership.id))
     if not profile:
@@ -223,10 +225,12 @@ def seed_development_data(db: Session) -> None:
                     role.permissions.append(permission)
         roles_by_code[code] = role
 
+    username = settings.seed_admin_username.strip().lower()
     email = str(settings.seed_admin_email).lower()
-    user = db.scalar(select(User).where(User.email == email))
+    user = db.scalar(select(User).where(User.username == username))
     if not user:
         user = User(
+            username=username,
             email=email,
             full_name=settings.seed_admin_name,
             hashed_password=hash_password(settings.seed_admin_password),
@@ -244,14 +248,15 @@ def seed_development_data(db: Session) -> None:
         )
     )
     if not membership:
-        membership = Membership(user_id=user.id, company_id=company.id)
+        membership = Membership(
+            user_id=user.id,
+            company_id=company.id,
+            role=roles_by_code["super_admin"],
+        )
         db.add(membership)
         db.flush()
-
-    for role_code in ("company_admin", "super_admin"):
-        role = roles_by_code[role_code]
-        if role not in membership.roles:
-            membership.roles.append(role)
+    else:
+        membership.role = roles_by_code["super_admin"]
 
     _seed_agent_workspace(db, company, roles_by_code["agent"])
     db.commit()
