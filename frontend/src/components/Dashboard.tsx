@@ -1,4 +1,4 @@
-import { ArrowUpRight, BadgeIndianRupee, ContactRound, FileUp, ImageUp, PackageSearch, ReceiptText, ShieldCheck, SunMedium, UsersRound } from 'lucide-react'
+import { ArrowUpRight, BadgeIndianRupee, ClipboardCheck, ContactRound, FileUp, ImageUp, PackageSearch, ReceiptText, ShieldCheck, SunMedium, UsersRound } from 'lucide-react'
 import { motion } from 'motion/react'
 import { Link } from 'react-router-dom'
 import { hasEveryPermission, hasPermission, PERMISSIONS } from '../lib/permissions'
@@ -13,6 +13,7 @@ const modules = [
   { icon: ImageUp, title: 'Poster library', permission: PERMISSIONS.posters.view, to: '/app/posters' },
   { icon: FileUp, title: 'Customer documents', permission: PERMISSIONS.documents.view, to: '/app/customer-documents' },
   { icon: ContactRound, title: 'Agent network', permission: PERMISSIONS.agents.view, to: '/app/agents' },
+  { icon: ClipboardCheck, title: 'Approval center', permission: PERMISSIONS.quotations.approve, to: '/app/approvals' },
   { icon: ShieldCheck, title: 'Administration', permission: PERMISSIONS.users.view, to: '/app/administration', extraPermissions: [PERMISSIONS.roles.view] },
 ]
 

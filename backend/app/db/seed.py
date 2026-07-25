@@ -8,6 +8,7 @@ from app.core.config import settings
 from app.core.security import hash_password
 from app.models.agent import AgentCustomer, AgentProfile, AgentTransaction
 from app.models.auth import Company, Membership, Permission, Role, User
+from app.models.workflow import TransactionApproval
 
 PERMISSIONS = {
     "dashboard.view": ("Show Overview tab", "Show the overview dashboard."),
@@ -57,7 +58,9 @@ PERMISSIONS = {
     "posters.archive": ("Archive posters", "Archive and restore posters."),
     "agents.view": ("Show Agents tab", "View an allowed agent profile, assigned customers and transaction history."),
     "agents.view_all": ("View all agents", "View every agent profile inside the current company."),
-    "agents.manage": ("Manage agents", "Edit agent profiles and post agent financial movements."),
+    "agents.manage": ("Manage agents", "Edit agent profiles and manage assigned customers."),
+    "agents.transactions.submit": ("Submit agent transactions", "Submit agent financial entries for administrator approval."),
+    "agents.transactions.approve": ("Approve agent transactions", "Approve or reject agent-submitted financial entries."),
     "security.sessions.view": ("Show Devices tab", "View active login devices."),
     "security.sessions.manage": ("Manage devices", "Revoke other login devices."),
     "users.view": ("View users", "View company users and their assigned roles."),
@@ -85,6 +88,9 @@ ROLE_BLUEPRINTS = {
             "documents.view",
             "documents.manage",
             "agents.view",
+            "customers.create",
+            "quotations.create",
+            "agents.transactions.submit",
         ],
     },
     "accounts_admin": {
@@ -98,6 +104,11 @@ ROLE_BLUEPRINTS = {
             "finance.manage",
             "agents.view",
             "agents.view_all",
+            "quotations.view",
+            "quotations.create",
+            "quotations.approve",
+            "projects.view",
+            "agents.transactions.approve",
         ],
     },
     "company_admin": {
@@ -200,8 +211,7 @@ def _seed_agent_workspace(db: Session, company: Company, agent_role: Role) -> No
             )
         )
         if not transaction:
-            db.add(
-                AgentTransaction(
+            transaction = AgentTransaction(
                     company_id=company.id,
                     agent_profile_id=profile.id,
                     created_by_membership_id=membership.id,
@@ -212,7 +222,17 @@ def _seed_agent_workspace(db: Session, company: Company, agent_role: Role) -> No
                     debit=Decimal(debit),
                     credit=Decimal(credit),
                 )
-            )
+            db.add(transaction)
+            db.flush()
+            db.add(TransactionApproval(
+                company_id=company.id,
+                transaction_id=transaction.id,
+                submitted_by_membership_id=membership.id,
+                status="approved",
+                decided_by_membership_id=membership.id,
+                decided_at=datetime.now(UTC),
+                decision_comment="Seeded approved transaction",
+            ))
 
 
 def seed_development_data(db: Session) -> None:
@@ -237,7 +257,6 @@ def seed_development_data(db: Session) -> None:
     roles_by_code: dict[str, Role] = {}
     for code, blueprint in ROLE_BLUEPRINTS.items():
         role = db.scalar(select(Role).where(Role.company_id == company.id, Role.code == code))
-        is_new = role is None
         if not role:
             role = Role(
                 company_id=company.id,
@@ -251,18 +270,10 @@ def seed_development_data(db: Session) -> None:
         role.name = str(blueprint["name"])
         role.description = str(blueprint["description"])
         role.is_system = True
-        if is_new or code in {"company_admin", "super_admin"}:
-            role.permissions = [
-                permissions_by_code[permission_code]
-                for permission_code in blueprint["permissions"]
-            ]
-        elif code in {"agent", "accounts_admin"}:
-            required_agent_permissions = [permissions_by_code["agents.view"]]
-            if code == "accounts_admin":
-                required_agent_permissions.append(permissions_by_code["agents.view_all"])
-            for permission in required_agent_permissions:
-                if permission not in role.permissions:
-                    role.permissions.append(permission)
+        role.permissions = [
+            permissions_by_code[permission_code]
+            for permission_code in blueprint["permissions"]
+        ]
         roles_by_code[code] = role
 
     username = settings.seed_admin_username.strip().lower()

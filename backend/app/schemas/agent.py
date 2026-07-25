@@ -41,6 +41,11 @@ class AgentCustomerSummary(BaseModel):
     project_name: str
     status: str
     outstanding_balance: float
+    quotation_request_status: str | None = None
+    quotation_status: str | None = None
+    project_number: str | None = None
+    project_status: str | None = None
+    can_edit: bool = False
 
 
 class AgentTransactionSummary(BaseModel):
@@ -52,6 +57,8 @@ class AgentTransactionSummary(BaseModel):
     debit: float
     credit: float
     running_balance: float
+    approval_status: str
+    approval_comment: str
 
 
 class AgentOverviewResponse(BaseModel):
@@ -84,6 +91,24 @@ class UpdateAgentProfileRequest(BaseModel):
     @classmethod
     def clean_text(cls, value: str) -> str:
         return " ".join(value.split())
+
+
+class CreateAgentCustomerRequest(BaseModel):
+    customer_name: str = Field(min_length=2, max_length=160)
+    company_name: str = Field(default="", max_length=160)
+    email: str = Field(default="", max_length=320)
+    phone: str = Field(min_length=7, max_length=32)
+    address: str = Field(default="", max_length=320)
+    project_name: str = Field(default="", max_length=180)
+
+    @field_validator("customer_name", "company_name", "email", "phone", "address", "project_name")
+    @classmethod
+    def clean_customer_text(cls, value: str) -> str:
+        return " ".join(value.split())
+
+
+class UpdateAgentCustomerRequest(CreateAgentCustomerRequest):
+    pass
 
 
 class CreateAgentTransactionRequest(BaseModel):

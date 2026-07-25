@@ -1,4 +1,4 @@
-import { BadgeIndianRupee, Boxes, Building2, ContactRound, FileUp, ImageUp, LayoutDashboard, LogOut, Menu, PanelLeftClose, PanelLeftOpen, ShieldCheck, Users, UsersRound, X } from 'lucide-react'
+import { BadgeIndianRupee, Boxes, Building2, ClipboardCheck, ContactRound, FileUp, ImageUp, LayoutDashboard, LogOut, Menu, PanelLeftClose, PanelLeftOpen, ShieldCheck, Users, UsersRound, X } from 'lucide-react'
 import { useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { hasEveryPermission, hasPermission, PERMISSIONS } from '../lib/permissions'
@@ -14,6 +14,7 @@ export function AppShell({ session, onLogout }: { session: Session; onLogout: ()
     { to: '/app', end: true, label: 'Overview', title: 'Overview', icon: LayoutDashboard, permission: PERMISSIONS.dashboard.view },
     { to: '/app/customers', label: 'Customers', title: 'Customer workflow', icon: UsersRound, permission: PERMISSIONS.customers.view },
     { to: '/app/agents', label: 'Agents', title: 'Agents', icon: ContactRound, permission: PERMISSIONS.agents.view },
+    { to: '/app/approvals', label: 'Approvals', title: 'Quotation and transaction approvals', icon: ClipboardCheck, permission: PERMISSIONS.quotations.approve },
     { to: '/app/inventory', label: 'Inventory', title: 'Solar inventory', icon: Boxes, permission: PERMISSIONS.inventory.view },
     { to: '/app/customer-documents', label: 'Customer data', title: 'Customer data upload', icon: FileUp, permission: PERMISSIONS.documents.view },
     { to: '/app/posters', label: 'Posters', title: 'Poster upload', icon: ImageUp, permission: PERMISSIONS.posters.view },

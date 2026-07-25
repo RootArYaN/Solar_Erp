@@ -61,7 +61,7 @@ export const PERMISSIONS = {
     edit: 'posters.edit',
     archive: 'posters.archive',
   },
-  agents: { view: 'agents.view', edit: 'agents.manage' },
+  agents: { view: 'agents.view', edit: 'agents.manage', submitTransaction: 'agents.transactions.submit', approveTransaction: 'agents.transactions.approve' },
   users: { view: 'users.view', edit: 'users.manage' },
   roles: { view: 'roles.view', edit: 'roles.manage' },
   security: { view: 'security.sessions.view', edit: 'security.sessions.manage' },

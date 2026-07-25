@@ -3,7 +3,6 @@ import {
   CheckCircle2,
   ChevronRight,
   Clock3,
-  Factory,
   LockKeyhole,
   MapPin,
   Phone,
@@ -12,7 +11,6 @@ import {
   RotateCcw,
   Search,
   Send,
-  UserRound,
 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { FieldErrors } from '../../contracts/api-contracts'
@@ -206,21 +204,16 @@ export function CustomerWorkspacePage({ session }: { session: Session }) {
 
   return (
     <section className="customer-flow-page">
-      <header className="customer-flow-header">
-        <div>
-          <span>Customers</span>
-          <h1>Customer workspace</h1>
-        </div>
-        <button className="secondary-button customer-refresh-button" onClick={() => void loadSnapshot(selectedId)} disabled={detailLoading}><RefreshCw size={15} /> Refresh</button>
-      </header>
-
       <DataFreshness offline={offline} stale={stale} updatedAt={snapshot?.customer.updated_at} />
       {(customerAccess.readOnly || quotationAccess.readOnly || projectAccess.readOnly || requestAccess.readOnly) && <ReadOnlyNotice />}
 
       {loading ? <LoadingSkeleton rows={7} /> : error && !snapshot ? <ErrorState message={error} onRetry={() => void loadCustomers()} /> : (
         <div className="customer-flow-layout">
           <aside className="customer-list-panel">
-            <div className="customer-list-heading"><div><strong>Customers</strong><span>{visibleCustomers.length} records</span></div></div>
+            <div className="customer-list-heading">
+              <div><strong>Customers</strong><span>{visibleCustomers.length} records</span></div>
+              <button className="customer-list-refresh" onClick={() => void loadSnapshot(selectedId)} disabled={detailLoading} aria-label="Refresh selected customer"><RefreshCw size={13} /><span>Refresh</span></button>
+            </div>
             <div className="customer-list-search"><Search size={15} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search customers" /></div>
             <div className="customer-list-scroll">
               {visibleCustomers.map((customer) => (
@@ -242,19 +235,21 @@ export function CustomerWorkspacePage({ session }: { session: Session }) {
             {detailLoading ? <LoadingSkeleton rows={9} /> : error ? <ErrorState message={error} onRetry={() => void loadSnapshot(selectedId)} /> : snapshot && (
               <>
                 <section className="customer-detail-card">
-                  <header>
+                  <header className="customer-summary-header">
                     <div className="customer-detail-title">
-                      <div className="customer-detail-icon">{snapshot.customer.customer_type === 'business' ? <Factory size={20} /> : <UserRound size={20} />}</div>
-                      <div><span>{snapshot.customer.record_number}</span><h2>{snapshot.customer.display_name}</h2><p>{snapshot.customer.legal_name}</p></div>
-                      <em className={`customer-status customer-status--${snapshot.customer.status}`}>{snapshot.customer.status.replaceAll('_', ' ')}</em>
+                      <div>
+                        <span>{snapshot.customer.record_number}</span>
+                        <div className="customer-name-row"><h2>{snapshot.customer.display_name}</h2><em className={`customer-status customer-status--${snapshot.customer.status}`}>{snapshot.customer.status.replaceAll('_', ' ')}</em></div>
+                        {snapshot.customer.legal_name !== snapshot.customer.display_name && <p>{snapshot.customer.legal_name}</p>}
+                      </div>
                     </div>
-                    {customerAccess.canArchive && <button className="secondary-button" onClick={() => setArchiveOpen(true)}>{snapshot.customer.archived_at ? <RotateCcw size={14} /> : <Archive size={14} />}{snapshot.customer.archived_at ? 'Restore' : 'Archive'}</button>}
+                    {customerAccess.canArchive && <button className="customer-archive-button" onClick={() => setArchiveOpen(true)}>{snapshot.customer.archived_at ? <RotateCcw size={13} /> : <Archive size={13} />}{snapshot.customer.archived_at ? 'Restore' : 'Archive'}</button>}
                   </header>
-                  {snapshot.customer.archived_at && <div className="archive-banner">Archived {new Date(snapshot.customer.archived_at).toLocaleString('en-IN')} · {snapshot.customer.archive_reason}</div>}
-                  <div className="customer-contact-grid">
-                    {snapshot.customer.contacts.map((contact) => <article key={contact.id}><div className="contact-card-icon"><UserRound size={18} /></div><div><small className="contact-card-label">Primary contact</small><strong>{contact.full_name}</strong><span>{contact.designation}</span><small><Phone size={13} /> {contact.phone}</small><small>{contact.email}</small></div></article>)}
-                    {snapshot.customer.addresses.map((address) => <article key={address.id}><div className="contact-card-icon"><MapPin size={18} /></div><div><small className="contact-card-label">{address.label}</small><strong>{address.city}, {address.state}</strong><span>{formatAddress([address.line_1, address.line_2, address.city, address.state, address.postal_code])}</span></div></article>)}
+                  <div className="customer-summary-details">
+                    {snapshot.customer.contacts.map((contact) => <div className="customer-summary-detail" key={contact.id}><Phone size={13} /><div>{contact.full_name !== snapshot.customer.display_name && <strong>{contact.full_name}</strong>}<span>{[contact.designation, contact.phone, contact.email].filter(Boolean).join(' · ')}</span></div></div>)}
+                    {snapshot.customer.addresses.map((address) => <div className="customer-summary-detail" key={address.id}><MapPin size={13} /><div><small>{address.label}</small><span>{formatAddress([address.line_1, address.line_2, address.city, address.state, address.postal_code])}</span></div></div>)}
                   </div>
+                  {snapshot.customer.archived_at && <div className="archive-banner">Archived {new Date(snapshot.customer.archived_at).toLocaleString('en-IN')} · {snapshot.customer.archive_reason}</div>}
                 </section>
 
 
@@ -266,7 +261,7 @@ export function CustomerWorkspacePage({ session }: { session: Session }) {
 
                   <article className={`flow-stage-card ${revision?.status === 'approved' ? 'flow-stage-card--complete' : 'flow-stage-card--current'}`}>
                     <header><div className="flow-stage-number">2</div><div><span>Quotation</span><strong>{quotation?.record_number ?? 'Not created'}</strong></div>{revision?.status === 'approved' ? <CheckCircle2 className="flow-stage-check" size={17} /> : <Clock3 className="flow-stage-pending" size={17} />}</header>
-                    {!quotationAccess.canView ? <EmptyState title="Restricted" /> : quotation && revision ? <div className="flow-stage-body"><div className="stage-title-row"><h3>Revision {revision.revision_number}</h3><span className={`stage-status stage-status--${revision.status}`}>{revision.status.replaceAll('_', ' ')}</span></div><p>{quotation.title}</p><dl><div><dt>Total</dt><dd>{currency.format(decimalToNumber(revision.grand_total))}</dd></div><div><dt>Version</dt><dd>v{revision.version}</dd></div></dl>{revision.status === 'approved' ? <div className="approval-success"><CheckCircle2 size={15} /><span>Approved</span></div> : <><label className="compact-field"><span>Approval note</span><input value={approvalComment} onChange={(event) => setApprovalComment(event.target.value)} disabled={!quotationAccess.canApprove} /></label>{quotationAccess.canApprove && <button className="primary-button primary-button--compact stage-action" onClick={() => void approveQuotation()} disabled={working}><CheckCircle2 size={15} /> Approve quotation</button>}</>}</div> : <EmptyState title="No quotation" />}
+                    {!quotationAccess.canView ? <EmptyState title="Restricted" /> : quotation && revision ? <div className="flow-stage-body"><div className="stage-title-row"><h3>Revision {revision.revision_number}</h3><span className={`stage-status stage-status--${revision.status}`}>{revision.status.replaceAll('_', ' ')}</span></div><p>{quotation.title}</p><dl><div><dt>Total</dt><dd>{currency.format(decimalToNumber(revision.grand_total))}</dd></div><div><dt>Version</dt><dd>v{revision.version}</dd></div></dl>{revision.status === 'approved' ? <div className="approval-success"><CheckCircle2 size={15} /><span>Approved</span></div> : <div className="stage-approval-controls"><label className="compact-field"><span>Approval note</span><input value={approvalComment} onChange={(event) => setApprovalComment(event.target.value)} disabled={!quotationAccess.canApprove} /></label>{quotationAccess.canApprove && <button className="primary-button primary-button--compact stage-action" onClick={() => void approveQuotation()} disabled={working}><CheckCircle2 size={15} /> Approve quotation</button>}</div>}</div> : <EmptyState title="No quotation" />}
                   </article>
 
                   <article className={`flow-stage-card ${snapshot.project ? 'flow-stage-card--complete' : ''}`}>

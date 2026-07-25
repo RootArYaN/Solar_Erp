@@ -51,6 +51,18 @@ class AgentCustomer(TimestampMixin, Base):
     agent: Mapped[AgentProfile] = relationship(back_populates="customers")
 
 
+class AgentCustomerEdit(TimestampMixin, Base):
+    __tablename__ = "agent_customer_edits"
+    __table_args__ = (UniqueConstraint("customer_id", name="uq_agent_customer_edit_customer"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    company_id: Mapped[str] = mapped_column(ForeignKey("companies.id", ondelete="CASCADE"), index=True, nullable=False)
+    customer_id: Mapped[str] = mapped_column(ForeignKey("agent_customers.id", ondelete="CASCADE"), index=True, nullable=False)
+    edited_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("memberships.id", ondelete="SET NULL"), index=True, nullable=True
+    )
+
+
 class AgentTransaction(TimestampMixin, Base):
     __tablename__ = "agent_transactions"
 

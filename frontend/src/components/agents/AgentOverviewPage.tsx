@@ -14,21 +14,29 @@ import {
 import { motion } from 'motion/react'
 import { useEffect, useMemo, useState } from 'react'
 import {
+  createAgentCustomer,
   createAgentTransaction,
+  createQuotationRequest,
   getAgentOverview,
   getAgents,
+  updateAgentCustomer,
   updateAgentProfile,
 } from '../../lib/api'
 import type {
   AgentListItem,
+  AgentCustomer,
   AgentOverview,
+  CreateAgentCustomerInput,
   CreateAgentTransactionInput,
+  CreateQuotationRequestInput,
   Session,
   UpdateAgentProfileInput,
 } from '../../types'
 import { useToast } from '../ui/ToastProvider'
+import { AgentCustomerDialog } from './AgentCustomerDialog'
 import { AgentProfileDialog } from './AgentProfileDialog'
 import { AgentTransactionDialog } from './AgentTransactionDialog'
+import { QuotationRequestDialog } from './QuotationRequestDialog'
 
 const currency = new Intl.NumberFormat('en-IN', {
   style: 'currency',
@@ -62,8 +70,13 @@ export function AgentOverviewPage({ session }: { session: Session }) {
   const { toast } = useToast()
   const [editingProfile, setEditingProfile] = useState(false)
   const [postingTransaction, setPostingTransaction] = useState(false)
+  const [registeringCustomer, setRegisteringCustomer] = useState(false)
+  const [editingCustomer, setEditingCustomer] = useState<AgentCustomer | null>(null)
+  const [quotationCustomer, setQuotationCustomer] = useState<AgentCustomer | null>(null)
 
-  const canPostTransactions = session.permissions.includes('agents.manage') || session.permissions.includes('finance.manage')
+  const canPostTransactions = session.permissions.includes('agents.transactions.submit') || session.permissions.includes('agents.manage') || session.permissions.includes('finance.manage')
+  const canRegisterCustomers = session.permissions.includes('customers.create') || session.permissions.includes('agents.manage')
+  const canRequestQuotations = session.permissions.includes('quotations.create') || session.permissions.includes('quotations.approve')
   const canEditSelectedProfile = Boolean(
     overview && (
       overview.profile.membership_id === session.membership_id
@@ -118,7 +131,7 @@ export function AgentOverviewPage({ session }: { session: Session }) {
     const term = transactionSearch.trim().toLowerCase()
     if (!overview || !term) return overview?.transactions ?? []
     return overview.transactions.filter((transaction) => (
-      `${transaction.reference} ${transaction.transaction_type} ${transaction.description} ${transaction.transaction_date} ${transaction.debit} ${transaction.credit} ${transaction.running_balance}`
+      `${transaction.reference} ${transaction.transaction_type} ${transaction.description} ${transaction.transaction_date} ${transaction.debit} ${transaction.credit} ${transaction.running_balance} ${transaction.approval_status}`
         .toLowerCase()
         .includes(term)
     ))
@@ -166,12 +179,63 @@ export function AgentOverviewPage({ session }: { session: Session }) {
     if (!overview) return
     setBusy(true)
     try {
-      await createAgentTransaction(session.access_token, overview.profile.membership_id, value)
+      const transaction = await createAgentTransaction(session.access_token, overview.profile.membership_id, value)
       setPostingTransaction(false)
       await Promise.all([loadOverview(overview.profile.membership_id), loadAgentList()])
-      toast({ message: 'Transaction posted', variant: 'success' })
+      toast({ message: transaction.approval_status === 'pending' ? 'Transaction submitted for admin approval' : 'Transaction approved and posted', variant: 'success' })
     } catch (reason) {
-      toast({ message: reason instanceof Error ? reason.message : 'Could not post transaction', variant: 'error' })
+      toast({ message: reason instanceof Error ? reason.message : 'Could not submit transaction', variant: 'error' })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function registerCustomer(value: CreateAgentCustomerInput) {
+    if (!overview) return
+    setBusy(true)
+    try {
+      const next = await createAgentCustomer(session.access_token, overview.profile.membership_id, value)
+      setOverview(next)
+      setRegisteringCustomer(false)
+      await loadAgentList()
+      toast({ message: 'Customer registered and assigned to this agent', variant: 'success' })
+    } catch (reason) {
+      toast({ message: reason instanceof Error ? reason.message : 'Could not register customer', variant: 'error' })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function saveCustomer(value: CreateAgentCustomerInput) {
+    if (!overview || !editingCustomer) return
+    setBusy(true)
+    try {
+      const next = await updateAgentCustomer(
+        session.access_token,
+        overview.profile.membership_id,
+        editingCustomer.id,
+        value,
+      )
+      setOverview(next)
+      setEditingCustomer(null)
+      toast({ message: session.role === 'agent' ? 'Customer updated. Your one-time edit has been used.' : 'Customer updated', variant: 'success' })
+    } catch (reason) {
+      toast({ message: reason instanceof Error ? reason.message : 'Could not update customer', variant: 'error' })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function requestQuotation(value: CreateQuotationRequestInput) {
+    if (!quotationCustomer || !overview) return
+    setBusy(true)
+    try {
+      await createQuotationRequest(session.access_token, quotationCustomer.id, value)
+      setQuotationCustomer(null)
+      await loadOverview(overview.profile.membership_id)
+      toast({ message: 'Quotation request forwarded to admin and super admin', variant: 'success' })
+    } catch (reason) {
+      toast({ message: reason instanceof Error ? reason.message : 'Could not request quotation', variant: 'error' })
     } finally {
       setBusy(false)
     }
@@ -270,6 +334,11 @@ export function AgentOverviewPage({ session }: { session: Session }) {
               <Edit3 size={16} /> Edit profile
             </button>
           )}
+          {overview && canRegisterCustomers && (
+            <button className="secondary-button secondary-button--icon" onClick={() => setRegisteringCustomer(true)}>
+              <Plus size={16} /> Register customer
+            </button>
+          )}
           {overview && canPostTransactions && (
             <button className="primary-button primary-button--compact" onClick={() => setPostingTransaction(true)}>
               <Plus size={17} /> Add transaction
@@ -300,9 +369,9 @@ export function AgentOverviewPage({ session }: { session: Session }) {
 
               <div className="agent-contact-list">
                 <a href={`mailto:${overview.profile.email}`}><Mail size={17} /><span><small>Email</small><strong>{overview.profile.email}</strong></span></a>
-                <a href={overview.profile.phone ? `tel:${overview.profile.phone}` : undefined}><Phone size={17} /><span><small>Phone</small><strong>{overview.profile.phone || 'Not provided'}</strong></span></a>
+                {overview.profile.phone && <a href={`tel:${overview.profile.phone}`}><Phone size={17} /><span><small>Phone</small><strong>{overview.profile.phone}</strong></span></a>}
                 {overview.profile.alternate_phone && <a href={`tel:${overview.profile.alternate_phone}`}><Phone size={17} /><span><small>Alternate phone</small><strong>{overview.profile.alternate_phone}</strong></span></a>}
-                <div><MapPin size={17} /><span><small>Address</small><strong>{formatAddress(overview) || 'Not provided'}</strong></span></div>
+                {formatAddress(overview) && <div><MapPin size={17} /><span><small>Address</small><strong>{formatAddress(overview)}</strong></span></div>}
               </div>
             </motion.article>
 
@@ -336,15 +405,22 @@ export function AgentOverviewPage({ session }: { session: Session }) {
               {filteredCustomers.length === 0 ? <div className="empty-state">No customers match this search.</div> : (
                 <div className="agent-table-wrap">
                   <table className="agent-table customer-table">
-                    <thead><tr><th>Customer</th><th>Contact</th><th>Project</th><th>Status</th><th className="numeric-cell">Outstanding</th></tr></thead>
+                    <thead><tr><th>Customer</th><th>Contact</th><th>Project</th><th>Workflow</th><th>Status</th><th className="numeric-cell">Outstanding</th><th>Action</th></tr></thead>
                     <tbody>
                       {filteredCustomers.map((customer) => (
                         <tr key={customer.id}>
                           <td data-label="Customer"><div className="customer-identity"><div className="customer-avatar">{customer.customer_name.slice(0, 1)}</div><span><strong>{customer.customer_name}</strong><small>{customer.company_name}</small></span></div></td>
                           <td data-label="Contact"><div className="table-contact"><strong>{customer.phone || '—'}</strong><small>{customer.email || customer.address}</small></div></td>
-                          <td data-label="Project"><strong className="project-name">{customer.project_name || 'Not assigned'}</strong></td>
+                          <td data-label="Project"><strong className="project-name">{customer.project_name || 'Not assigned'}</strong>{customer.project_number && <small>{customer.project_number} · {customer.project_status?.replaceAll('_', ' ')}</small>}</td>
+                          <td data-label="Workflow"><span className={`workflow-status workflow-status--${customer.quotation_status || customer.quotation_request_status || 'not_requested'}`}>{(customer.quotation_status || customer.quotation_request_status || 'not requested').replaceAll('_', ' ')}</span></td>
                           <td data-label="Status"><span className={`customer-status customer-status--${customer.status}`}>{customer.status.replaceAll('_', ' ')}</span></td>
                           <td data-label="Outstanding" className="numeric-cell"><strong>{currency.format(customer.outstanding_balance)}</strong></td>
+                          <td data-label="Action"><div className="agent-customer-actions">
+                            {customer.can_edit && <button className="table-action-button table-action-button--neutral" onClick={() => setEditingCustomer(customer)}><Edit3 size={12} /> Edit</button>}
+                            {canRequestQuotations && !['pending', 'quotation_ready', 'pending_approval', 'approved'].includes(customer.quotation_status || customer.quotation_request_status || '')
+                              ? <button className="table-action-button" onClick={() => setQuotationCustomer(customer)}>Request quotation</button>
+                              : !customer.can_edit && <small>{customer.project_number ? 'Project created' : customer.quotation_request_status ? 'With admin' : '—'}</small>}
+                          </div></td>
                         </tr>
                       ))}
                     </tbody>
@@ -369,13 +445,14 @@ export function AgentOverviewPage({ session }: { session: Session }) {
               {filteredTransactions.length === 0 ? <div className="empty-state">{overview.transactions.length === 0 ? 'No agent transactions have been posted.' : 'No transactions match this search.'}</div> : (
                 <div className="agent-table-wrap">
                   <table className="agent-table transaction-table">
-                    <thead><tr><th>Date</th><th>Reference</th><th>Transaction</th><th className="numeric-cell">Debit</th><th className="numeric-cell">Credit</th><th className="numeric-cell">Balance</th></tr></thead>
+                    <thead><tr><th>Date</th><th>Reference</th><th>Transaction</th><th>Approval</th><th className="numeric-cell">Debit</th><th className="numeric-cell">Credit</th><th className="numeric-cell">Posted balance</th></tr></thead>
                     <tbody>
                       {filteredTransactions.map((transaction) => (
                         <tr key={transaction.id}>
                           <td data-label="Date">{dateFormatter.format(new Date(transaction.transaction_date))}</td>
                           <td data-label="Reference"><code>{transaction.reference || '—'}</code></td>
                           <td data-label="Transaction"><div className="transaction-detail"><span className={`transaction-icon ${transaction.credit > 0 ? 'transaction-icon--credit' : 'transaction-icon--debit'}`}>{transaction.credit > 0 ? <ArrowDownLeft size={15} /> : <ArrowUpRight size={15} />}</span><span><strong>{transactionLabel(transaction.transaction_type)}</strong><small>{transaction.description}</small></span></div></td>
+                          <td data-label="Approval"><span className={`workflow-status workflow-status--${transaction.approval_status}`}>{transaction.approval_status}</span>{transaction.approval_status === 'rejected' && <small>{transaction.approval_comment}</small>}</td>
                           <td data-label="Debit" className="numeric-cell amount-debit">{transaction.debit > 0 ? currency.format(transaction.debit) : '—'}</td>
                           <td data-label="Credit" className="numeric-cell amount-credit">{transaction.credit > 0 ? currency.format(transaction.credit) : '—'}</td>
                           <td data-label="Balance" className="numeric-cell"><strong>{currency.format(transaction.running_balance)}</strong></td>
@@ -391,6 +468,9 @@ export function AgentOverviewPage({ session }: { session: Session }) {
       )}
 
       {editingProfile && overview && <AgentProfileDialog profile={overview.profile} busy={busy} onClose={() => setEditingProfile(false)} onSubmit={saveProfile} />}
+      {registeringCustomer && <AgentCustomerDialog busy={busy} onClose={() => setRegisteringCustomer(false)} onSubmit={registerCustomer} />}
+      {editingCustomer && <AgentCustomerDialog customer={editingCustomer} busy={busy} onClose={() => setEditingCustomer(null)} onSubmit={saveCustomer} />}
+      {quotationCustomer && <QuotationRequestDialog customer={quotationCustomer} busy={busy} onClose={() => setQuotationCustomer(null)} onSubmit={requestQuotation} />}
       {postingTransaction && <AgentTransactionDialog busy={busy} onClose={() => setPostingTransaction(false)} onSubmit={postTransaction} />}
     </section>
   )

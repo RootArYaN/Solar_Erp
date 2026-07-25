@@ -1,10 +1,15 @@
 import type { ApiErrorBody, FieldErrors, IdempotentRequestOptions } from '../contracts/api-contracts'
 import type {
   AgentListItem,
+  ApprovalCenter,
+  ApprovalDecisionInput,
   AgentOverview,
   AgentTransaction,
+  CreateAgentCustomerInput,
   CreateAgentTransactionInput,
+  CreateQuotationRequestInput,
   CreateRoleInput,
+  GenerateQuotationInput,
   CreateUserInput,
   ManagedUser,
   Permission,
@@ -200,3 +205,11 @@ export function getAgents(token: string): Promise<AgentListItem[]> { return apiR
 export function getAgentOverview(token: string, membershipId: string): Promise<AgentOverview> { return apiRequest(`/agents/${membershipId}/overview`, { token }) }
 export function updateAgentProfile(token: string, membershipId: string, input: UpdateAgentProfileInput): Promise<AgentOverview> { return apiRequest(`/agents/${membershipId}/profile`, { method: 'PATCH', token, body: input }) }
 export function createAgentTransaction(token: string, membershipId: string, input: CreateAgentTransactionInput): Promise<AgentTransaction> { return apiRequest(`/agents/${membershipId}/transactions`, { method: 'POST', token, body: input, idempotencyKey: crypto.randomUUID() }) }
+
+export function createAgentCustomer(token: string, membershipId: string, input: CreateAgentCustomerInput): Promise<AgentOverview> { return apiRequest(`/agents/${membershipId}/customers`, { method: 'POST', token, body: input, idempotencyKey: crypto.randomUUID() }) }
+export function updateAgentCustomer(token: string, membershipId: string, customerId: string, input: CreateAgentCustomerInput): Promise<AgentOverview> { return apiRequest(`/agents/${membershipId}/customers/${customerId}`, { method: 'PATCH', token, body: input }) }
+export function createQuotationRequest(token: string, customerId: string, input: CreateQuotationRequestInput) { return apiRequest(`/workflow/customers/${customerId}/quotation-requests`, { method: 'POST', token, body: input, idempotencyKey: crypto.randomUUID() }) }
+export function getApprovalCenter(token: string): Promise<ApprovalCenter> { return apiRequest('/workflow/approvals', { token }) }
+export function generateQuotation(token: string, requestId: string, input: GenerateQuotationInput) { return apiRequest(`/workflow/quotation-requests/${requestId}/quotation`, { method: 'POST', token, body: input, idempotencyKey: crypto.randomUUID() }) }
+export function decideQuotation(token: string, quotationId: string, input: ApprovalDecisionInput) { return apiRequest(`/workflow/quotations/${quotationId}/decision`, { method: 'POST', token, body: input, idempotencyKey: crypto.randomUUID() }) }
+export function decideTransaction(token: string, approvalId: string, input: ApprovalDecisionInput) { return apiRequest(`/workflow/transactions/${approvalId}/decision`, { method: 'POST', token, body: input, idempotencyKey: crypto.randomUUID() }) }

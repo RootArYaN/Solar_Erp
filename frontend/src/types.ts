@@ -105,6 +105,11 @@ export type AgentCustomer = {
   project_name: string
   status: string
   outstanding_balance: number
+  quotation_request_status: string | null
+  quotation_status: string | null
+  project_number: string | null
+  project_status: string | null
+  can_edit: boolean
 }
 
 export type AgentTransaction = {
@@ -116,6 +121,8 @@ export type AgentTransaction = {
   debit: number
   credit: number
   running_balance: number
+  approval_status: string
+  approval_comment: string
 }
 
 export type AgentOverview = {
@@ -139,4 +146,92 @@ export type CreateAgentTransactionInput = {
   description: string
   debit: number
   credit: number
+}
+
+export type CreateAgentCustomerInput = {
+  customer_name: string
+  company_name: string
+  email: string
+  phone: string
+  address: string
+  project_name: string
+}
+
+export type CreateQuotationRequestInput = {
+  requirement_summary: string
+  proposed_capacity_kw: number
+  site_address: string
+  notes: string
+}
+
+export type QuotationLineInput = {
+  description: string
+  quantity: number
+  unit: string
+  unit_price: number
+  tax_rate: number
+}
+
+export type GenerateQuotationInput = {
+  title: string
+  valid_until?: string | null
+  lines: QuotationLineInput[]
+}
+
+export type ApprovalDecisionInput = {
+  decision: 'approved' | 'rejected'
+  comment: string
+}
+
+export type WorkflowQuotation = {
+  id: string
+  quotation_number: string
+  title: string
+  subtotal: number
+  tax_total: number
+  grand_total: number
+  valid_until: string | null
+  status: string
+  decision_comment: string
+  created_at: string
+}
+
+export type QuotationRequestSummary = {
+  id: string
+  customer_id: string
+  customer_name: string
+  company_name: string
+  agent_membership_id: string
+  agent_name: string
+  requirement_summary: string
+  proposed_capacity_kw: number
+  site_address: string
+  notes: string
+  status: string
+  review_comment: string
+  created_at: string
+  quotation: WorkflowQuotation | null
+  project_number: string | null
+  project_status: string | null
+}
+
+export type TransactionApprovalSummary = {
+  approval_id: string
+  transaction_id: string
+  agent_membership_id: string
+  agent_name: string
+  transaction_date: string
+  reference: string
+  transaction_type: string
+  description: string
+  debit: number
+  credit: number
+  status: string
+  decision_comment: string
+  created_at: string
+}
+
+export type ApprovalCenter = {
+  quotation_requests: QuotationRequestSummary[]
+  transactions: TransactionApprovalSummary[]
 }

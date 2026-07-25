@@ -98,3 +98,58 @@ def test_agent_can_view_and_update_only_own_profile() -> None:
             headers=headers,
         )
         assert forbidden.status_code == 403
+
+
+def test_agent_customer_edit_is_once_but_admin_edits_are_unlimited() -> None:
+    with TestClient(app) as client:
+        agent_login = client.post(
+            "/api/v1/auth/login",
+            json={"username": "agent", "password": "AgentPass123!"},
+        )
+        assert agent_login.status_code == 200
+        agent_session = agent_login.json()
+        agent_headers = {"Authorization": f"Bearer {agent_session['access_token']}"}
+        membership_id = agent_session["membership_id"]
+
+        overview = client.get(f"/api/v1/agents/{membership_id}/overview", headers=agent_headers)
+        assert overview.status_code == 200
+        customer = overview.json()["customers"][0]
+        assert customer["can_edit"] is True
+        payload = {
+            "customer_name": customer["customer_name"],
+            "company_name": customer["company_name"],
+            "email": customer["email"],
+            "phone": customer["phone"],
+            "address": "One-time agent correction",
+            "project_name": customer["project_name"],
+        }
+
+        first_edit = client.patch(
+            f"/api/v1/agents/{membership_id}/customers/{customer['id']}",
+            json=payload,
+            headers=agent_headers,
+        )
+        assert first_edit.status_code == 200, first_edit.text
+        edited_customer = next(item for item in first_edit.json()["customers"] if item["id"] == customer["id"])
+        assert edited_customer["address"] == "One-time agent correction"
+        assert edited_customer["can_edit"] is False
+
+        second_edit = client.patch(
+            f"/api/v1/agents/{membership_id}/customers/{customer['id']}",
+            json={**payload, "address": "Second agent correction"},
+            headers=agent_headers,
+        )
+        assert second_edit.status_code == 409
+
+        admin = admin_login(client)
+        admin_headers = {"Authorization": f"Bearer {admin['access_token']}"}
+        for address in ("Admin correction one", "Admin correction two"):
+            admin_edit = client.patch(
+                f"/api/v1/agents/{membership_id}/customers/{customer['id']}",
+                json={**payload, "address": address},
+                headers=admin_headers,
+            )
+            assert admin_edit.status_code == 200, admin_edit.text
+            admin_customer = next(item for item in admin_edit.json()["customers"] if item["id"] == customer["id"])
+            assert admin_customer["address"] == address
+            assert admin_customer["can_edit"] is True

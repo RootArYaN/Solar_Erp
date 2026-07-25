@@ -35,7 +35,7 @@ export function AgentTransactionDialog({
   }
 
   return (
-    <Modal title="Post transaction" onClose={onClose}>
+    <Modal title="Submit transaction" onClose={onClose}>
       <form className="admin-form" onSubmit={submit}>
         <div className="admin-form__grid">
           <label className="field">
@@ -82,9 +82,11 @@ export function AgentTransactionDialog({
           <textarea required value={description} onChange={(event) => setDescription(event.target.value)} maxLength={240} placeholder="Transaction note" />
         </label>
 
+        <div className="workflow-note">Agent entries remain pending and do not change the balance until an administrator approves them.</div>
+
         <footer className="modal-actions">
           <button type="button" className="secondary-button" onClick={onClose}>Cancel</button>
-          <button type="submit" className="primary-button primary-button--compact" disabled={busy || Number(amount) <= 0}>{busy ? 'Posting…' : 'Post transaction'}</button>
+          <button type="submit" className="primary-button primary-button--compact" disabled={busy || Number(amount) <= 0}>{busy ? 'Submitting…' : 'Submit for approval'}</button>
         </footer>
       </form>
     </Modal>
