@@ -1,9 +1,10 @@
 import {
   Archive,
-  Building2,
   CheckCircle2,
   ChevronRight,
-  ClipboardList,
+  Clock3,
+  Factory,
+  LockKeyhole,
   MapPin,
   Phone,
   Plus,
@@ -60,7 +61,6 @@ export function CustomerWorkspacePage({ session }: { session: Session }) {
   const [working, setWorking] = useState(false)
   const [offline, setOffline] = useState(!navigator.onLine)
   const [stale, setStale] = useState(false)
-  const [syncCursor, setSyncCursor] = useState<string | null>(null)
   const nextCursor = useRef<string | null>(null)
   const { toast } = useToast()
 
@@ -71,6 +71,7 @@ export function CustomerWorkspacePage({ session }: { session: Session }) {
   const requestAccess = getModuleAccess(session, 'materialRequests')
   const revision = currentRevision(snapshot)
   const quotation = snapshot?.quotations[0] ?? null
+  const site = snapshot?.sites[0] ?? null
 
   async function loadCustomers() {
     setLoading(true)
@@ -79,7 +80,6 @@ export function CustomerWorkspacePage({ session }: { session: Session }) {
       const page = await repository.listCustomers(null)
       setCustomers(page.items)
       nextCursor.current = page.next_cursor
-      setSyncCursor(page.sync_cursor)
       setSelectedId((current) => current || page.items[0]?.id || '')
       setStale(!navigator.onLine)
     } catch (reason) {
@@ -208,11 +208,10 @@ export function CustomerWorkspacePage({ session }: { session: Session }) {
     <section className="customer-flow-page">
       <header className="customer-flow-header">
         <div>
-          <span>Connected workflow prototype</span>
-          <h1>Customer → Site → Quotation → Project</h1>
-          <p>Contracts use UUIDs, UTC timestamps, record numbers, versions and decimal-string money.</p>
+          <span>Customers</span>
+          <h1>Customer workspace</h1>
         </div>
-        <button className="secondary-button" onClick={() => void loadSnapshot(selectedId)} disabled={detailLoading}><RefreshCw size={14} /> Refresh</button>
+        <button className="secondary-button customer-refresh-button" onClick={() => void loadSnapshot(selectedId)} disabled={detailLoading}><RefreshCw size={15} /> Refresh</button>
       </header>
 
       <DataFreshness offline={offline} stale={stale} updatedAt={snapshot?.customer.updated_at} />
@@ -221,6 +220,7 @@ export function CustomerWorkspacePage({ session }: { session: Session }) {
       {loading ? <LoadingSkeleton rows={7} /> : error && !snapshot ? <ErrorState message={error} onRetry={() => void loadCustomers()} /> : (
         <div className="customer-flow-layout">
           <aside className="customer-list-panel">
+            <div className="customer-list-heading"><div><strong>Customers</strong><span>{visibleCustomers.length} records</span></div></div>
             <div className="customer-list-search"><Search size={15} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search customers" /></div>
             <div className="customer-list-scroll">
               {visibleCustomers.map((customer) => (
@@ -229,14 +229,13 @@ export function CustomerWorkspacePage({ session }: { session: Session }) {
                   setSelectedId(customer.id)
                 }}>
                   <div className="customer-list-avatar">{customer.display_name.slice(0, 1)}</div>
-                  <span><strong>{customer.display_name}</strong><small>{customer.record_number} · {customer.status.replaceAll('_', ' ')}</small></span>
+                  <span><strong>{customer.display_name}</strong><small>{customer.record_number}</small><em className={`customer-status customer-status--${customer.status}`}>{customer.status.replaceAll('_', ' ')}</em></span>
                   <ChevronRight size={15} />
                 </button>
               ))}
-              {visibleCustomers.length === 0 && <EmptyState title="No customers" message="Try a different search." />}
+              {visibleCustomers.length === 0 && <EmptyState title="No customers" />}
             </div>
-            <button className="cursor-load-button" disabled={!nextCursor.current}>Load more</button>
-            <small className="sync-cursor">Sync cursor: {syncCursor ?? 'not issued'}</small>
+            {nextCursor.current && <button className="cursor-load-button">Load more customers</button>}
           </aside>
 
           <main className="customer-workspace">
@@ -244,43 +243,48 @@ export function CustomerWorkspacePage({ session }: { session: Session }) {
               <>
                 <section className="customer-detail-card">
                   <header>
-                    <div><span>{snapshot.customer.record_number}</span><h2>{snapshot.customer.display_name}</h2><p>{snapshot.customer.legal_name}</p></div>
+                    <div className="customer-detail-title">
+                      <div className="customer-detail-icon">{snapshot.customer.customer_type === 'business' ? <Factory size={20} /> : <UserRound size={20} />}</div>
+                      <div><span>{snapshot.customer.record_number}</span><h2>{snapshot.customer.display_name}</h2><p>{snapshot.customer.legal_name}</p></div>
+                      <em className={`customer-status customer-status--${snapshot.customer.status}`}>{snapshot.customer.status.replaceAll('_', ' ')}</em>
+                    </div>
                     {customerAccess.canArchive && <button className="secondary-button" onClick={() => setArchiveOpen(true)}>{snapshot.customer.archived_at ? <RotateCcw size={14} /> : <Archive size={14} />}{snapshot.customer.archived_at ? 'Restore' : 'Archive'}</button>}
                   </header>
                   {snapshot.customer.archived_at && <div className="archive-banner">Archived {new Date(snapshot.customer.archived_at).toLocaleString('en-IN')} · {snapshot.customer.archive_reason}</div>}
                   <div className="customer-contact-grid">
-                    {snapshot.customer.contacts.map((contact) => <article key={contact.id}><UserRound size={17} /><div><strong>{contact.full_name}</strong><span>{contact.designation}</span><small><Phone size={12} /> {contact.phone}</small><small>{contact.email}</small></div></article>)}
-                    {snapshot.customer.addresses.map((address) => <article key={address.id}><MapPin size={17} /><div><strong>{address.label}</strong><span>{formatAddress([address.line_1, address.line_2, address.city, address.state, address.postal_code])}</span></div></article>)}
+                    {snapshot.customer.contacts.map((contact) => <article key={contact.id}><div className="contact-card-icon"><UserRound size={18} /></div><div><small className="contact-card-label">Primary contact</small><strong>{contact.full_name}</strong><span>{contact.designation}</span><small><Phone size={13} /> {contact.phone}</small><small>{contact.email}</small></div></article>)}
+                    {snapshot.customer.addresses.map((address) => <article key={address.id}><div className="contact-card-icon"><MapPin size={18} /></div><div><small className="contact-card-label">{address.label}</small><strong>{address.city}, {address.state}</strong><span>{formatAddress([address.line_1, address.line_2, address.city, address.state, address.postal_code])}</span></div></article>)}
                   </div>
                 </section>
 
+
                 <section className="flow-stage-grid">
-                  <article className="flow-stage-card">
-                    <header><MapPin size={17} /><div><span>Site</span><strong>{snapshot.sites[0]?.record_number}</strong></div></header>
-                    {siteAccess.canView ? snapshot.sites.map((site) => <div className="flow-stage-body" key={site.id}><h3>{site.name}</h3><p>{formatAddress([site.address.line_1, site.address.line_2, site.address.city])}</p><dl><div><dt>Proposed</dt><dd>{site.proposed_capacity_kw} kW</dd></div><div><dt>Meter</dt><dd>{site.meter_type.replaceAll('_', ' ')}</dd></div><div><dt>Status</dt><dd>{site.status.replaceAll('_', ' ')}</dd></div></dl></div>) : <EmptyState title="Restricted" message="Site details require sites.view." />}
+                  <article className={`flow-stage-card ${site ? 'flow-stage-card--complete' : ''}`}>
+                    <header><div className="flow-stage-number">1</div><div><span>Site</span><strong>{site?.record_number ?? 'Not created'}</strong></div>{site && <CheckCircle2 className="flow-stage-check" size={17} />}</header>
+                    {siteAccess.canView ? snapshot.sites.map((site) => <div className="flow-stage-body" key={site.id}><h3>{site.name}</h3><p>{formatAddress([site.address.line_1, site.address.line_2, site.address.city])}</p><dl><div><dt>Proposed</dt><dd>{site.proposed_capacity_kw} kW</dd></div><div><dt>Meter</dt><dd>{site.meter_type.replaceAll('_', ' ')}</dd></div><div><dt>Status</dt><dd>{site.status.replaceAll('_', ' ')}</dd></div></dl></div>) : <EmptyState title="Restricted" />}
                   </article>
 
-                  <article className="flow-stage-card">
-                    <header><ClipboardList size={17} /><div><span>Quotation</span><strong>{quotation?.record_number ?? 'Not created'}</strong></div></header>
-                    {!quotationAccess.canView ? <EmptyState title="Restricted" message="Quotation details require quotations.view." /> : quotation && revision ? <div className="flow-stage-body"><h3>Revision {revision.revision_number}</h3><p>{quotation.title}</p><dl><div><dt>Status</dt><dd>{revision.status.replaceAll('_', ' ')}</dd></div><div><dt>Total</dt><dd>{currency.format(decimalToNumber(revision.grand_total))}</dd></div><div><dt>Version</dt><dd>v{revision.version}</dd></div></dl><label className="compact-field"><span>Approval comment</span><input value={approvalComment} onChange={(event) => setApprovalComment(event.target.value)} disabled={!quotationAccess.canApprove || revision.status === 'approved'} /></label>{quotationAccess.canApprove && revision.status !== 'approved' && <button className="primary-button primary-button--compact" onClick={() => void approveQuotation()} disabled={working}><CheckCircle2 size={14} /> Approve revision</button>}</div> : <EmptyState title="No quotation" message="Create a quotation revision after the site survey." />}
+                  <article className={`flow-stage-card ${revision?.status === 'approved' ? 'flow-stage-card--complete' : 'flow-stage-card--current'}`}>
+                    <header><div className="flow-stage-number">2</div><div><span>Quotation</span><strong>{quotation?.record_number ?? 'Not created'}</strong></div>{revision?.status === 'approved' ? <CheckCircle2 className="flow-stage-check" size={17} /> : <Clock3 className="flow-stage-pending" size={17} />}</header>
+                    {!quotationAccess.canView ? <EmptyState title="Restricted" /> : quotation && revision ? <div className="flow-stage-body"><div className="stage-title-row"><h3>Revision {revision.revision_number}</h3><span className={`stage-status stage-status--${revision.status}`}>{revision.status.replaceAll('_', ' ')}</span></div><p>{quotation.title}</p><dl><div><dt>Total</dt><dd>{currency.format(decimalToNumber(revision.grand_total))}</dd></div><div><dt>Version</dt><dd>v{revision.version}</dd></div></dl>{revision.status === 'approved' ? <div className="approval-success"><CheckCircle2 size={15} /><span>Approved</span></div> : <><label className="compact-field"><span>Approval note</span><input value={approvalComment} onChange={(event) => setApprovalComment(event.target.value)} disabled={!quotationAccess.canApprove} /></label>{quotationAccess.canApprove && <button className="primary-button primary-button--compact stage-action" onClick={() => void approveQuotation()} disabled={working}><CheckCircle2 size={15} /> Approve quotation</button>}</>}</div> : <EmptyState title="No quotation" />}
                   </article>
 
-                  <article className="flow-stage-card">
-                    <header><Building2 size={17} /><div><span>Project</span><strong>{snapshot.project?.record_number ?? 'Pending approval'}</strong></div></header>
-                    {!projectAccess.canView ? <EmptyState title="Restricted" message="Project details require projects.view." /> : snapshot.project ? <div className="flow-stage-body"><h3>{snapshot.project.name}</h3><dl><div><dt>Status</dt><dd>{snapshot.project.status}</dd></div><div><dt>Capacity</dt><dd>{snapshot.project.capacity_kw} kW</dd></div><div><dt>Approved</dt><dd>{currency.format(decimalToNumber(snapshot.project.approved_value))}</dd></div></dl></div> : <div className="flow-stage-body"><p>An approved quotation becomes the immutable commercial source for project creation.</p>{projectAccess.canCreate && <button className="primary-button primary-button--compact" onClick={() => void convertToProject()} disabled={working || revision?.status !== 'approved'}><Plus size={14} /> Create project</button>}</div>}
+                  <article className={`flow-stage-card ${snapshot.project ? 'flow-stage-card--complete' : ''}`}>
+                    <header><div className="flow-stage-number">3</div><div><span>Project</span><strong>{snapshot.project?.record_number ?? 'Not created'}</strong></div>{snapshot.project ? <CheckCircle2 className="flow-stage-check" size={17} /> : <LockKeyhole className="flow-stage-locked" size={16} />}</header>
+                    {!projectAccess.canView ? <EmptyState title="Restricted" /> : snapshot.project ? <div className="flow-stage-body"><h3>{snapshot.project.name}</h3><dl><div><dt>Status</dt><dd>{snapshot.project.status}</dd></div><div><dt>Capacity</dt><dd>{snapshot.project.capacity_kw} kW</dd></div><div><dt>Approved value</dt><dd>{currency.format(decimalToNumber(snapshot.project.approved_value))}</dd></div></dl></div> : <div className="flow-stage-body flow-stage-body--locked"><div className="locked-stage-message"><LockKeyhole size={18} /><div><strong>Quotation approval required</strong></div></div>{projectAccess.canCreate && <button className="primary-button primary-button--compact stage-action" onClick={() => void convertToProject()} disabled={working || revision?.status !== 'approved'}><Plus size={15} /> Create project</button>}</div>}
                   </article>
                 </section>
 
                 <section className="material-request-card">
-                  <header><div><span>Material request</span><h2>{snapshot.material_request?.record_number ?? 'Draft'}</h2></div>{dirty && <small>Unsaved changes</small>}</header>
-                  {!requestAccess.canView ? <EmptyState title="Restricted" message="Material requests require material_requests.view." /> : !snapshot.project ? <EmptyState title="Project required" message="Create the project before drafting material demand." /> : <>
+                  <header><div><span>Next step</span><h2>Material request</h2>{snapshot.material_request?.record_number && <p>{snapshot.material_request.record_number}</p>}</div>{dirty && <small>Unsaved changes</small>}</header>
+                  {!requestAccess.canView ? <EmptyState title="Restricted" /> : !snapshot.project ? <EmptyState title="Project required" /> : <>
                     <div className="material-request-meta">
                       <label><span>Purpose</span><input value={purpose} onChange={(event) => { setPurpose(event.target.value); setDirty(true) }} disabled={!requestAccess.canEdit && !requestAccess.canCreate} />{fieldErrors.purpose?.map((message) => <small className="field-error" key={message}>{message}</small>)}</label>
                       <label><span>Needed at site by</span><input type="date" value={neededBy} onChange={(event) => { setNeededBy(event.target.value); setDirty(true) }} disabled={!requestAccess.canEdit && !requestAccess.canCreate} /></label>
                     </div>
                     <div className="material-lines">
                       {materialLines.map((line, index) => <div className="material-line" key={line.id}><input value={line.description} onChange={(event) => updateMaterialLine(line.id, { description: event.target.value })} placeholder="Material description" disabled={!requestAccess.canEdit && !requestAccess.canCreate} /><input value={line.requested_quantity} inputMode="decimal" onChange={(event) => updateMaterialLine(line.id, { requested_quantity: event.target.value })} aria-label="Requested quantity" disabled={!requestAccess.canEdit && !requestAccess.canCreate} /><input value={line.unit} onChange={(event) => updateMaterialLine(line.id, { unit: event.target.value })} aria-label="Unit" disabled={!requestAccess.canEdit && !requestAccess.canCreate} /><small className="field-error">{fieldErrors[`lines.${index}.description`]?.[0] ?? fieldErrors[`lines.${index}.requested_quantity`]?.[0]}</small></div>)}
-                      {materialLines.length === 0 && <EmptyState title="No material lines" message="Add only the minimum draft lines; inventory balance mutations remain backend-owned." />}
+                      {materialLines.length === 0 && <EmptyState title="No material lines" />}
                     </div>
                     <footer><button className="secondary-button" onClick={addMaterialLine} disabled={!requestAccess.canCreate && !requestAccess.canEdit}><Plus size={14} /> Add line</button><button className="primary-button primary-button--compact" onClick={() => void saveMaterialDraft()} disabled={working || (!requestAccess.canCreate && !requestAccess.canEdit)}><Send size={14} /> Save draft</button></footer>
                   </>}
@@ -294,7 +298,6 @@ export function CustomerWorkspacePage({ session }: { session: Session }) {
       <AlertDialog
         open={archiveOpen}
         title={snapshot?.customer.archived_at ? 'Restore customer?' : 'Archive customer?'}
-        description="Archived records remain available for audit and can be restored. No permanent delete is performed."
         confirmLabel={snapshot?.customer.archived_at ? 'Restore customer' : 'Archive customer'}
         variant="warning"
         icon={snapshot?.customer.archived_at ? 'reset' : 'warning'}

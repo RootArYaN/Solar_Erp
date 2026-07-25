@@ -9,6 +9,20 @@ type RoleFormValue = {
   permission_codes: string[]
 }
 
+const tabOptions = [
+  { label: 'Overview', codes: ['dashboard.view'] },
+  { label: 'Customers', codes: ['customers.view'] },
+  { label: 'Agents', codes: ['agents.view'] },
+  { label: 'Inventory', codes: ['inventory.view'] },
+  { label: 'Customer data', codes: ['documents.view'] },
+  { label: 'Posters', codes: ['posters.view'] },
+  { label: 'Solar pricing', codes: ['pricing.view'] },
+  { label: 'Devices', codes: ['security.sessions.view'] },
+  { label: 'Users & roles', codes: ['users.view', 'roles.view'] },
+] as const
+
+const tabPermissionCodes = new Set<string>(tabOptions.flatMap((option) => option.codes))
+
 function permissionGroup(code: string) {
   return code.split('.')[0]
 }
@@ -34,11 +48,13 @@ export function RoleDialog({
     description: role?.description ?? '',
     permission_codes: role?.permissions ?? ['dashboard.view'],
   })
-  const groups = useMemo(() => permissions.reduce<Record<string, Permission[]>>((result, permission) => {
+  const groups = useMemo(() => permissions.filter((permission) => !tabPermissionCodes.has(permission.code)).reduce<Record<string, Permission[]>>((result, permission) => {
     const group = permissionGroup(permission.code)
     result[group] = [...(result[group] ?? []), permission]
     return result
   }, {}), [permissions])
+  const availableCodes = useMemo(() => new Set(permissions.map((permission) => permission.code)), [permissions])
+  const availableTabs = tabOptions.filter((option) => option.codes.every((code) => availableCodes.has(code)))
 
   function togglePermission(code: string) {
     setValue((current) => ({
@@ -47,6 +63,18 @@ export function RoleDialog({
         ? current.permission_codes.filter((permissionCode) => permissionCode !== code)
         : [...current.permission_codes, code],
     }))
+  }
+
+  function toggleTab(codes: readonly string[]) {
+    setValue((current) => {
+      const selected = codes.every((code) => current.permission_codes.includes(code))
+      return {
+        ...current,
+        permission_codes: selected
+          ? current.permission_codes.filter((code) => !codes.includes(code))
+          : Array.from(new Set([...current.permission_codes, ...codes])),
+      }
+    })
   }
 
   async function submit(event: FormEvent) {
@@ -74,7 +102,24 @@ export function RoleDialog({
 
         <section className="permission-editor">
           <div className="permission-editor__heading">
-            <div><strong>Permissions</strong><span>{value.permission_codes.length} selected</span></div>
+            <div><strong>Visible tabs</strong><span>Select what this role sees in the menu</span></div>
+          </div>
+          <div className="permission-groups">
+            <section className="permission-group">
+              <h3>Menu</h3>
+              {availableTabs.map((tab) => (
+                <label key={tab.label}>
+                  <input disabled={!canEdit} type="checkbox" checked={tab.codes.every((code) => value.permission_codes.includes(code))} onChange={() => toggleTab(tab.codes)} />
+                  <span><strong>{tab.label}</strong></span>
+                </label>
+              ))}
+            </section>
+          </div>
+        </section>
+
+        <section className="permission-editor">
+          <div className="permission-editor__heading">
+            <div><strong>Allowed actions</strong><span>{value.permission_codes.length} total permissions selected</span></div>
             {canEdit && <button type="button" className="text-button" onClick={() => setValue({ ...value, permission_codes: permissions.map((permission) => permission.code) })}>Select all</button>}
           </div>
           <div className="permission-groups">

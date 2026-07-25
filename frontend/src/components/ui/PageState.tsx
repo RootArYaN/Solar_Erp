@@ -4,8 +4,8 @@ export function LoadingSkeleton({ rows = 5 }: { rows?: number }) {
   return <div className="page-skeleton" aria-label="Loading"><div className="page-skeleton__heading" />{Array.from({ length: rows }, (_, index) => <div className="page-skeleton__row" key={index} />)}</div>
 }
 
-export function EmptyState({ title, message, action }: { title: string; message: string; action?: React.ReactNode }) {
-  return <div className="page-empty"><Inbox size={24} /><strong>{title}</strong><span>{message}</span>{action}</div>
+export function EmptyState({ title, message, action }: { title: string; message?: string; action?: React.ReactNode }) {
+  return <div className="page-empty"><Inbox size={24} /><strong>{title}</strong>{message && <span>{message}</span>}{action}</div>
 }
 
 export function ErrorState({ message, onRetry, requestId }: { message: string; onRetry: () => void; requestId?: string | null }) {
