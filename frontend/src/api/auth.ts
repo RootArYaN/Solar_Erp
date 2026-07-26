@@ -1,5 +1,6 @@
 import type { Session } from '../types'
 import { clearSession } from '../lib/auth-storage'
+import { createClientId } from '../lib/client-id'
 import { apiRequest } from './client'
 
 export type ActiveDevice = {
@@ -23,4 +24,4 @@ export async function logout(): Promise<void> {
 }
 export function getCurrentSession(token?: string): Promise<Omit<Session, 'access_token' | 'token_type' | 'expires_at'>> { return apiRequest('/auth/me', { token }) }
 export function getActiveDevices(): Promise<ActiveDevice[]> { return apiRequest('/auth/devices') }
-export function logoutOtherDevices(): Promise<void> { return apiRequest('/auth/devices/others', { method: 'DELETE', idempotencyKey: crypto.randomUUID() }) }
+export function logoutOtherDevices(): Promise<void> { return apiRequest('/auth/devices/others', { method: 'DELETE', idempotencyKey: createClientId() }) }

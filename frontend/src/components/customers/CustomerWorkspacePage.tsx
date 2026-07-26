@@ -30,6 +30,7 @@ import { useToast } from '../ui/ToastProvider'
 import { KpiGrid, TabStrip, WorkspacePage } from '../workspace'
 
 type Tab = 'overview' | 'projects' | 'timeline' | 'quotations' | 'documents' | 'payments' | 'loan' | 'activity'
+type PaymentFilter = 'all' | 'loan' | 'cash' | 'remaining'
 
 const money = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 })
 const dateTime = new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium', timeStyle: 'short' })
@@ -71,6 +72,7 @@ export function CustomerWorkspacePage({ session }: { session: Session }) {
   const [snapshot, setSnapshot] = useState<CustomerFlowSnapshot | null>(null)
   const [tab, setTab] = useState<Tab>('overview')
   const [search, setSearch] = useState('')
+  const [paymentFilter, setPaymentFilter] = useState<PaymentFilter>('all')
   const [loading, setLoading] = useState(true)
   const [detailLoading, setDetailLoading] = useState(false)
   const [error, setError] = useState('')
@@ -133,9 +135,13 @@ export function CustomerWorkspacePage({ session }: { session: Session }) {
 
   const visibleCustomers = useMemo(() => {
     const term = search.trim().toLowerCase()
-    if (!term) return customers
-    return customers.filter((row) => `${row.display_name} ${row.record_number} ${row.consumer_number} ${row.contacts[0]?.phone ?? ''}`.toLowerCase().includes(term))
-  }, [customers, search])
+    return customers.filter((row) => {
+      const matchesSearch = !term || `${row.display_name} ${row.record_number} ${row.consumer_number} ${row.contacts[0]?.phone ?? ''}`.toLowerCase().includes(term)
+      const matchesPayment = paymentFilter === 'all'
+        || (paymentFilter === 'remaining' ? Number(row.outstanding_balance) > 0 : row.payment_mode === paymentFilter)
+      return matchesSearch && matchesPayment
+    })
+  }, [customers, paymentFilter, search])
 
   async function approveQuotation() {
     if (!snapshot || !snapshot.quotations[0]) return
@@ -251,7 +257,15 @@ export function CustomerWorkspacePage({ session }: { session: Session }) {
       <div className="customer-detail-layout">
         <aside className="customer-directory">
           <header><div><strong>Customers</strong><span>{visibleCustomers.length} B2C records</span></div><button onClick={() => void loadCustomers()} aria-label="Refresh customers"><RefreshCw size={15} /></button></header>
-          <label className="erp-search"><Search size={15} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Name, phone or consumer no." /></label>
+          <div className="customer-directory__filters">
+            <label className="erp-search"><Search size={15} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Name, phone or consumer no." /></label>
+            <select aria-label="Filter customers by payment" value={paymentFilter} onChange={(event) => setPaymentFilter(event.target.value as PaymentFilter)}>
+              <option value="all">All payments</option>
+              <option value="loan">Loan</option>
+              <option value="cash">Cash</option>
+              <option value="remaining">Balance remaining</option>
+            </select>
+          </div>
           <div className="customer-directory__list">
             {visibleCustomers.map((row) => <button className={selectedId === row.id ? 'active' : ''} key={row.id} onClick={() => setSelectedId(row.id)}>
               <span className="customer-avatar">{row.display_name.slice(0, 1).toUpperCase()}</span>

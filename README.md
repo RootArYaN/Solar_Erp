@@ -12,7 +12,7 @@ A clean, responsive authentication foundation for a Solar EPC ERP.
 - Argon2 password hashing
 - Company-aware memberships
 - Role and permission schema for future RBAC
-- Seeded local administrator
+- One-time local super-administrator bootstrap
 - Protected starter dashboard
 
 ## Project structure
@@ -34,12 +34,14 @@ cp .env.example .env
 uvicorn app.main:app --reload --port 8000
 ```
 
-The local seed user is created from `.env`:
+The local super administrator is created from `.env` only when no user with
+the configured username or email exists:
 
 - Username: `admin`
 - Password: `ChangeMe123!`
 
-Change these values before sharing or deploying the application.
+Later startups do not modify existing users, roles, permissions, agent data, or
+business data. Change these values before sharing or deploying the application.
 
 API documentation: `http://localhost:8000/docs`
 

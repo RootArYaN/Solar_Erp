@@ -55,6 +55,8 @@ class FlowCustomer(FlowEntity):
     consumer_number: str = ""
     electricity_provider: str = ""
     lead_source: str = ""
+    payment_mode: str = ""
+    outstanding_balance: str = "0.00"
 
 
 class FlowSite(FlowEntity):

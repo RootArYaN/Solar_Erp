@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     session_cookie_secure: bool = False
     session_cookie_samesite: str = "lax"
 
-    frontend_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
+    frontend_origins: str = "http://172.20.10.12:5173,http://127.0.0.1:5173"
     storage_type: str = "local"
     storage_path: str = "./storage"
     max_upload_mb: int = 20

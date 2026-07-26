@@ -97,6 +97,7 @@ ROLE_BLUEPRINTS = {
             "projects.manage",
             "documents.view",
             "documents.manage",
+            "posters.view",
             "agents.view",
             "customers.create",
             "quotations.create",
@@ -296,7 +297,57 @@ def _seed_business_defaults(db: Session, company: Company, membership: Membershi
         db.add(PricingBook(company_id=company.id, name="Master Price List", version=1, is_default=True, is_active=True, created_by=membership.id, updated_by=membership.id))
 
 
-def seed_development_data(db: Session) -> None:
+def bootstrap_super_admin(db: Session) -> None:
+    """Create the initial super administrator without changing existing data."""
+    if settings.is_production:
+        raise RuntimeError("Development bootstrap is disabled in production")
+
+    username = settings.seed_admin_username.strip().lower()
+    email = str(settings.seed_admin_email).strip().lower()
+    existing_user = db.scalar(
+        select(User).where((User.username == username) | (User.email == email))
+    )
+    if existing_user:
+        return
+
+    company = db.scalar(select(Company).where(Company.code == settings.seed_company_code.upper()))
+    if not company:
+        company = Company(name=settings.seed_company_name, code=settings.seed_company_code.upper())
+        db.add(company)
+        db.flush()
+
+    role = db.scalar(
+        select(Role).where(
+            Role.company_id == company.id,
+            Role.code == "super_admin",
+        )
+    )
+    if not role:
+        role = Role(
+            company_id=company.id,
+            code="super_admin",
+            name="Super Admin",
+            description="Platform-level administration with unrestricted access.",
+            is_system=True,
+        )
+        db.add(role)
+        db.flush()
+
+    user = User(
+        username=username,
+        email=email,
+        full_name=settings.seed_admin_name,
+        hashed_password=hash_password(settings.seed_admin_password),
+        is_super_admin=True,
+    )
+    db.add(user)
+    db.flush()
+    db.add(Membership(user_id=user.id, company_id=company.id, role=role))
+    db.commit()
+
+
+def seed_demo_data(db: Session) -> None:
+    """Populate deterministic demo fixtures. Never called by application startup."""
     if settings.is_production:
         raise RuntimeError("Development seed data is disabled in production")
     company = db.scalar(select(Company).where(Company.code == settings.seed_company_code.upper()))

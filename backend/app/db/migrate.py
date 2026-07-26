@@ -170,9 +170,8 @@ def run_migrations() -> None:
                 f'CREATE {unique}INDEX IF NOT EXISTS "{index_name}" ON "{table}" ({column_sql})'
             ))
 
-        _migrate_permissions(connection, inspector)
-
         if not applied:
+            _migrate_permissions(connection, inspector)
             connection.execute(
                 text("INSERT INTO schema_migrations (id, applied_at) VALUES (:id, :applied_at)"),
                 {"id": MIGRATION_ID, "applied_at": datetime.now(UTC)},

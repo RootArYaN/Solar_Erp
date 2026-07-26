@@ -5,6 +5,7 @@ import type {
   MaterialRequest,
 } from '../../contracts/domain-contracts'
 import { apiRequest } from '../../api/client'
+import { createClientId } from '../client-id'
 
 export type CustomerFlowRepository = {
   listCustomers(cursor?: string | null): Promise<PaginatedList<Customer>>
@@ -34,7 +35,7 @@ export function createCustomerFlowRepository(token?: string): CustomerFlowReposi
         ...options,
         method: 'POST',
         body: { decision: 'approved', comment },
-        idempotencyKey: crypto.randomUUID(),
+        idempotencyKey: createClientId(),
       })
       return apiRequest<CustomerFlowSnapshot>(`/customer-flow/customers/${customerId}`, options)
     },

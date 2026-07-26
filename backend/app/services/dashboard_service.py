@@ -1,35 +1,138 @@
 from datetime import date
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import CurrentSession
 from app.models.agent import AgentCustomer
-from app.models.finance import Bill, CustomerLoan, FinanceTransaction
-from app.models.operations import InventoryBalance, InventoryItem
-from app.models.system import StoredFile
-from app.models.workflow import CustomerProject, CustomerQuotation
+from app.models.workflow import CustomerProject, CustomerQuotation, ProjectTimeline, QuotationRequest
 from app.schemas.dashboard import DashboardSummary
+from app.services.finance_service import finance_kpis
+from app.services.operations_service import low_stock_item_count
+
+
+OPEN_PROJECT_STATUSES = ('planning', 'in_progress', 'on_hold')
+PENDING_LOAN_STATUSES = (
+    'draft',
+    'applied',
+    'documents_pending',
+    'submitted_to_bank',
+    'under_review',
+    'conditionally_approved',
+)
+PENDING_QUOTATION_STATUSES = ('pending_approval', 'condition', 'rejected')
+
+
+def _count(db: Session, statement) -> int:
+    return int(db.scalar(statement) or 0)
 
 
 def get_summary(db: Session, actor: CurrentSession) -> DashboardSummary:
-    company_id=actor.membership.company_id
-    month_start=date.today().replace(day=1)
-    total_customers=db.scalar(select(func.count()).select_from(AgentCustomer).where(AgentCustomer.company_id==company_id,AgentCustomer.archived_at.is_(None))) or 0
-    new_customers=db.scalar(select(func.count()).select_from(AgentCustomer).where(AgentCustomer.company_id==company_id,AgentCustomer.created_at>=month_start,AgentCustomer.archived_at.is_(None))) or 0
-    active_projects=db.scalar(select(func.count()).select_from(CustomerProject).where(CustomerProject.company_id==company_id,CustomerProject.status.not_in(['completed','cancelled']),CustomerProject.archived_at.is_(None))) or 0
-    pending_quotations=db.scalar(select(func.count()).select_from(CustomerQuotation).where(CustomerQuotation.company_id==company_id,CustomerQuotation.status.in_(['pending_approval','condition','submitted']))) or 0
-    pending_documents=db.scalar(select(func.count()).select_from(StoredFile).where(StoredFile.company_id==company_id,StoredFile.status=='active',StoredFile.owner_type.in_(['customer_document_pending','document_pending']))) or 0
-    loan_pending=db.scalar(select(func.count()).select_from(CustomerLoan).where(CustomerLoan.company_id==company_id,CustomerLoan.loan_status.in_(['draft','applied','documents_pending','submitted_to_bank','under_review','conditionally_approved']))) or 0
-    material_pending=db.scalar(select(func.count()).select_from(CustomerProject).where(CustomerProject.company_id==company_id,CustomerProject.material_status.in_(['pending','scheduled','in_transit']))) or 0
-    installation=db.scalar(select(func.count()).select_from(CustomerProject).where(CustomerProject.company_id==company_id,CustomerProject.installation_status=='in_progress')) or 0
-    dcr_pending=db.scalar(select(func.count()).select_from(CustomerProject).where(CustomerProject.company_id==company_id,CustomerProject.dcr_status.in_(['pending','in_progress']))) or 0
-    subsidy_pending=db.scalar(select(func.count()).select_from(CustomerProject).where(CustomerProject.company_id==company_id,CustomerProject.subsidy_status.in_(['pending','applied','in_progress']))) or 0
-    completed=db.scalar(select(func.count()).select_from(CustomerProject).where(CustomerProject.company_id==company_id,CustomerProject.status=='completed')) or 0
-    low_stock=db.scalar(select(func.count()).select_from(InventoryItem).where(InventoryItem.company_id==company_id,InventoryItem.is_active.is_(True),InventoryItem.reorder_level >= select(func.coalesce(func.sum(InventoryBalance.quantity_on_hand-InventoryBalance.reserved_quantity),0)).where(InventoryBalance.item_id==InventoryItem.id).scalar_subquery())) or 0
-    money_in=db.scalar(select(func.coalesce(func.sum(FinanceTransaction.amount),0)).where(FinanceTransaction.company_id==company_id,FinanceTransaction.direction=='credit',FinanceTransaction.status=='posted',FinanceTransaction.transaction_date>=month_start)) or 0
-    money_out=db.scalar(select(func.coalesce(func.sum(FinanceTransaction.amount),0)).where(FinanceTransaction.company_id==company_id,FinanceTransaction.direction=='debit',FinanceTransaction.status=='posted',FinanceTransaction.transaction_date>=month_start)) or 0
-    expenses=db.scalar(select(func.coalesce(func.sum(FinanceTransaction.amount),0)).where(FinanceTransaction.company_id==company_id,FinanceTransaction.direction=='debit',FinanceTransaction.source_type=='expense',FinanceTransaction.status=='posted',FinanceTransaction.transaction_date>=month_start)) or 0
-    receivables=db.scalar(select(func.coalesce(func.sum(Bill.balance_amount),0)).where(Bill.company_id==company_id,Bill.bill_type=='sales',Bill.status!='cancelled')) or 0
-    payables=db.scalar(select(func.coalesce(func.sum(Bill.balance_amount),0)).where(Bill.company_id==company_id,Bill.bill_type=='purchase',Bill.status!='cancelled')) or 0
-    return DashboardSummary(total_customers=int(total_customers),new_customers_month=int(new_customers),active_projects=int(active_projects),pending_quotations=int(pending_quotations),pending_documents=int(pending_documents),loan_approvals_pending=int(loan_pending),material_arrivals_pending=int(material_pending),installations_in_progress=int(installation),dcr_pending=int(dcr_pending),subsidy_pending=int(subsidy_pending),completed_projects=int(completed),low_stock_items=int(low_stock),money_received_month=float(money_in),money_paid_month=float(money_out),expenses_month=float(expenses),customer_receivables=float(receivables),supplier_payables=float(payables))
+    company_id = actor.membership.company_id
+    month_start = date.today().replace(day=1)
+    active_project_filters = (
+        CustomerProject.company_id == company_id,
+        CustomerProject.archived_at.is_(None),
+        CustomerProject.status.in_(OPEN_PROJECT_STATUSES),
+    )
+
+    total_customers = _count(db, select(func.count()).select_from(AgentCustomer).where(
+        AgentCustomer.company_id == company_id,
+        AgentCustomer.archived_at.is_(None),
+    ))
+    new_customers = _count(db, select(func.count()).select_from(AgentCustomer).where(
+        AgentCustomer.company_id == company_id,
+        AgentCustomer.created_at >= month_start,
+        AgentCustomer.archived_at.is_(None),
+    ))
+    active_projects = _count(db, select(func.count()).select_from(CustomerProject).where(
+        *active_project_filters,
+    ))
+
+    # This mirrors the Approval Center: requests without a generated quote and
+    # quotes that still require approval/revision are actionable.
+    pending_quotations = _count(
+        db,
+        select(func.count())
+        .select_from(QuotationRequest)
+        .outerjoin(CustomerQuotation, CustomerQuotation.request_id == QuotationRequest.id)
+        .where(
+            QuotationRequest.company_id == company_id,
+            or_(
+                CustomerQuotation.id.is_(None),
+                CustomerQuotation.status.in_(PENDING_QUOTATION_STATUSES),
+            ),
+        ),
+    )
+
+    # Document completion is project workflow state. Uploaded files use the
+    # owner type "customer_document", so counting synthetic pending file types
+    # would never reflect the Documents page.
+    pending_documents = _count(db, select(func.count()).select_from(CustomerProject).where(
+        *active_project_filters,
+        CustomerProject.documentation_status.in_(('pending', 'in_progress')),
+    ))
+    loan_pending = _count(db, select(func.count()).select_from(CustomerProject).where(
+        *active_project_filters,
+        CustomerProject.payment_mode == 'loan',
+        CustomerProject.loan_status.in_(PENDING_LOAN_STATUSES),
+    ))
+
+    project_timeline = (
+        select(CustomerProject.id, ProjectTimeline.current_step)
+        .outerjoin(ProjectTimeline, ProjectTimeline.project_id == CustomerProject.id)
+        .where(*active_project_filters)
+        .subquery()
+    )
+    material_pending = _count(
+        db,
+        select(func.count()).select_from(CustomerProject)
+        .join(project_timeline, project_timeline.c.id == CustomerProject.id)
+        .where(or_(
+            CustomerProject.material_status.in_(('scheduled', 'in_transit')),
+            project_timeline.c.current_step == 'material_arrival',
+        )),
+    )
+    installations_in_progress = _count(
+        db,
+        select(func.count()).select_from(CustomerProject)
+        .join(project_timeline, project_timeline.c.id == CustomerProject.id)
+        .where(or_(
+            CustomerProject.installation_status == 'in_progress',
+            project_timeline.c.current_step == 'installation',
+        )),
+    )
+    dcr_pending = _count(db, select(func.count()).select_from(CustomerProject).where(
+        *active_project_filters,
+        CustomerProject.dcr_status.in_(('pending', 'in_progress')),
+    ))
+    subsidy_pending = _count(db, select(func.count()).select_from(CustomerProject).where(
+        *active_project_filters,
+        CustomerProject.subsidy_status.in_(('pending', 'applied', 'in_progress')),
+    ))
+    completed_projects = _count(db, select(func.count()).select_from(CustomerProject).where(
+        CustomerProject.company_id == company_id,
+        CustomerProject.archived_at.is_(None),
+        CustomerProject.status == 'completed',
+    ))
+
+    finance = finance_kpis(db, company_id)
+    return DashboardSummary(
+        total_customers=total_customers,
+        new_customers_month=new_customers,
+        active_projects=active_projects,
+        pending_quotations=pending_quotations,
+        pending_documents=pending_documents,
+        loan_approvals_pending=loan_pending,
+        material_arrivals_pending=material_pending,
+        installations_in_progress=installations_in_progress,
+        dcr_pending=dcr_pending,
+        subsidy_pending=subsidy_pending,
+        completed_projects=completed_projects,
+        low_stock_items=low_stock_item_count(db, company_id),
+        money_received_month=finance.money_in_month,
+        money_paid_month=finance.money_out_month,
+        expenses_month=finance.expenses_month,
+        customer_receivables=finance.customer_receivables,
+        supplier_payables=finance.supplier_payables,
+    )

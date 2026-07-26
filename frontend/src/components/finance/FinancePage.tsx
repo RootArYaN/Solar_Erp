@@ -17,6 +17,7 @@ import {
   WalletCards,
 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import {
   createBill,
   createCompanyLoan,
@@ -45,6 +46,7 @@ import { KpiGrid, TabStrip, WorkspaceHeader, WorkspacePage } from '../workspace'
 
 type Tab = 'overview' | 'transactions' | 'expenses' | 'bills' | 'accounts' | 'loans' | 'profitability' | 'reports'
 type Dialog = 'transaction' | 'expense' | 'account' | 'transfer' | 'bill' | 'bill-payment' | 'loan' | 'loan-payment' | null
+const tabs: Tab[] = ['overview', 'transactions', 'expenses', 'bills', 'accounts', 'loans', 'profitability', 'reports']
 
 const money = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 })
 const shortDate = new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium' })
@@ -82,7 +84,9 @@ function exportLedgerCsv(rows: FinanceTransactionList['data']) {
 }
 
 export function FinancePage({ session }: { session: Session }) {
-  const [tab, setTab] = useState<Tab>('overview')
+  const [searchParams] = useSearchParams()
+  const requestedTab = searchParams.get('tab')
+  const [tab, setTab] = useState<Tab>(() => tabs.includes(requestedTab as Tab) ? requestedTab as Tab : 'overview')
   const [dialog, setDialog] = useState<Dialog>(null)
   const [loading, setLoading] = useState(true)
   const [working, setWorking] = useState(false)
@@ -100,8 +104,8 @@ export function FinancePage({ session }: { session: Session }) {
   const [selectedLoan, setSelectedLoan] = useState<CompanyLoan | null>(null)
   const [dateFrom, setDateFrom] = useState(monthStart())
   const [dateTo, setDateTo] = useState(today())
-  const [direction, setDirection] = useState('')
-  const [billType, setBillType] = useState('')
+  const [direction, setDirection] = useState(() => ['credit', 'debit'].includes(searchParams.get('direction') ?? '') ? searchParams.get('direction') ?? '' : '')
+  const [billType, setBillType] = useState(() => ['sales', 'purchase'].includes(searchParams.get('bill_type') ?? '') ? searchParams.get('bill_type') ?? '' : '')
   const [search, setSearch] = useState('')
   const { toast } = useToast()
   const access = getModuleAccess(session, 'finance')

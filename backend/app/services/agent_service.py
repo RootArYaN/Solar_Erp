@@ -332,6 +332,15 @@ def get_agent_overview(db: Session, actor: CurrentSession, membership_id: str) -
         [customer.id for customer in customers],
     )
     current_balance = _current_balance(db, profile, approvals)
+    commission_total = sum(
+        (
+            Decimal(transaction.credit or 0) - Decimal(transaction.debit or 0)
+            for transaction in ordered_transactions
+            if transaction.transaction_type == "commission"
+            and _is_posted(transaction, approvals)
+        ),
+        Decimal("0.00"),
+    )
     customer_summaries: list[AgentCustomerSummary] = []
     for customer in customers:
         request = latest_requests.get(customer.id)
@@ -392,6 +401,7 @@ def get_agent_overview(db: Session, actor: CurrentSession, membership_id: str) -
         ),
         customer_count=len(customers),
         active_customer_count=sum(customer.status == "active" for customer in customers),
+        commission_total=_money(commission_total),
         customer_outstanding=_money(sum((Decimal(customer.outstanding_balance or 0) for customer in customers), Decimal("0.00"))),
         customers=customer_summaries,
         transactions=list(reversed(transaction_summaries)),

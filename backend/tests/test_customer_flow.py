@@ -13,6 +13,37 @@ def _admin_session(client: TestClient) -> tuple[dict, dict[str, str]]:
     return session, {"Authorization": f"Bearer {session['access_token']}"}
 
 
+def test_agent_documents_and_posters_have_required_read_access() -> None:
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/auth/login",
+            json={"username": "agent", "password": "AgentPass123!"},
+        )
+        assert response.status_code == 200, response.text
+        session = response.json()
+        assert "documents.view" in session["permissions"]
+        assert "posters.view" in session["permissions"]
+        assert "customers.view" not in session["permissions"]
+        headers = {"Authorization": f"Bearer {session['access_token']}"}
+
+        customers = client.get("/api/v1/customer-flow/customers", headers=headers)
+        assert customers.status_code == 200, customers.text
+        assert customers.json()["items"]
+        assert "payment_mode" in customers.json()["items"][0]
+        assert "outstanding_balance" in customers.json()["items"][0]
+
+        customer_id = customers.json()["items"][0]["id"]
+        snapshot = client.get(
+            f"/api/v1/customer-flow/customers/{customer_id}",
+            headers=headers,
+        )
+        assert snapshot.status_code == 200, snapshot.text
+        assert snapshot.json()["customer"]["id"] == customer_id
+
+        posters = client.get("/api/v1/posters", params={"status": "active"}, headers=headers)
+        assert posters.status_code == 200, posters.text
+
+
 def test_customer_quotation_project_and_material_draft_are_linked() -> None:
     with TestClient(app) as client:
         _, headers = _admin_session(client)

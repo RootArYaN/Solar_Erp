@@ -55,6 +55,8 @@ export type Customer = EntityBase & {
   consumer_number: string
   electricity_provider: string
   lead_source: string
+  payment_mode: '' | 'cash' | 'loan'
+  outstanding_balance: string
 }
 
 export type SiteStatus = 'survey_pending' | 'surveyed' | 'quotation_ready' | 'approved' | 'converted'

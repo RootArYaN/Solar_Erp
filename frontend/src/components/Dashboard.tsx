@@ -38,6 +38,14 @@ export function Dashboard({ session }: { session: Session }) {
     ['Installations', summary.installations_in_progress, 'Currently in progress', Boxes, '/app/projects', PERMISSIONS.projects.view],
     ['Low stock', summary.low_stock_items, 'Items need attention', PackageSearch, '/app/inventory', PERMISSIONS.inventory.view],
   ] as const
+  const financial = [
+    ['Money received', summary.money_received_month, 'This month', ArrowDownLeft, '/app/finance?tab=transactions&direction=credit'],
+    ['Money paid', summary.money_paid_month, 'This month', ArrowUpRight, '/app/finance?tab=transactions&direction=debit'],
+    ['Expenses', summary.expenses_month, 'This month', WalletCards, '/app/finance?tab=expenses'],
+    ['Customer receivables', summary.customer_receivables, 'Pending collection', HandCoins, '/app/finance?tab=bills&bill_type=sales'],
+    ['Supplier payables', summary.supplier_payables, 'Pending payment', ReceiptText, '/app/finance?tab=bills&bill_type=purchase'],
+  ] as const
+  const canViewFinance = hasPermission(session, PERMISSIONS.finance.view)
 
   return <WorkspacePage className="erp-page dashboard-live">
     <WorkspaceHeader className="erp-page-head">
@@ -46,11 +54,10 @@ export function Dashboard({ session }: { session: Session }) {
     </WorkspaceHeader>
 
     <KpiGrid columns={5} className="erp-kpi-grid erp-kpi-grid--finance">
-      <article><ArrowDownLeft /><span>Money received</span><strong>{money.format(summary.money_received_month)}</strong><small>This month</small></article>
-      <article><ArrowUpRight /><span>Money paid</span><strong>{money.format(summary.money_paid_month)}</strong><small>This month</small></article>
-      <article><WalletCards /><span>Expenses</span><strong>{money.format(summary.expenses_month)}</strong><small>This month</small></article>
-      <article><HandCoins /><span>Customer receivables</span><strong>{money.format(summary.customer_receivables)}</strong><small>Pending collection</small></article>
-      <article><ReceiptText /><span>Supplier payables</span><strong>{money.format(summary.supplier_payables)}</strong><small>Pending payment</small></article>
+      {financial.map(([title, value, note, Icon, to]) => <article className="dashboard-finance-kpi" key={title}>
+        <Icon /><span>{title}</span><strong>{money.format(value)}</strong><small>{note}</small>
+        {canViewFinance && <Link className="dashboard-finance-kpi__link" to={to} aria-label={`Open ${title}`}><ArrowUpRight size={13} /></Link>}
+      </article>)}
     </KpiGrid>
 
     <ScrollSurface className="dashboard-scroll-body">

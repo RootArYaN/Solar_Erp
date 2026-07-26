@@ -73,6 +73,24 @@ def _inventory_maps(db: Session, company_id: str):
     return items, locations, balances
 
 
+def _available_by_item(balances: list[InventoryBalance]) -> dict[str, Decimal]:
+    available: dict[str, Decimal] = {}
+    for balance in balances:
+        available[balance.item_id] = available.get(balance.item_id, Decimal('0')) + (
+            Decimal(balance.quantity_on_hand or 0) - Decimal(balance.reserved_quantity or 0)
+        )
+    return available
+
+
+def low_stock_item_count(db: Session, company_id: str) -> int:
+    items, _, balances = _inventory_maps(db, company_id)
+    available = _available_by_item(balances)
+    return sum(
+        available.get(item.id, Decimal('0')) <= Decimal(item.reorder_level or 0)
+        for item in items
+    )
+
+
 def inventory_summary(db: Session, actor: CurrentSession) -> InventorySummary:
     company_id = actor.membership.company_id
     items, locations, balances = _inventory_maps(db, company_id)

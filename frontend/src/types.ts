@@ -143,6 +143,7 @@ export type AgentOverview = {
   profile: AgentProfile
   customer_count: number
   active_customer_count: number
+  commission_total: number
   customer_outstanding: number
   customers: AgentCustomer[]
   transactions: AgentTransaction[]

@@ -1,5 +1,6 @@
 import { AlertCircle, CheckCircle2, Info, TriangleAlert, X } from 'lucide-react'
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import { createClientId } from '../../lib/client-id'
 
 type ToastVariant = 'success' | 'error' | 'warning' | 'info'
 
@@ -42,7 +43,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 
   const toast = useCallback((input: ToastInput | string) => {
     const value = typeof input === 'string' ? { message: input } : input
-    const id = crypto.randomUUID()
+    const id = createClientId()
     const item: ToastItem = {
       id,
       title: value.title,

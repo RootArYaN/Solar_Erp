@@ -34,6 +34,7 @@ def test_seeded_agent_overview_and_transaction_posting() -> None:
         payload = overview.json()
         assert payload["profile"]["phone"] == "+91 98765 43210"
         assert payload["customer_count"] == 4
+        assert payload["commission_total"] == 40900.0
         assert payload["customer_outstanding"] == 1305000.0
         assert len(payload["transactions"]) == 5
 
@@ -50,6 +51,13 @@ def test_seeded_agent_overview_and_transaction_posting() -> None:
         )
         assert created.status_code == 201, created.text
         assert created.json()["running_balance"] == 45000.0
+
+        refreshed = client.get(
+            f"/api/v1/agents/{seeded['membership_id']}/overview",
+            headers=headers,
+        )
+        assert refreshed.status_code == 200, refreshed.text
+        assert refreshed.json()["commission_total"] == 42300.0
 
 
 def test_agent_can_view_and_update_only_own_profile() -> None:

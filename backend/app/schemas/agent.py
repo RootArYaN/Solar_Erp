@@ -80,6 +80,7 @@ class AgentOverviewResponse(BaseModel):
     profile: AgentProfileSummary
     customer_count: int
     active_customer_count: int
+    commission_total: float
     customer_outstanding: float
     customers: list[AgentCustomerSummary]
     transactions: list[AgentTransactionSummary]

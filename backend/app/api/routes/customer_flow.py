@@ -24,7 +24,7 @@ def _raise_service_error(exc: CustomerFlowError) -> None:
 @router.get("/customers", response_model=CustomerFlowList)
 def list_customers(
     db: Session = Depends(get_db),
-    session: CurrentSession = Depends(require_permissions("customers.view")),
+    session: CurrentSession = Depends(require_any_permissions("customers.view", "documents.view")),
 ) -> CustomerFlowList:
     return customer_flow_service.list_customers(db, session)
 
@@ -33,7 +33,7 @@ def list_customers(
 def get_customer_snapshot(
     customer_id: str,
     db: Session = Depends(get_db),
-    session: CurrentSession = Depends(require_permissions("customers.view")),
+    session: CurrentSession = Depends(require_any_permissions("customers.view", "documents.view")),
 ) -> CustomerFlowSnapshot:
     try:
         return customer_flow_service.get_snapshot(db, session, customer_id)

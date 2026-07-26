@@ -7,7 +7,7 @@ from app.api.routes import admin, agents, archives, auth, customer_flow, dashboa
 from app.core.config import settings
 from app.core.middleware import add_error_handlers, add_request_middleware
 from app.db.migrate import run_migrations
-from app.db.seed import seed_development_data
+from app.db.seed import bootstrap_super_admin
 from app.db.session import SessionLocal
 
 
@@ -16,7 +16,7 @@ async def lifespan(_: FastAPI):
     if settings.environment.lower() == "development":
         run_migrations()
         with SessionLocal() as db:
-            seed_development_data(db)
+            bootstrap_super_admin(db)
     yield
 
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from uuid import uuid4
@@ -57,6 +58,15 @@ class FinanceConflictError(FinanceServiceError):
     status_code = 409
 
 
+@dataclass(frozen=True)
+class FinanceKpis:
+    money_in_month: float
+    money_out_month: float
+    expenses_month: float
+    customer_receivables: float
+    supplier_payables: float
+
+
 def _decimal(value: float | Decimal | int | None) -> Decimal:
     return Decimal(str(value or 0)).quantize(Decimal('0.01'))
 
@@ -73,6 +83,42 @@ def _month_bounds(on_date: date | None = None) -> tuple[date, date]:
     else:
         end = date(start.year, start.month + 1, 1)
     return start, end
+
+
+def finance_kpis(db: Session, company_id: str, *, on_date: date | None = None) -> FinanceKpis:
+    start, end = _month_bounds(on_date)
+    monthly = db.execute(select(
+        func.coalesce(func.sum(case((FinanceTransaction.direction == 'credit', FinanceTransaction.amount), else_=0)), 0),
+        func.coalesce(func.sum(case((FinanceTransaction.direction == 'debit', FinanceTransaction.amount), else_=0)), 0),
+        func.coalesce(func.sum(case((
+            (FinanceTransaction.direction == 'debit') & (FinanceTransaction.source_type == 'expense'),
+            FinanceTransaction.amount,
+        ), else_=0)), 0),
+    ).where(
+        FinanceTransaction.company_id == company_id,
+        FinanceTransaction.status == 'posted',
+        FinanceTransaction.transaction_date >= start,
+        FinanceTransaction.transaction_date < end,
+    )).one()
+    receivables = db.scalar(select(func.coalesce(func.sum(Bill.balance_amount), 0)).where(
+        Bill.company_id == company_id,
+        Bill.bill_type == 'sales',
+        Bill.status != 'cancelled',
+        Bill.balance_amount > 0,
+    )) or 0
+    payables = db.scalar(select(func.coalesce(func.sum(Bill.balance_amount), 0)).where(
+        Bill.company_id == company_id,
+        Bill.bill_type == 'purchase',
+        Bill.status != 'cancelled',
+        Bill.balance_amount > 0,
+    )) or 0
+    return FinanceKpis(
+        money_in_month=_float(monthly[0]),
+        money_out_month=_float(monthly[1]),
+        expenses_month=_float(monthly[2]),
+        customer_receivables=_float(receivables),
+        supplier_payables=_float(payables),
+    )
 
 
 def _transaction_number(prefix: str = 'TXN') -> str:
@@ -416,26 +462,21 @@ def pay_company_loan(db: Session, actor: CurrentSession, loan_id: str, payload: 
 
 
 def overview(db: Session, actor: CurrentSession) -> FinanceOverview:
+    company_id = actor.membership.company_id
     start, end = _month_bounds()
-    monthly = db.execute(select(
-        func.coalesce(func.sum(case((FinanceTransaction.direction == 'credit', FinanceTransaction.amount), else_=0)), 0),
-        func.coalesce(func.sum(case((FinanceTransaction.direction == 'debit', FinanceTransaction.amount), else_=0)), 0),
-        func.coalesce(func.sum(case(((FinanceTransaction.direction == 'debit') & (FinanceTransaction.source_type == 'expense'), FinanceTransaction.amount), else_=0)), 0),
-    ).where(FinanceTransaction.company_id == actor.membership.company_id, FinanceTransaction.status == 'posted', FinanceTransaction.transaction_date >= start, FinanceTransaction.transaction_date < end)).one()
+    kpis = finance_kpis(db, company_id)
     accounts = list_accounts(db, actor)
     bank_balance = sum(row.current_balance for row in accounts if row.account_type in {'bank', 'upi'})
     cash_balance = sum(row.current_balance for row in accounts if row.account_type in {'cash', 'petty_cash'})
-    receivables = db.scalar(select(func.coalesce(func.sum(Bill.balance_amount), 0)).where(Bill.company_id == actor.membership.company_id, Bill.bill_type == 'sales', Bill.status != 'cancelled')) or 0
-    payables = db.scalar(select(func.coalesce(func.sum(Bill.balance_amount), 0)).where(Bill.company_id == actor.membership.company_id, Bill.bill_type == 'purchase', Bill.status != 'cancelled')) or 0
-    recent_rows = list(db.scalars(select(FinanceTransaction).where(FinanceTransaction.company_id == actor.membership.company_id).order_by(FinanceTransaction.transaction_date.desc(), FinanceTransaction.created_at.desc()).limit(8)).all())
-    pending_rows = list(db.scalars(select(Bill).where(Bill.company_id == actor.membership.company_id, Bill.balance_amount > 0, Bill.status != 'cancelled').order_by(Bill.due_date.asc().nullslast()).limit(8)).all())
-    expense_rows = db.execute(select(FinanceCategory.name, func.sum(FinanceTransaction.amount)).join(FinanceTransaction, FinanceTransaction.category_id == FinanceCategory.id).where(FinanceTransaction.company_id == actor.membership.company_id, FinanceTransaction.direction == 'debit', FinanceTransaction.status == 'posted', FinanceTransaction.transaction_date >= start, FinanceTransaction.transaction_date < end).group_by(FinanceCategory.name).order_by(func.sum(FinanceTransaction.amount).desc()).limit(8)).all()
-    flow_rows = db.execute(select(func.strftime('%Y-%m', FinanceTransaction.transaction_date), FinanceTransaction.direction, func.sum(FinanceTransaction.amount)).where(FinanceTransaction.company_id == actor.membership.company_id, FinanceTransaction.status == 'posted').group_by(func.strftime('%Y-%m', FinanceTransaction.transaction_date), FinanceTransaction.direction).order_by(func.strftime('%Y-%m', FinanceTransaction.transaction_date).desc()).limit(12)).all() if db.bind and db.bind.dialect.name == 'sqlite' else []
+    recent_rows = list(db.scalars(select(FinanceTransaction).where(FinanceTransaction.company_id == company_id).order_by(FinanceTransaction.transaction_date.desc(), FinanceTransaction.created_at.desc()).limit(8)).all())
+    pending_rows = list(db.scalars(select(Bill).where(Bill.company_id == company_id, Bill.balance_amount > 0, Bill.status != 'cancelled').order_by(Bill.due_date.asc().nullslast()).limit(8)).all())
+    expense_rows = db.execute(select(FinanceCategory.name, func.sum(FinanceTransaction.amount)).join(FinanceTransaction, FinanceTransaction.category_id == FinanceCategory.id).where(FinanceTransaction.company_id == company_id, FinanceTransaction.direction == 'debit', FinanceTransaction.source_type == 'expense', FinanceTransaction.status == 'posted', FinanceTransaction.transaction_date >= start, FinanceTransaction.transaction_date < end).group_by(FinanceCategory.name).order_by(func.sum(FinanceTransaction.amount).desc()).limit(8)).all()
+    flow_rows = db.execute(select(func.strftime('%Y-%m', FinanceTransaction.transaction_date), FinanceTransaction.direction, func.sum(FinanceTransaction.amount)).where(FinanceTransaction.company_id == company_id, FinanceTransaction.status == 'posted').group_by(func.strftime('%Y-%m', FinanceTransaction.transaction_date), FinanceTransaction.direction).order_by(func.strftime('%Y-%m', FinanceTransaction.transaction_date).desc()).limit(12)).all() if db.bind and db.bind.dialect.name == 'sqlite' else []
     flow_map: dict[str, dict[str, float | str]] = {}
     for month, direction, amount in flow_rows:
         bucket = flow_map.setdefault(str(month), {'month': str(month), 'money_in': 0.0, 'money_out': 0.0})
         bucket['money_in' if direction == 'credit' else 'money_out'] = _float(amount)
-    return FinanceOverview(money_in_month=_float(monthly[0]), money_out_month=_float(monthly[1]), bank_balance=bank_balance, cash_balance=cash_balance, customer_receivables=_float(receivables), supplier_payables=_float(payables), expenses_month=_float(monthly[2]), net_cash_flow=_float(monthly[0]) - _float(monthly[1]), accounts=accounts, recent_transactions=_transaction_summaries(db, recent_rows), pending_bills=[_bill_summary(db, row) for row in pending_rows], expense_by_category=[{'category': name, 'amount': _float(amount)} for name, amount in expense_rows], monthly_flow=list(reversed(list(flow_map.values()))))
+    return FinanceOverview(money_in_month=kpis.money_in_month, money_out_month=kpis.money_out_month, bank_balance=bank_balance, cash_balance=cash_balance, customer_receivables=kpis.customer_receivables, supplier_payables=kpis.supplier_payables, expenses_month=kpis.expenses_month, net_cash_flow=kpis.money_in_month - kpis.money_out_month, accounts=accounts, recent_transactions=_transaction_summaries(db, recent_rows), pending_bills=[_bill_summary(db, row) for row in pending_rows], expense_by_category=[{'category': name, 'amount': _float(amount)} for name, amount in expense_rows], monthly_flow=list(reversed(list(flow_map.values()))))
 
 
 def profitability(db: Session, actor: CurrentSession) -> ProfitabilitySummary:

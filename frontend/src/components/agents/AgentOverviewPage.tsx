@@ -1,6 +1,7 @@
 import {
   ArrowDownLeft,
   ArrowUpRight,
+  BadgeIndianRupee,
   BriefcaseBusiness,
   CircleDollarSign,
   Download,
@@ -9,6 +10,7 @@ import {
   MapPin,
   Phone,
   Plus,
+  RefreshCw,
   Search,
   UsersRound,
 } from 'lucide-react'
@@ -112,6 +114,27 @@ export function AgentOverviewPage({ session }: { session: Session }) {
       setOverview(await getAgentOverview(session.access_token, membershipId))
     } catch (reason) {
       toast({ message: reason instanceof Error ? reason.message : 'Could not load agent overview', variant: 'error' })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function refreshPage() {
+    setLoading(true)
+    try {
+      const nextAgents = await getAgents(session.access_token)
+      const nextMembershipId = nextAgents.some((agent) => agent.membership_id === selectedMembershipId)
+        ? selectedMembershipId
+        : nextAgents[0]?.membership_id ?? ''
+      const nextOverview = nextMembershipId
+        ? await getAgentOverview(session.access_token, nextMembershipId)
+        : null
+      setAgents(nextAgents)
+      setSelectedMembershipId(nextMembershipId)
+      setOverview(nextOverview)
+      toast({ message: 'Agent overview refreshed', variant: 'success' })
+    } catch (reason) {
+      toast({ message: reason instanceof Error ? reason.message : 'Could not refresh agent overview', variant: 'error' })
     } finally {
       setLoading(false)
     }
@@ -346,6 +369,9 @@ export function AgentOverviewPage({ session }: { session: Session }) {
         )}
 
         <div className="agent-page__actions">
+          <button className="secondary-button secondary-button--icon" onClick={() => void refreshPage()} disabled={loading}>
+            <RefreshCw className={loading ? 'spin' : ''} size={16} /> Refresh
+          </button>
           {overview && canEditSelectedProfile && (
             <button className="secondary-button secondary-button--icon" onClick={() => setEditingProfile(true)}>
               <Edit3 size={16} /> Edit profile
@@ -392,23 +418,30 @@ export function AgentOverviewPage({ session }: { session: Session }) {
               </div>
             </motion.article>
 
-            <KpiGrid columns={3} className="agent-kpi-grid">
+            <KpiGrid columns={4} className="agent-kpi-grid">
               <motion.article initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.04 }}>
                 <div className="agent-kpi__icon"><UsersRound size={20} /></div>
-                <span>Customers</span>
+                <span>Total customers</span>
                 <strong>{overview.customer_count}</strong>
                 <small>{overview.active_customer_count} currently active</small>
               </motion.article>
               <motion.article initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08 }}>
+                <div className="agent-kpi__icon"><BadgeIndianRupee size={20} /></div>
+                <span>Total commission</span>
+                <strong>{currency.format(overview.commission_total)}</strong>
+                <small>Approved commission entries</small>
+              </motion.article>
+              <motion.article initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12 }}>
                 <div className="agent-kpi__icon"><CircleDollarSign size={20} /></div>
-                <span>Current balance</span>
+                <span>Overall balance</span>
                 <strong>{currency.format(overview.profile.current_balance)}</strong>
                 <small>Opening: {currency.format(overview.profile.opening_balance)}</small>
               </motion.article>
-              <motion.article initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12 }}>
+              <motion.article initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.16 }}>
                 <div className="agent-kpi__icon"><BriefcaseBusiness size={20} /></div>
-                <span>Outstanding</span>
+                <span>Customer outstanding</span>
                 <strong>{currency.format(overview.customer_outstanding)}</strong>
+                <small>Across assigned customers</small>
               </motion.article>
             </KpiGrid>
           </section>

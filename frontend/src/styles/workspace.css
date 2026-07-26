@@ -498,6 +498,85 @@ body,
   padding-block: 7px;
 }
 
+.dashboard-finance-kpi {
+  position: relative;
+  padding-right: 34px !important;
+}
+
+.dashboard-finance-kpi__link {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  color: #9a6815;
+}
+
+.dashboard-finance-kpi__link:hover {
+  background: #fff4dc;
+}
+
+.document-workspace-grid {
+  align-items: stretch;
+}
+
+.workspace-page.erp-page.document-page {
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.document-page > * {
+  flex: 0 0 auto;
+}
+
+.document-page__body {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--workspace-gap);
+  overflow: visible;
+}
+
+.document-page .erp-table-wrap {
+  max-width: 100%;
+}
+
+.document-data-pack {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.document-data-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.document-data-grid__wide {
+  grid-column: 1 / -1;
+}
+
+.document-data-pack .document-template-preview {
+  margin-top: auto;
+}
+
+@media (max-width: 1400px) {
+  .document-data-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 600px) {
+  .document-data-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Modal viewport card: header fixed, body scrolls, action rows remain reachable. */
 .modal-layer {
   padding: 12px;
