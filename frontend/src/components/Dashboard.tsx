@@ -6,6 +6,7 @@ import type { DashboardSummary } from '../erp-types'
 import { hasPermission, PERMISSIONS } from '../lib/permissions'
 import type { Session } from '../types'
 import { useToast } from './ui/ToastProvider'
+import { KpiGrid, ScrollSurface, WorkspaceHeader, WorkspacePage } from './workspace'
 
 const money = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 })
 
@@ -24,8 +25,8 @@ export function Dashboard({ session }: { session: Session }) {
 
   useEffect(() => { void load() }, [load])
 
-  if (loading && !summary) return <section className="erp-page"><div className="erp-state"><LoaderCircle className="spin" /><strong>Loading live business summary…</strong></div></section>
-  if (!summary) return <section className="erp-page"><div className="erp-state erp-state--error"><AlertCircle /><strong>{error || 'Dashboard is unavailable'}</strong><button className="secondary-button" onClick={() => void load()}>Retry</button></div></section>
+  if (loading && !summary) return <WorkspacePage className="erp-page"><div className="erp-state"><LoaderCircle className="spin" /><strong>Loading live business summary…</strong></div></WorkspacePage>
+  if (!summary) return <WorkspacePage className="erp-page"><div className="erp-state erp-state--error"><AlertCircle /><strong>{error || 'Dashboard is unavailable'}</strong><button className="secondary-button" onClick={() => void load()}>Retry</button></div></WorkspacePage>
 
   const operational = [
     ['Customers', summary.total_customers, `${summary.new_customers_month} new this month`, UsersRound, '/app/customers', PERMISSIONS.customers.view],
@@ -38,22 +39,27 @@ export function Dashboard({ session }: { session: Session }) {
     ['Low stock', summary.low_stock_items, 'Items need attention', PackageSearch, '/app/inventory', PERMISSIONS.inventory.view],
   ] as const
 
-  return <section className="erp-page dashboard-live">
-    <header className="erp-page-head"><div><span>Operations overview</span><h1>Good to see you, {session.user.full_name.split(' ')[0]}.</h1></div><button className="secondary-button" onClick={() => void load()} disabled={loading}><RefreshCw className={loading ? 'spin' : ''} size={15} /> Refresh</button></header>
+  return <WorkspacePage className="erp-page dashboard-live">
+    <WorkspaceHeader className="erp-page-head">
+      <div><span>Operations overview</span><h1>Good to see you, {session.user.full_name.split(' ')[0]}.</h1></div>
+      <button className="secondary-button" onClick={() => void load()} disabled={loading}><RefreshCw className={loading ? 'spin' : ''} size={15} /> Refresh</button>
+    </WorkspaceHeader>
 
-    <div className="erp-kpi-grid erp-kpi-grid--finance">
+    <KpiGrid columns={5} className="erp-kpi-grid erp-kpi-grid--finance">
       <article><ArrowDownLeft /><span>Money received</span><strong>{money.format(summary.money_received_month)}</strong><small>This month</small></article>
       <article><ArrowUpRight /><span>Money paid</span><strong>{money.format(summary.money_paid_month)}</strong><small>This month</small></article>
       <article><WalletCards /><span>Expenses</span><strong>{money.format(summary.expenses_month)}</strong><small>This month</small></article>
       <article><HandCoins /><span>Customer receivables</span><strong>{money.format(summary.customer_receivables)}</strong><small>Pending collection</small></article>
       <article><ReceiptText /><span>Supplier payables</span><strong>{money.format(summary.supplier_payables)}</strong><small>Pending payment</small></article>
-    </div>
+    </KpiGrid>
 
-    <section className="erp-panel"><header><div><span>Workflow pulse</span><h2>What needs attention</h2></div></header><div className="dashboard-operation-grid">{operational.map(([title, value, note, Icon, to, permission]) => {
-      const allowed = hasPermission(session, permission)
-      return <article key={title}><span className="dashboard-operation-icon"><Icon size={18} /></span><div><small>{title}</small><strong>{value}</strong><p>{note}</p></div>{allowed && <Link to={to} aria-label={`Open ${title}`}><ArrowUpRight size={15} /></Link>}</article>
-    })}</div></section>
+    <ScrollSurface className="dashboard-scroll-body">
+      <section className="erp-panel"><header><div><span>Workflow pulse</span><h2>What needs attention</h2></div></header><div className="dashboard-operation-grid">{operational.map(([title, value, note, Icon, to, permission]) => {
+        const allowed = hasPermission(session, permission)
+        return <article key={title}><span className="dashboard-operation-icon"><Icon size={18} /></span><div><small>{title}</small><strong>{value}</strong><p>{note}</p></div>{allowed && <Link to={to} aria-label={`Open ${title}`}><ArrowUpRight size={15} /></Link>}</article>
+      })}</div></section>
 
-    <div className="erp-two-column"><section className="erp-panel"><header><div><span>Project pipeline</span><h2>Current work</h2></div></header><div className="dashboard-status-list"><div><SunMedium /><span>Installations in progress</span><strong>{summary.installations_in_progress}</strong></div><div><BadgeIndianRupee /><span>DCR pending</span><strong>{summary.dcr_pending}</strong></div><div><IndianRupee /><span>Subsidy pending</span><strong>{summary.subsidy_pending}</strong></div><div><CheckCircle2 /><span>Completed projects</span><strong>{summary.completed_projects}</strong></div></div></section><section className="erp-panel"><header><div><span>Access</span><h2>Your workspace</h2></div></header><div className="dashboard-status-list"><div><UsersRound /><span>Role</span><strong>{session.role.replaceAll('_', ' ')}</strong></div><div><ClipboardCheck /><span>Permissions</span><strong>{session.permissions.length}</strong></div><div><Landmark /><span>Company</span><strong>{session.company.code}</strong></div></div></section></div>
-  </section>
+      <div className="erp-two-column"><section className="erp-panel"><header><div><span>Project pipeline</span><h2>Current work</h2></div></header><div className="dashboard-status-list"><div><SunMedium /><span>Installations in progress</span><strong>{summary.installations_in_progress}</strong></div><div><BadgeIndianRupee /><span>DCR pending</span><strong>{summary.dcr_pending}</strong></div><div><IndianRupee /><span>Subsidy pending</span><strong>{summary.subsidy_pending}</strong></div><div><CheckCircle2 /><span>Completed projects</span><strong>{summary.completed_projects}</strong></div></div></section><section className="erp-panel"><header><div><span>Access</span><h2>Your workspace</h2></div></header><div className="dashboard-status-list"><div><UsersRound /><span>Role</span><strong>{session.role.replaceAll('_', ' ')}</strong></div><div><ClipboardCheck /><span>Permissions</span><strong>{session.permissions.length}</strong></div><div><Landmark /><span>Company</span><strong>{session.company.code}</strong></div></div></section></div>
+    </ScrollSurface>
+  </WorkspacePage>
 }

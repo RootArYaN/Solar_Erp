@@ -48,7 +48,7 @@ export function AppShell({ session, onLogout }: { session: Session; onLogout: ()
       </aside>
 
       {mobileOpen && <button className="sidebar-backdrop" onClick={() => setMobileOpen(false)} aria-label="Close navigation" />}
-      <section className="app-main"><header className="app-topbar"><button className="icon-button app-menu-button" onClick={() => setMobileOpen(true)} aria-label="Open menu"><Menu size={20} /></button></header><Outlet /></section>
+      <section className="app-main"><header className="app-topbar"><button className="icon-button app-menu-button" onClick={() => setMobileOpen(true)} aria-label="Open menu"><Menu size={20} /></button></header><div className="app-viewport"><Outlet /></div></section>
     </main>
   )
 }

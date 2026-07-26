@@ -56,6 +56,29 @@ npm run dev
 
 Open `http://localhost:5173`.
 
+## Google Drive customer documents
+
+Customer document uploads can be stored in a company Google Drive. Copy the
+Google Drive variables from `backend/.env.example` into `backend/.env`, enable
+the Google Drive API in Google Cloud, and create a Web application OAuth client
+with this authorized redirect URI:
+
+```text
+http://localhost:8000/api/v1/documents/google-drive/callback
+```
+
+Sign in as a company administrator, open **Customer data**, and select
+**Connect** beside Google Drive. The app creates this structure automatically:
+
+```text
+Solar ERP Customers/
+└── <customer number> - <customer name>/
+    └── uploaded documents
+```
+
+The integration requests the limited `drive.file` scope and encrypts the saved
+refresh token with `GOOGLE_DRIVE_TOKEN_KEY`.
+
 ## Production migration path
 
 - Replace `DATABASE_URL` with PostgreSQL, for example `postgresql+psycopg://...`.

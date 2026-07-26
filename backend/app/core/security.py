@@ -1,4 +1,6 @@
 from datetime import UTC, datetime, timedelta
+from hashlib import sha256
+from secrets import token_urlsafe
 from typing import Any
 
 import jwt
@@ -22,16 +24,19 @@ def verify_password(password: str, hashed_password: str) -> bool:
 
 
 def create_access_token(subject: str, claims: dict[str, Any]) -> tuple[str, datetime]:
-    expires_at = datetime.now(UTC) + timedelta(minutes=settings.access_token_minutes)
-    payload = {
-        "sub": subject,
-        "iat": datetime.now(UTC),
-        "exp": expires_at,
-        **claims,
-    }
-    token = jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
-    return token, expires_at
+    now = datetime.now(UTC)
+    expires_at = now + timedelta(minutes=settings.access_token_minutes)
+    payload = {"sub": subject, "iat": now, "exp": expires_at, **claims}
+    return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm), expires_at
 
 
 def decode_access_token(token: str) -> dict[str, Any]:
     return jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
+
+
+def new_refresh_token() -> str:
+    return token_urlsafe(48)
+
+
+def hash_refresh_token(token: str) -> str:
+    return sha256(token.encode("utf-8")).hexdigest()

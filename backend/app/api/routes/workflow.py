@@ -8,6 +8,10 @@ from app.schemas.workflow import (
     ApprovalDecisionRequest,
     CreateQuotationRequest,
     GenerateQuotationRequest,
+    ProjectPaymentModeRequest,
+    ProjectTimelineListItem,
+    ProjectTimelineResponse,
+    ProjectTimelineUpdateRequest,
     QuotationRequestSummary,
     TransactionApprovalSummary,
 )
@@ -82,5 +86,55 @@ def decide_transaction(
 ) -> TransactionApprovalSummary:
     try:
         return workflow_service.decide_transaction(db, session, approval_id, payload)
+    except WorkflowServiceError as exc:
+        _raise_service_error(exc)
+
+
+@router.get("/projects/timelines", response_model=list[ProjectTimelineListItem])
+def list_project_timelines(
+    db: Session = Depends(get_db),
+    session: CurrentSession = Depends(require_any_permissions("projects.view")),
+) -> list[ProjectTimelineListItem]:
+    try:
+        return workflow_service.list_project_timelines(db, session)
+    except WorkflowServiceError as exc:
+        _raise_service_error(exc)
+
+
+@router.get("/projects/{project_id}/timeline", response_model=ProjectTimelineResponse)
+def get_project_timeline(
+    project_id: str,
+    db: Session = Depends(get_db),
+    session: CurrentSession = Depends(require_any_permissions("projects.view")),
+) -> ProjectTimelineResponse:
+    try:
+        return workflow_service.get_project_timeline(db, session, project_id)
+    except WorkflowServiceError as exc:
+        _raise_service_error(exc)
+
+
+@router.patch("/projects/{project_id}/payment-mode", response_model=ProjectTimelineResponse)
+def set_project_payment_mode(
+    project_id: str,
+    payload: ProjectPaymentModeRequest,
+    db: Session = Depends(get_db),
+    session: CurrentSession = Depends(require_any_permissions("projects.view")),
+) -> ProjectTimelineResponse:
+    try:
+        return workflow_service.set_project_payment_mode(db, session, project_id, payload.payment_mode)
+    except WorkflowServiceError as exc:
+        _raise_service_error(exc)
+
+
+@router.patch("/projects/{project_id}/timeline/{step_key}", response_model=ProjectTimelineResponse)
+def update_project_timeline_step(
+    project_id: str,
+    step_key: str,
+    payload: ProjectTimelineUpdateRequest,
+    db: Session = Depends(get_db),
+    session: CurrentSession = Depends(require_any_permissions("projects.view")),
+) -> ProjectTimelineResponse:
+    try:
+        return workflow_service.update_project_timeline_step(db, session, project_id, step_key, payload)
     except WorkflowServiceError as exc:
         _raise_service_error(exc)

@@ -6,6 +6,7 @@ from pydantic import BaseModel, EmailStr, Field, field_validator
 class LoginRequest(BaseModel):
     username: str = Field(min_length=3, max_length=50, pattern=r"^[a-zA-Z0-9._-]+$")
     password: str = Field(min_length=8, max_length=128)
+    remember: bool = True
 
     @field_validator("username")
     @classmethod
@@ -18,6 +19,7 @@ class UserSummary(BaseModel):
     username: str
     email: EmailStr
     full_name: str
+    is_super_admin: bool = False
 
 
 class CompanySummary(BaseModel):
@@ -43,3 +45,15 @@ class MeResponse(BaseModel):
     company: CompanySummary
     role: str
     permissions: list[str]
+
+
+class ActiveDeviceSummary(BaseModel):
+    id: str
+    device_name: str
+    browser: str
+    operating_system: str
+    approximate_location: str
+    ip_hint: str
+    created_at: datetime
+    last_seen_at: datetime
+    is_current: bool

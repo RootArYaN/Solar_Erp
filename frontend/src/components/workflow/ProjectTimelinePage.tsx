@@ -23,6 +23,7 @@ import {
 import type { ProjectTimeline, ProjectTimelineListItem, ProjectTimelineStep, Session } from '../../types'
 import { EmptyState, ErrorState, LoadingSkeleton } from '../ui/PageState'
 import { useToast } from '../ui/ToastProvider'
+import { KpiGrid, WorkspacePage } from '../workspace'
 
 const money = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 })
 const date = new Intl.DateTimeFormat('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -186,7 +187,7 @@ export function ProjectTimelinePage({ session }: { session: Session }) {
   }
 
   return (
-    <section className="project-timeline-page">
+    <WorkspacePage variant="split" className="project-timeline-page">
       {loading ? <LoadingSkeleton rows={8} /> : error && !projects.length ? <ErrorState message={error} onRetry={() => void loadProjects()} /> : !projects.length ? (
         <EmptyState title="No projects yet" message="Approved quotations will appear here as project timelines." />
       ) : (
@@ -215,12 +216,12 @@ export function ProjectTimelinePage({ session }: { session: Session }) {
 
                 <div className="timeline-progress-track"><i style={{ width: `${timeline.progress}%` }} /></div>
 
-                <section className="timeline-summary-grid">
+                <KpiGrid columns={4} className="timeline-summary-grid">
                   <article><WalletCards size={16} /><span><small>Payment mode</small><strong>{timeline.payment_mode ? timeline.payment_mode : 'Not selected'}</strong></span></article>
                   <article><IndianRupee size={16} /><span><small>Approved value</small><strong>{money.format(timeline.approved_value)}</strong></span></article>
                   <article><CheckCircle2 size={16} /><span><small>Plant capacity</small><strong>{timeline.capacity_kw} kW</strong></span></article>
                   <article><CalendarDays size={16} /><span><small>Last updated</small><strong>{formatDate(timeline.updated_at)}</strong></span></article>
-                </section>
+                </KpiGrid>
 
                 <div className={`timeline-content-grid ${timeline.can_manage ? '' : 'timeline-content-grid--read-only'}`}>
                   <section className="project-timeline-card">
@@ -256,6 +257,6 @@ export function ProjectTimelinePage({ session }: { session: Session }) {
           </main>
         </div>
       )}
-    </section>
+    </WorkspacePage>
   )
 }

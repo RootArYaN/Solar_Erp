@@ -15,6 +15,7 @@ from app.schemas.admin import (
     UserAdminSummary,
 )
 from app.services.agent_service import ensure_agent_profile
+from app.services.audit_service import write_event
 
 
 class AdminServiceError(Exception):
@@ -151,6 +152,10 @@ def create_user(db: Session, actor: CurrentSession, payload: CreateUserRequest) 
     db.flush()
     if payload.role_code == "agent":
         ensure_agent_profile(db, membership)
+    write_event(
+        db, company_id=company_id, event="user.created", entity="membership",
+        entity_id=membership.id, actor=actor, changes={"username": user.username, "role": role.code},
+    )
     db.commit()
     db.refresh(membership)
     return _to_user_summary(_get_membership(db, company_id, membership.id))
@@ -202,6 +207,10 @@ def update_user(
     if payload.is_active is not None:
         membership.is_active = payload.is_active
 
+    write_event(
+        db, company_id=company_id, event="user.updated", entity="membership",
+        entity_id=membership.id, actor=actor, changes=payload.model_dump(exclude_none=True),
+    )
     db.commit()
     return _to_user_summary(_get_membership(db, company_id, membership.id))
 
@@ -215,6 +224,10 @@ def reset_user_password(
     membership = _get_membership(db, actor.membership.company_id, membership_id)
     _assert_target_editable(actor, membership)
     membership.user.hashed_password = hash_password(payload.new_password)
+    write_event(
+        db, company_id=membership.company_id, event="user.password_reset", entity="membership",
+        entity_id=membership.id, actor=actor, changes={},
+    )
     db.commit()
 
 
@@ -260,6 +273,11 @@ def create_role(db: Session, actor: CurrentSession, payload: CreateRoleRequest) 
     )
     role.permissions = _load_permissions(db, payload.permission_codes)
     db.add(role)
+    db.flush()
+    write_event(
+        db, company_id=role.company_id, event="role.created", entity="role", entity_id=role.id,
+        actor=actor, changes={"code": role.code, "permissions": payload.permission_codes},
+    )
     db.commit()
     db.refresh(role)
     return _to_role_summary(role, 0)
@@ -288,6 +306,10 @@ def update_role(
     if payload.permission_codes is not None:
         role.permissions = _load_permissions(db, payload.permission_codes)
 
+    write_event(
+        db, company_id=role.company_id, event="role.updated", entity="role", entity_id=role.id,
+        actor=actor, changes=payload.model_dump(exclude_none=True),
+    )
     db.commit()
     return _to_role_summary(role)
 
@@ -304,5 +326,9 @@ def delete_role(db: Session, actor: CurrentSession, role_id: str) -> None:
         raise AdminForbiddenError("System roles cannot be deleted")
     if role.memberships:
         raise AdminConflictError("Remove this role from all users before deleting it")
+    write_event(
+        db, company_id=role.company_id, event="role.deleted", entity="role", entity_id=role.id,
+        actor=actor, changes={"code": role.code},
+    )
     db.delete(role)
     db.commit()

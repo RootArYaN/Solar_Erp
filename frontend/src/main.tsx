@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom'
 import App from './App'
 import { ToastProvider } from './components/ui/ToastProvider'
 import './styles.css'
+import './styles/workspace.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

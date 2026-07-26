@@ -21,6 +21,7 @@ import {
 import { hasPermission, PERMISSIONS } from '../../lib/permissions'
 import type { AgentListItem, ArchiveDetail, ArchiveJob, ArchiveKpis, ArchiveSummary, AuditEvent, DocumentCustomerOption, ProjectTimelineListItem, Session } from '../../types'
 import { Modal } from '../admin/Modal'
+import { KpiGrid, WorkspacePage, WorkspaceToolbar } from '../workspace'
 import { useToast } from '../ui/ToastProvider'
 
 type DetailTab = 'summary' | 'files' | 'events' | 'integrity'
@@ -187,20 +188,20 @@ export function DataArchivePage({ session }: { session: Session }) {
   const completedProjects = useMemo(() => projects.filter((item) => item.project_status === 'completed'), [projects])
 
   return (
-    <section className="archive-page page-section">
+    <WorkspacePage className="archive-page page-section">
       {activeJob && <div className="archive-job-banner">
         <LoaderCircle className="spin" size={18} />
         <div><strong>{label(activeJob.action)} archive job</strong><span>{label(activeJob.status)} · {activeJob.progress}%</span></div>
         <progress max={100} value={activeJob.progress} aria-label={`Archive job ${activeJob.progress}% complete`} />
       </div>}
 
-      <div className="archive-kpis">
+      <KpiGrid columns={5} className="archive-kpis">
         <Kpi label="Archived projects" value={String(kpis.archived_projects)} icon={<Archive size={18} />} />
         <Kpi label="Archive storage" value={formatBytes(kpis.storage_used)} icon={<FileArchive size={18} />} />
         <Kpi label="Ready for cleanup" value={String(kpis.ready_for_cleanup)} icon={<CheckCircle2 size={18} />} />
         <Kpi label="Failed jobs" value={String(kpis.failed_jobs)} icon={<ShieldCheck size={18} />} />
         <Kpi label="Last cleanup" value={kpis.last_cleanup ? formatDate(kpis.last_cleanup) : 'Not run'} icon={<History size={18} />} />
-      </div>
+      </KpiGrid>
 
       {canCreate && <div className="archive-create-grid">
         <form className="archive-create-panel" onSubmit={createProject}>
@@ -233,13 +234,13 @@ export function DataArchivePage({ session }: { session: Session }) {
       </div>}
 
       <section className="archive-table-panel">
-        <div className="archive-toolbar">
+        <WorkspaceToolbar className="archive-toolbar">
           <input placeholder="Search archive" value={searchInput} onChange={(event) => setSearchInput(event.target.value)} />
           <select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)}><option value="">All types</option><option value="project">Project</option><option value="customer">Customer</option><option value="agent_transactions">Agent transactions</option></select>
           <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="">All status</option>{['queued', 'collecting', 'packing', 'verifying', 'ready', 'cleaned', 'failed', 'restored', 'purged'].map((status) => <option key={status} value={status}>{label(status)}</option>)}</select>
-        </div>
+        </WorkspaceToolbar>
 
-        <div className="table-scroll">
+        <div className="table-scroll" data-scroll-surface="table">
           <table className="archive-table">
             <thead><tr><th>Archive</th><th>Type</th><th>Customer / Agent</th><th>Project</th><th>Created</th><th>Size</th><th>Status</th><th>Keep until</th><th>Actions</th></tr></thead>
             <tbody>
@@ -280,7 +281,7 @@ export function DataArchivePage({ session }: { session: Session }) {
             <span className={`archive-status archive-status--${detail.status}`}>{label(detail.status)}</span>
           </div>
 
-          <div className="archive-detail-tabs" role="tablist" aria-label="Archive details">
+          <div className="archive-detail-tabs" role="tablist" aria-label="Archive details" data-scroll-surface="horizontal">
             {(['summary', 'files', 'events', 'integrity'] as DetailTab[]).map((tab) => <button type="button" role="tab" aria-selected={detailTab === tab} className={detailTab === tab ? 'is-active' : ''} key={tab} onClick={() => void selectTab(tab)}>
               {tab === 'summary' && <Eye size={13} />}
               {tab === 'files' && <FileArchive size={13} />}
@@ -300,7 +301,7 @@ export function DataArchivePage({ session }: { session: Session }) {
           </div>
         </div>
       </Modal>}
-    </section>
+    </WorkspacePage>
   )
 }
 

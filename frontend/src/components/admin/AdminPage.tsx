@@ -16,6 +16,7 @@ import { AlertDialog } from '../ui/AlertDialog'
 import { useToast } from '../ui/ToastProvider'
 import { RoleDialog } from './RoleDialog'
 import { UserDialog } from './UserDialog'
+import { KpiGrid, ScrollSurface, TabStrip, WorkspaceHeader, WorkspacePage } from '../workspace'
 
 type Tab = 'users' | 'roles'
 
@@ -153,26 +154,26 @@ export function AdminPage({ session }: { session: Session }) {
   }
 
   return (
-    <section className="admin-page">
-      <header className="page-heading">
+    <WorkspacePage variant="fixed-tabs" className="admin-page">
+      <WorkspaceHeader className="page-heading">
         <div>
           <div className="eyebrow">Identity & access</div>
           <h1>Users and roles</h1>
         </div>
         {tab === 'users' && canManageUsers && <button className="primary-button primary-button--compact" onClick={() => setEditingUser(null)}><Plus size={17} /> Create user</button>}
         {tab === 'roles' && canManageRoles && <button className="primary-button primary-button--compact" onClick={() => setEditingRole(null)}><Plus size={17} /> Create role</button>}
-      </header>
+      </WorkspaceHeader>
 
-      <div className="admin-stats">
+      <KpiGrid columns={3} className="admin-stats">
         <article><Users size={19} /><span>Users</span><strong>{users.length}</strong></article>
         <article><UserCheck size={19} /><span>Active</span><strong>{users.filter((user) => user.is_active).length}</strong></article>
         <article><ShieldCheck size={19} /><span>Roles</span><strong>{roles.length}</strong></article>
-      </div>
+      </KpiGrid>
 
-      <nav className="segmented-tabs">
+      <TabStrip className="segmented-tabs" label="Administration sections">
         <button className={tab === 'users' ? 'active' : ''} onClick={() => setTab('users')}>Users</button>
         <button className={tab === 'roles' ? 'active' : ''} onClick={() => setTab('roles')}>Roles</button>
-      </nav>
+      </TabStrip>
 
       {tab === 'users' ? (
         <section className="data-panel">
@@ -204,7 +205,7 @@ export function AdminPage({ session }: { session: Session }) {
           )}
         </section>
       ) : (
-        <section className="role-grid">
+        <ScrollSurface className="role-grid">
           {roles.map((role) => {
             const canEditRole = canManageRoles && !['company_admin', 'super_admin'].includes(role.code)
             return (
@@ -221,7 +222,7 @@ export function AdminPage({ session }: { session: Session }) {
               </article>
             )
           })}
-        </section>
+        </ScrollSurface>
       )}
 
       {editingUser !== undefined && (
@@ -239,6 +240,6 @@ export function AdminPage({ session }: { session: Session }) {
         onCancel={() => setRoleToDelete(null)}
         onConfirm={removeRole}
       />
-    </section>
+    </WorkspacePage>
   )
 }

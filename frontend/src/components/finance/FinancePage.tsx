@@ -41,6 +41,7 @@ import type { ProjectTimelineListItem, Session } from '../../types'
 import { Modal } from '../admin/Modal'
 import { EmptyState, ErrorState, LoadingSkeleton, ReadOnlyNotice } from '../ui/PageState'
 import { useToast } from '../ui/ToastProvider'
+import { KpiGrid, TabStrip, WorkspaceHeader, WorkspacePage } from '../workspace'
 
 type Tab = 'overview' | 'transactions' | 'expenses' | 'bills' | 'accounts' | 'loans' | 'profitability' | 'reports'
 type Dialog = 'transaction' | 'expense' | 'account' | 'transfer' | 'bill' | 'bill-payment' | 'loan' | 'loan-payment' | null
@@ -218,12 +219,12 @@ export function FinancePage({ session }: { session: Session }) {
     return term ? rows.filter((row) => `${row.transaction_number} ${row.party_name} ${row.description} ${row.reference_number}`.toLowerCase().includes(term)) : rows
   }, [transactions, search])
 
-  if (loading && !overview) return <LoadingSkeleton rows={8} />
-  if (error && !overview) return <ErrorState message={error} onRetry={() => void loadBase()} />
+  if (loading && !overview) return <WorkspacePage className="finance-page"><LoadingSkeleton rows={8} /></WorkspacePage>
+  if (error && !overview) return <WorkspacePage className="finance-page"><ErrorState message={error} onRetry={() => void loadBase()} /></WorkspacePage>
 
-  return <section className="finance-page">
+  return <WorkspacePage variant="fixed-tabs" className="finance-page">
     {access.readOnly && <ReadOnlyNotice />}
-    <header className="module-page-header finance-page-header">
+    <WorkspaceHeader className="module-page-header finance-page-header">
       <div>
         <span className="module-kicker">Company finance</span>
         <h1>Finance workspace</h1>
@@ -233,15 +234,15 @@ export function FinancePage({ session }: { session: Session }) {
         <button className="secondary-button" onClick={() => void refreshAll()} disabled={loading}><RefreshCw className={loading ? 'spin' : ''} size={14} /> Refresh</button>
         {access.canEdit && <button className="primary-button" onClick={() => setDialog('transaction')}><Plus size={14} /> Add transaction</button>}
       </div>
-    </header>
+    </WorkspaceHeader>
 
-    <nav className="finance-tabs" role="tablist" aria-label="Company finance sections">{([
+    <TabStrip className="finance-tabs" role="tablist" aria-label="Company finance sections">{([
       ['overview', WalletCards, 'Overview'], ['transactions', ArrowRightLeft, 'Transactions'], ['expenses', ReceiptText, 'Expenses'], ['bills', FileText, 'Bills'],
       ['accounts', Landmark, 'Bank & Cash'], ['loans', Building2, 'Loans'], ['profitability', BarChart3, 'Profitability'], ['reports', FileSpreadsheet, 'Reports'],
-    ] as Array<[Tab, typeof WalletCards, string]>).map(([key, Icon, text]) => <button type="button" role="tab" aria-selected={tab === key} className={tab === key ? 'active' : ''} onClick={() => setTab(key)} key={key}><Icon size={14} /> {text}</button>)}</nav>
+    ] as Array<[Tab, typeof WalletCards, string]>).map(([key, Icon, text]) => <button type="button" role="tab" aria-selected={tab === key} className={tab === key ? 'active' : ''} onClick={() => setTab(key)} key={key}><Icon size={14} /> {text}</button>)}</TabStrip>
 
     {error && <div className="inline-error">{error}</div>}
-    <div className={`finance-tab-panel finance-tab-panel--${tab}`} role="tabpanel">
+    <div className={`finance-tab-panel finance-tab-panel--${tab}`} role="tabpanel" data-scroll-surface="tab-body">
       {loading ? <LoadingSkeleton rows={6} /> : <>
         {tab === 'overview' && overview && <Overview data={overview} />}
         {(tab === 'transactions' || tab === 'reports') && <Transactions data={transactions} rows={visibleTransactions} search={search} setSearch={setSearch} direction={direction} setDirection={setDirection} dateFrom={dateFrom} setDateFrom={setDateFrom} dateTo={dateTo} setDateTo={setDateTo} reload={() => void loadTab(tab)} reportMode={tab === 'reports'} />}
@@ -261,7 +262,7 @@ export function FinancePage({ session }: { session: Session }) {
     {dialog === 'bill-payment' && selectedBill && <Modal className="finance-modal" title={`Pay ${selectedBill.bill_number}`} subtitle={`${money.format(selectedBill.balance_amount)} outstanding`} onClose={() => setDialog(null)}><PaymentForm accounts={accounts} amount={selectedBill.balance_amount} working={working} onSubmit={submitBillPayment} /></Modal>}
     {dialog === 'loan' && <Modal className="finance-modal" title="Add company loan" subtitle="Separate from customer solar loans." onClose={() => setDialog(null)}><CompanyLoanForm accounts={accounts} working={working} onSubmit={submitLoan} /></Modal>}
     {dialog === 'loan-payment' && selectedLoan && <Modal className="finance-modal" title={`Pay ${selectedLoan.lender_name}`} subtitle={`${money.format(selectedLoan.outstanding_amount)} outstanding`} onClose={() => setDialog(null)}><LoanPaymentForm accounts={accounts} amount={selectedLoan.emi_amount || selectedLoan.outstanding_amount} working={working} onSubmit={submitLoanPayment} /></Modal>}
-  </section>
+  </WorkspacePage>
 }
 
 function Overview({ data }: { data: FinanceOverview }) {
@@ -274,14 +275,14 @@ function Overview({ data }: { data: FinanceOverview }) {
   const maxFlow = Math.max(1, ...data.monthly_flow.flatMap((row) => [row.money_in, row.money_out]))
   const maxExpense = Math.max(1, ...data.expense_by_category.map((row) => row.amount))
   return <>
-    <section className="finance-kpis">
+    <KpiGrid columns={4} className="finance-kpis">
       {cards.map(([name, value, Icon, tone]) => (
         <article className={`finance-kpi finance-kpi--${tone}`} key={name}>
           <span><Icon size={17} /></span>
           <div><small>{name}</small><strong>{money.format(value)}</strong></div>
         </article>
       ))}
-    </section>
+    </KpiGrid>
     <div className="finance-overview-grid">
       <section className="erp-panel finance-overview-card">
         <header><div><strong>Recent transactions</strong><span>Latest company money movements</span></div></header>

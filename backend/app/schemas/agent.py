@@ -2,6 +2,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
+from app.schemas.workflow import QuotationSummary
+
 
 class AgentListItem(BaseModel):
     membership_id: str
@@ -37,19 +39,32 @@ class AgentCustomerSummary(BaseModel):
     company_name: str
     email: str
     phone: str
+    alternate_phone: str = ""
     address: str
+    billing_address: str = ""
+    site_address: str = ""
+    district: str = ""
+    state: str = ""
+    postal_code: str = ""
+    consumer_number: str = ""
+    electricity_provider: str = ""
+    customer_type: str = "residential"
+    lead_source: str = ""
     project_name: str
     status: str
     outstanding_balance: float
     quotation_request_status: str | None = None
     quotation_status: str | None = None
+    project_id: str | None = None
     project_number: str | None = None
     project_status: str | None = None
+    approved_quotation: QuotationSummary | None = None
     can_edit: bool = False
 
 
 class AgentTransactionSummary(BaseModel):
     id: str
+    project_id: str | None = None
     transaction_date: datetime
     reference: str
     transaction_type: str
@@ -98,10 +113,20 @@ class CreateAgentCustomerRequest(BaseModel):
     company_name: str = Field(default="", max_length=160)
     email: str = Field(default="", max_length=320)
     phone: str = Field(min_length=7, max_length=32)
+    alternate_phone: str = Field(default="", max_length=32)
     address: str = Field(default="", max_length=320)
+    billing_address: str = Field(default="", max_length=320)
+    site_address: str = Field(default="", max_length=320)
+    district: str = Field(default="", max_length=80)
+    state: str = Field(default="Gujarat", max_length=80)
+    postal_code: str = Field(default="", max_length=16)
+    consumer_number: str = Field(default="", max_length=80)
+    electricity_provider: str = Field(default="", max_length=100)
+    customer_type: str = Field(default="residential", pattern=r"^(residential|commercial|society|institutional)$")
+    lead_source: str = Field(default="", max_length=80)
     project_name: str = Field(default="", max_length=180)
 
-    @field_validator("customer_name", "company_name", "email", "phone", "address", "project_name")
+    @field_validator("customer_name", "company_name", "email", "phone", "alternate_phone", "address", "billing_address", "site_address", "district", "state", "postal_code", "consumer_number", "electricity_provider", "lead_source", "project_name")
     @classmethod
     def clean_customer_text(cls, value: str) -> str:
         return " ".join(value.split())
@@ -113,6 +138,7 @@ class UpdateAgentCustomerRequest(CreateAgentCustomerRequest):
 
 class CreateAgentTransactionRequest(BaseModel):
     transaction_date: datetime | None = None
+    project_id: str | None = Field(default=None, max_length=36)
     reference: str = Field(default="", max_length=60)
     transaction_type: str = Field(pattern=r"^[a-z][a-z0-9_]{1,31}$")
     description: str = Field(default="", max_length=240)

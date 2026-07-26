@@ -28,6 +28,7 @@ import { useToast } from '../ui/ToastProvider'
 import { ApprovalDecisionDialog } from './ApprovalDecisionDialog'
 import { QuotationBuilderDialog } from './QuotationBuilderDialog'
 import { QuotationPreviewDialog } from './QuotationPreviewDialog'
+import { KpiGrid, WorkspacePage } from '../workspace'
 
 const currency = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 })
 const dateFormatter = new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium' })
@@ -111,14 +112,14 @@ export function ApprovalCenterPage({ session }: { session: Session }) {
   ).length
   const approvedQuotationCount = data.quotation_requests.filter((item) => item.quotation?.status === 'approved').length
 
-  return <section className="approval-page">
+  return <WorkspacePage variant="split" className="approval-page">
     <div className="approval-toolbar">
-      <div className="approval-kpis" aria-label="Approval summary">
+      <KpiGrid columns={4} className="approval-kpis" aria-label="Approval summary">
         <article><span>Total requests</span><strong>{quotationCount}</strong></article>
         <article><span>Pending quotes</span><strong>{pendingQuotationCount}</strong></article>
         <article><span>Approved</span><strong>{approvedQuotationCount}</strong></article>
         <article><span>Transactions</span><strong>{data.transactions.length}</strong></article>
-      </div>
+      </KpiGrid>
       <button className="approval-refresh" type="button" onClick={() => void load()} disabled={loading || busy}>
         <RefreshCw size={14} className={loading ? 'is-spinning' : undefined} />
         Refresh
@@ -135,7 +136,7 @@ export function ApprovalCenterPage({ session }: { session: Session }) {
           ? <div className="approval-empty">Loading quotations…</div>
           : data.quotation_requests.length === 0
             ? <div className="approval-empty">No quotation requests.</div>
-            : <div className="approval-table-wrap">
+            : <div className="approval-table-wrap" data-scroll-surface="table">
               <table className="approval-table approval-table--quotations">
                 <thead><tr><th>Customer</th><th>Requirement</th><th>Quote</th><th>Status</th><th>Action</th></tr></thead>
                 <tbody>{data.quotation_requests.map((item) => {
@@ -185,7 +186,7 @@ export function ApprovalCenterPage({ session }: { session: Session }) {
           ? <div className="approval-empty">Loading transactions…</div>
           : data.transactions.length === 0
             ? <div className="approval-empty">No transactions are waiting for approval.</div>
-            : <div className="approval-table-wrap"><table className="approval-table approval-table--transactions">
+            : <div className="approval-table-wrap" data-scroll-surface="table"><table className="approval-table approval-table--transactions">
               <thead><tr><th>Agent</th><th>Date</th><th>Details</th><th>Amount</th><th>Action</th></tr></thead>
               <tbody>{data.transactions.map((item) => <tr key={item.approval_id}>
                 <td data-label="Agent"><strong>{item.agent_name}</strong><small>{item.reference || 'No reference'}</small></td>
@@ -213,5 +214,5 @@ export function ApprovalCenterPage({ session }: { session: Session }) {
       onClose={() => setPreviewRequest(null)}
     />}
     {decisionTarget && <ApprovalDecisionDialog title={decisionTarget.kind === 'quotation' ? 'quotation' : 'transaction'} decision={decisionTarget.decision} busy={busy} onClose={() => setDecisionTarget(null)} onSubmit={saveDecision} />}
-  </section>
+  </WorkspacePage>
 }

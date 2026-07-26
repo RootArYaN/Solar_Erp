@@ -1,0 +1,756 @@
+/* Authenticated workspace contract. Login and authentication visuals intentionally remain in styles.css. */
+:root {
+  --workspace-inset: 12px;
+  --workspace-gap: 8px;
+  --workspace-control-height: 32px;
+  --workspace-touch-height: 38px;
+  --workspace-radius: 10px;
+  --workspace-title-size: 20px;
+  --workspace-section-title-size: 13px;
+  --workspace-body-size: 10px;
+  --workspace-label-size: 8px;
+  --workspace-border: rgba(35, 46, 61, 0.12);
+  --workspace-surface: #fff;
+  --workspace-background: #f5f3ef;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  min-width: 320px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.app-shell,
+.app-main,
+.app-viewport,
+.workspace-page,
+.workspace-page > *,
+.workspace-scroll-surface,
+.data-table-surface,
+.data-table-scroll {
+  min-width: 0;
+  min-height: 0;
+}
+
+.app-shell {
+  height: 100dvh;
+  max-height: 100dvh;
+}
+
+.app-main {
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.app-viewport {
+  grid-row: 1 / -1;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.workspace-page {
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  max-height: 100%;
+  margin: 0;
+  padding: var(--workspace-inset);
+  display: flex;
+  flex-direction: column;
+  gap: var(--workspace-gap);
+  overflow: hidden;
+  background: var(--workspace-background);
+}
+
+.workspace-page--split,
+.workspace-page--detail,
+.workspace-page--fixed-tabs {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Neutralize route-specific viewport calculations without changing their content styling. */
+.workspace-page.erp-page,
+.workspace-page.admin-page,
+.workspace-page.agent-page,
+.workspace-page.customer-detail-page,
+.workspace-page.project-timeline-page,
+.workspace-page.approval-page,
+.workspace-page.finance-page,
+.workspace-page.security-page,
+.workspace-page.archive-page,
+.workspace-page.page-section {
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  min-height: 0;
+  max-height: 100%;
+  margin: 0;
+  padding: var(--workspace-inset);
+  overflow: hidden;
+}
+
+.workspace-header,
+.workspace-page > :is(.erp-page-head, .page-heading, .security-header, .finance-page-header, .module-page-header) {
+  flex: 0 0 auto;
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--workspace-gap);
+  margin: 0;
+  padding: 0;
+}
+
+.workspace-header__copy,
+.workspace-header > div:first-child,
+.workspace-page > :is(.erp-page-head, .page-heading, .security-header, .finance-page-header, .module-page-header) > div:first-child {
+  min-width: 0;
+}
+
+.workspace-header__eyebrow,
+.workspace-header > div:first-child > span:first-child,
+.workspace-page > :is(.erp-page-head, .page-heading, .security-header, .finance-page-header, .module-page-header) > div:first-child > :is(span:first-child, .eyebrow:first-child) {
+  display: block;
+  margin: 0 0 2px;
+  color: #9a6813;
+  font-size: var(--workspace-label-size);
+  font-weight: 800;
+  letter-spacing: .65px;
+  text-transform: uppercase;
+}
+
+.workspace-header h1,
+.workspace-page > :is(.erp-page-head, .page-heading, .security-header, .finance-page-header, .module-page-header) h1 {
+  margin: 0;
+  font-size: var(--workspace-title-size);
+  line-height: 1.15;
+  letter-spacing: -.35px;
+}
+
+.workspace-header p,
+.workspace-page > :is(.erp-page-head, .page-heading, .security-header, .finance-page-header, .module-page-header) p {
+  max-width: 720px;
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.4;
+}
+
+.workspace-header__actions,
+.workspace-page > :is(.erp-page-head, .page-heading, .security-header, .finance-page-header, .module-page-header) > :last-child:not(:first-child),
+.erp-head-actions,
+.agent-page__actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--workspace-gap);
+  flex-wrap: wrap;
+}
+
+.workspace-toolbar {
+  flex: 0 0 auto;
+  min-width: 0;
+  display: flex;
+  align-items: flex-end;
+  gap: var(--workspace-gap);
+  flex-wrap: wrap;
+  padding: 8px;
+  border: 1px solid var(--workspace-border);
+  border-radius: var(--workspace-radius);
+  background: var(--workspace-surface);
+}
+
+.workspace-toolbar__controls {
+  min-width: 0;
+  flex: 1 1 420px;
+  display: flex;
+  align-items: flex-end;
+  gap: var(--workspace-gap);
+  flex-wrap: wrap;
+}
+
+.workspace-toolbar__actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--workspace-gap);
+  flex-wrap: wrap;
+}
+
+.workspace-kpi-grid,
+.workspace-page > :is(.erp-kpi-grid, .admin-stats, .agent-kpi-grid, .customer-kpis, .finance-kpis, .archive-kpis) {
+  flex: 0 0 auto;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(var(--workspace-kpi-columns, 4), minmax(0, 1fr));
+  gap: var(--workspace-gap);
+  margin: 0;
+}
+
+.workspace-kpi-grid > *,
+.workspace-page > :is(.erp-kpi-grid, .admin-stats, .agent-kpi-grid, .customer-kpis, .finance-kpis, .archive-kpis) > * {
+  min-width: 0;
+  border-radius: var(--workspace-radius);
+}
+
+.workspace-tab-strip,
+.workspace-page > :is(.segmented-tabs, .erp-tabs, .finance-tabs, .workspace-tabs, .archive-detail-tabs) {
+  flex: 0 0 auto;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  padding: 3px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border: 1px solid var(--workspace-border);
+  border-radius: var(--workspace-radius);
+  background: rgba(255, 255, 255, .72);
+  scrollbar-width: none;
+}
+
+.workspace-tab-strip::-webkit-scrollbar,
+.workspace-page > :is(.segmented-tabs, .erp-tabs, .finance-tabs, .workspace-tabs, .archive-detail-tabs)::-webkit-scrollbar {
+  display: none;
+}
+
+.workspace-tab-strip button,
+.workspace-page > :is(.segmented-tabs, .erp-tabs, .finance-tabs, .workspace-tabs, .archive-detail-tabs) button {
+  flex: 0 0 auto;
+  min-height: 28px;
+  white-space: nowrap;
+}
+
+.workspace-scroll-surface {
+  flex: 1 1 auto;
+  width: 100%;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.workspace-scroll-surface--vertical { overflow-x: hidden; overflow-y: auto; }
+.workspace-scroll-surface--horizontal { overflow-x: auto; overflow-y: hidden; }
+.workspace-scroll-surface--both { overflow: auto; }
+
+.data-table-surface {
+  flex: 1 1 auto;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--workspace-border);
+  border-radius: var(--workspace-radius);
+  background: var(--workspace-surface);
+}
+
+.data-table-scroll,
+.workspace-page :is(.user-table-wrap, .agent-table-wrap, .erp-table-wrap, .table-scroll) {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.data-table-scroll > table,
+.workspace-page :is(.user-table-wrap, .agent-table-wrap, .erp-table-wrap, .table-scroll) > table {
+  width: 100%;
+}
+
+.workspace-page table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+}
+
+.workspace-page :is(.data-panel, .erp-panel, .archive-table-panel) {
+  min-width: 0;
+  min-height: 0;
+  border-radius: var(--workspace-radius);
+}
+
+/* Existing split/detail workspaces retain their visual identity and receive only sizing ownership. */
+.workspace-page .customer-detail-layout,
+.workspace-page .project-timeline-layout,
+.workspace-page .approval-split-layout {
+  flex: 1 1 auto;
+  width: 100%;
+  height: auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.workspace-page .customer-directory,
+.workspace-page .customer-workspace,
+.workspace-page .timeline-projects-panel,
+.workspace-page .timeline-detail-panel,
+.workspace-page .approval-split-layout > *,
+.workspace-page .workspace-tab-panel,
+.workspace-page .finance-tab-panel {
+  min-width: 0;
+  min-height: 0;
+}
+
+.workspace-page .workspace-tab-panel {
+  flex: 1 1 auto;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.workspace-page .finance-tab-panel {
+  flex: 1 1 auto;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+
+.workspace-page .finance-tab-panel--overview {
+  gap: var(--workspace-gap);
+}
+
+/* Simple authenticated pages use one explicit body scroll owner. */
+.workspace-page > .workspace-scroll-surface > :first-child {
+  min-width: 0;
+}
+
+/* Route bodies keep their existing visual design while sharing one scroll contract. */
+.dashboard-scroll-body {
+  display: grid;
+  align-content: start;
+  gap: var(--workspace-gap);
+}
+
+.agent-page__body,
+.document-scroll-body,
+.poster-scroll-body,
+.security-device-surface {
+  display: flex;
+  flex-direction: column;
+  gap: var(--workspace-gap);
+}
+
+.agent-page__body .agent-tables-grid,
+.inventory-workspace-body,
+.pricing-workspace-panel,
+.archive-table-panel {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+
+.agent-page__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.inventory-workspace-body {
+  display: grid;
+  grid-template-rows: minmax(0, 1.25fr) minmax(0, .75fr);
+  gap: var(--workspace-gap);
+  overflow: hidden;
+}
+
+.inventory-workspace-body > .erp-panel {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.inventory-workspace-body > .erp-panel > .erp-table-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.pricing-workspace-panel {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.pricing-workspace-panel .erp-table-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.security-device-surface > :is(.device-list, .active-device-list, .security-device-list) {
+  min-height: 0;
+}
+
+.archive-page .archive-table-panel {
+  height: auto;
+}
+
+.workspace-toolbar.archive-toolbar {
+  border: 0;
+  border-bottom: 1px solid #e7ebf2;
+  border-radius: 0;
+}
+
+/* Keep authenticated controls compact while preserving the login contract. */
+.workspace-page :is(
+  .primary-button,
+  .secondary-button,
+  .danger-button,
+  .icon-button,
+  .danger-icon-button,
+  button:not(.sidebar-collapse-button)
+) {
+  min-height: var(--workspace-control-height);
+}
+
+.workspace-page :is(.primary-button, .secondary-button, .danger-button) {
+  height: var(--workspace-control-height);
+  padding-inline: 11px;
+  margin-top: 0;
+  border-radius: 8px;
+  font-size: 10px;
+}
+
+.workspace-page :is(button.icon-button, button.danger-icon-button),
+.modal-layer :is(button.icon-button, button.danger-icon-button) {
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  padding: 0;
+  border-radius: 7px;
+}
+
+.workspace-page :is(button.icon-button, button.danger-icon-button) > svg,
+.modal-layer :is(button.icon-button, button.danger-icon-button) > svg {
+  width: 14px;
+  height: 14px;
+  stroke-width: 2;
+}
+
+.workspace-page :is(
+  .primary-button,
+  .secondary-button,
+  .danger-button,
+  .erp-tabs button,
+  .finance-tabs button,
+  .workspace-tabs button
+) > svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+
+.workspace-page button > svg,
+.modal-layer button > svg {
+  max-width: 14px;
+  max-height: 14px;
+  flex: 0 0 auto;
+}
+
+.workspace-page :is(.search-control, .field__control) {
+  min-height: var(--workspace-control-height);
+  height: var(--workspace-control-height);
+  border-radius: 8px;
+}
+
+.workspace-page :is(input:not([type='checkbox']):not([type='radio']), select) {
+  min-height: var(--workspace-control-height);
+}
+
+.workspace-page .erp-table :is(input[type='checkbox'], input[type='radio']) {
+  width: 15px;
+  height: 15px;
+  min-width: 15px;
+  min-height: 15px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  accent-color: #2f7a50;
+  cursor: pointer;
+}
+
+.workspace-page .erp-table :is(input[type='checkbox'], input[type='radio']):disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.workspace-page .pricing-table :is(th, td):nth-last-child(-n + 2) {
+  width: 48px;
+  text-align: center;
+}
+
+.workspace-page .pricing-table td {
+  padding-block: 7px;
+}
+
+/* Modal viewport card: header fixed, body scrolls, action rows remain reachable. */
+.modal-layer {
+  padding: 12px;
+  overflow: hidden;
+}
+
+.modal-layer .modal-card {
+  width: min(700px, 100%);
+  max-width: 100%;
+  max-height: calc(100dvh - 24px);
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+  border-radius: var(--workspace-radius);
+}
+
+/* Preserve purpose-built dialog widths while applying the shared viewport cap. */
+.modal-layer .modal-card.quotation-request-modal { width: min(760px, 100%); }
+.modal-layer .modal-card.quotation-builder-modal { width: min(1160px, 100%); }
+.modal-layer .modal-card.quotation-preview-modal { width: min(900px, 100%); }
+.modal-layer .modal-card.archive-detail-modal { width: min(740px, 100%); }
+.modal-layer .modal-card.finance-modal { width: min(640px, 100%); }
+
+.modal-card__header {
+  position: relative;
+  top: auto;
+  padding: 11px 12px;
+}
+
+.modal-card__header h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.modal-card__header p {
+  margin-top: 2px;
+  font-size: 9px;
+}
+
+.modal-card__body {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.quotation-preview-modal .modal-card__body {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  overflow: hidden;
+}
+
+.quotation-preview-modal .quotation-preview-shell,
+.archive-detail-modal .archive-detail-body {
+  height: 100%;
+  min-height: 0;
+}
+
+.archive-detail-modal .modal-card__body {
+  overflow: hidden;
+}
+
+.modal-card__body > :is(form, .archive-detail-body, .quotation-preview-body) {
+  min-width: 0;
+}
+
+.modal-card__body > :is(.quotation-request-form, .quotation-builder) {
+  max-height: none;
+  overflow: visible;
+}
+
+.modal-card__body :is(.modal-actions, .erp-form-actions, .quotation-request-actions, .dialog-actions) {
+  position: sticky;
+  z-index: 4;
+  bottom: 0;
+  margin-top: 8px;
+  padding: 9px 0 0;
+  border-top: 1px solid var(--workspace-border);
+  background: #fbfaf7;
+}
+
+@media (max-width: 1100px) {
+  .workspace-kpi-grid,
+  .workspace-page > :is(.erp-kpi-grid, .admin-stats, .agent-kpi-grid, .customer-kpis, .finance-kpis, .archive-kpis) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 780px) {
+  :root {
+    --workspace-inset: 8px;
+    --workspace-control-height: var(--workspace-touch-height);
+  }
+
+  .app-main {
+    grid-template-rows: 48px minmax(0, 1fr);
+  }
+
+  .app-topbar {
+    height: 48px;
+    min-height: 48px;
+  }
+
+  .app-viewport {
+    grid-row: 2;
+  }
+
+  .workspace-page,
+  .workspace-page.erp-page,
+  .workspace-page.admin-page,
+  .workspace-page.agent-page,
+  .workspace-page.customer-detail-page,
+  .workspace-page.project-timeline-page,
+  .workspace-page.approval-page,
+  .workspace-page.finance-page,
+  .workspace-page.security-page,
+  .workspace-page.archive-page,
+  .workspace-page.page-section {
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    margin: 0;
+    padding: var(--workspace-inset);
+    overflow: hidden;
+  }
+
+  .workspace-header,
+  .workspace-page > :is(.erp-page-head, .page-heading, .security-header, .finance-page-header, .module-page-header) {
+    align-items: stretch;
+  }
+
+  .workspace-header__actions,
+  .workspace-page > :is(.erp-page-head, .page-heading, .security-header, .finance-page-header, .module-page-header) > :last-child:not(:first-child),
+  .erp-head-actions,
+  .agent-page__actions {
+    width: auto;
+  }
+
+  .workspace-toolbar,
+  .workspace-toolbar__controls,
+  .workspace-toolbar__actions {
+    width: 100%;
+  }
+
+  .workspace-toolbar__actions > * {
+    flex: 1 1 auto;
+  }
+
+  .workspace-page .customer-detail-layout,
+  .workspace-page .project-timeline-layout,
+  .workspace-page .approval-split-layout {
+    flex: 1 1 auto;
+    height: auto;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .workspace-page .customer-workspace,
+  .workspace-page .timeline-detail-panel {
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .workspace-page .workspace-tab-panel,
+  .workspace-page .finance-tab-panel {
+    min-height: 0;
+  }
+
+  .workspace-page .customer-detail-layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, .38fr) minmax(0, 1fr);
+  }
+
+  .workspace-page .customer-directory {
+    width: 100%;
+    height: 100%;
+    max-height: none;
+    overflow: hidden;
+  }
+
+  .workspace-page .customer-workspace {
+    height: 100%;
+    overflow: hidden;
+  }
+
+  .workspace-page .project-timeline-layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, .34fr) minmax(0, 1fr);
+  }
+
+  .workspace-page .timeline-projects-panel {
+    width: 100%;
+    height: 100%;
+    max-height: none;
+  }
+
+  .workspace-page .timeline-detail-panel {
+    height: 100%;
+    overflow: auto;
+  }
+
+  .workspace-page .approval-split-layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+  }
+
+  .inventory-workspace-body {
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+  }
+
+  .archive-page .archive-create-grid {
+    flex: 0 1 auto;
+    max-height: 34%;
+    overflow: auto;
+  }
+
+  .archive-page .archive-table-panel {
+    flex: 1 1 auto;
+    height: auto;
+    min-height: 0;
+  }
+
+  .modal-layer {
+    place-items: end center;
+    padding: 8px;
+  }
+
+  .modal-layer .modal-card.quotation-request-modal,
+  .modal-layer .modal-card.quotation-builder-modal,
+  .modal-layer .modal-card.quotation-preview-modal,
+  .modal-layer .modal-card.archive-detail-modal,
+  .modal-layer .modal-card.finance-modal {
+    width: 100%;
+  }
+
+  .modal-layer .modal-card {
+    width: 100%;
+    max-height: calc(100dvh - 16px);
+    border-radius: var(--workspace-radius);
+  }
+}
+
+@media (max-width: 520px) {
+  .workspace-kpi-grid,
+  .workspace-page > :is(.erp-kpi-grid, .admin-stats, .agent-kpi-grid, .customer-kpis, .finance-kpis, .archive-kpis) {
+    grid-template-columns: 1fr;
+  }
+
+  .workspace-header,
+  .workspace-page > :is(.erp-page-head, .page-heading, .security-header, .finance-page-header, .module-page-header) {
+    display: grid;
+  }
+}

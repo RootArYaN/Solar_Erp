@@ -27,6 +27,7 @@ import type { Session } from '../../types'
 import { Modal } from '../admin/Modal'
 import { EmptyState, ErrorState, LoadingSkeleton, ReadOnlyNotice } from '../ui/PageState'
 import { useToast } from '../ui/ToastProvider'
+import { KpiGrid, TabStrip, WorkspacePage } from '../workspace'
 
 type Tab = 'overview' | 'projects' | 'timeline' | 'quotations' | 'documents' | 'payments' | 'loan' | 'activity'
 
@@ -241,11 +242,11 @@ export function CustomerWorkspacePage({ session }: { session: Session }) {
     }
   }
 
-  if (loading) return <LoadingSkeleton rows={8} />
-  if (error && !snapshot) return <ErrorState message={error} onRetry={() => void loadCustomers()} />
+  if (loading) return <WorkspacePage className="customer-detail-page"><LoadingSkeleton rows={8} /></WorkspacePage>
+  if (error && !snapshot) return <WorkspacePage className="customer-detail-page"><ErrorState message={error} onRetry={() => void loadCustomers()} /></WorkspacePage>
 
   return (
-    <section className="customer-detail-page">
+    <WorkspacePage variant="split" className="customer-detail-page">
       {(customerAccess.readOnly || documentAccess.readOnly) && <ReadOnlyNotice />}
       <div className="customer-detail-layout">
         <aside className="customer-directory">
@@ -268,22 +269,22 @@ export function CustomerWorkspacePage({ session }: { session: Session }) {
               <div className="customer-header-actions"><button className="secondary-button" onClick={() => void loadSnapshot()}><RefreshCw size={14} /> Refresh</button>{customerAccess.canEdit && <button className="primary-button primary-button--compact" onClick={() => setEditOpen(true)}><Pencil size={14} /> Edit</button>}</div>
             </header>
 
-            <section className="customer-kpis">
+            <KpiGrid columns={4} className="customer-kpis">
               <article><span><FolderKanban size={16} /></span><div><small>Current project</small><strong>{project?.record_number || 'Not created'}</strong><em>{project ? `${project.capacity_kw} kW · ${label(project.payment_mode || 'mode pending')}` : 'Approve quotation to create'}</em></div></article>
               <article><span><CalendarClock size={16} /></span><div><small>Current stage</small><strong>{snapshot.timeline.find((row) => row.status === 'current')?.name || (project?.status ? label(project.status) : 'Quotation')}</strong><em>{project ? `${Math.round((snapshot.timeline.filter((row) => row.status === 'completed').length / Math.max(1, snapshot.timeline.length)) * 100)}% complete` : 'Project not started'}</em></div></article>
               <article><span><BadgeIndianRupee size={16} /></span><div><small>Approved value</small><strong>{money.format(approvedValue)}</strong><em>{currentRevision?.record_number || 'No approved quotation'}</em></div></article>
               <article><span><CheckCircle2 size={16} /></span><div><small>Received / pending</small><strong>{money.format(totalReceived)}</strong><em>{money.format(balance)} pending</em></div></article>
-            </section>
+            </KpiGrid>
 
-            <nav className="workspace-tabs" aria-label="Customer detail sections">
+            <TabStrip className="workspace-tabs" label="Customer detail sections">
               {([
                 ['overview', Building2, 'Overview'], ['projects', FolderKanban, 'Projects'], ['timeline', CalendarClock, 'Timeline'],
                 ['quotations', ClipboardList, 'Quotations'], ['documents', FileText, 'Documents'], ['payments', BadgeIndianRupee, 'Payments'],
                 ['loan', Landmark, 'Loan'], ['activity', History, 'Activity'],
               ] as Array<[Tab, typeof Building2, string]>).filter(([key]) => key !== 'loan' || project?.payment_mode === 'loan' || snapshot.loan).map(([key, Icon, text]) => <button className={tab === key ? 'active' : ''} onClick={() => setTab(key)} key={key}><Icon size={14} /> {text}</button>)}
-            </nav>
+            </TabStrip>
 
-            <section className="workspace-tab-panel">
+            <section className="workspace-tab-panel" data-scroll-surface="tab-body">
               {tab === 'overview' && <OverviewTab snapshot={snapshot} />}
               {tab === 'projects' && <ProjectsTab snapshot={snapshot} />}
               {tab === 'timeline' && <TimelineTab snapshot={snapshot} />}
@@ -301,7 +302,7 @@ export function CustomerWorkspacePage({ session }: { session: Session }) {
       {paymentOpen && snapshot && <Modal title="Record customer money" subtitle="This posts once to the shared company finance ledger." onClose={() => setPaymentOpen(false)}><PaymentForm accounts={accounts} categories={categories} working={working} onSubmit={recordPayment} /></Modal>}
       {billOpen && snapshot && <Modal title="Create customer sales bill" subtitle="The bill records the receivable; payment is posted separately." onClose={() => setBillOpen(false)}><SalesBillForm approvedValue={approvedValue} working={working} onSubmit={createSalesBill} /></Modal>}
       {loanOpen && project && <Modal title="Customer solar loan" subtitle="Project-specific bank approval and disbursement details" onClose={() => setLoanOpen(false)}><LoanForm snapshot={snapshot!} working={working} onSubmit={saveLoan} /></Modal>}
-    </section>
+    </WorkspacePage>
   )
 }
 

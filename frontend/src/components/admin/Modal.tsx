@@ -19,7 +19,7 @@ export function Modal({ title, subtitle, children, className = '', hideTitle = f
           </div>}
           <button className="icon-button" onClick={onClose} aria-label="Close"><X size={18} /></button>
         </header>
-        {children}
+        <div className="modal-card__body" data-scroll-surface="modal-body">{children}</div>
       </section>
     </div>
   )

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from decimal import Decimal
 
@@ -10,6 +11,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.api.deps import CurrentSession
 from app.models.agent import AgentCustomer, AgentCustomerEdit, AgentProfile, AgentTransaction
 from app.models.auth import Membership, Role, User
+from app.models.system import Archive
 from app.models.workflow import CustomerProject, CustomerQuotation, QuotationRequest, TransactionApproval
 from app.schemas.agent import (
     AgentCustomerSummary,
@@ -22,6 +24,9 @@ from app.schemas.agent import (
     UpdateAgentCustomerRequest,
     UpdateAgentProfileRequest,
 )
+from app.schemas.workflow import QuotationLineSummary, QuotationSummary
+from app.services.access_service import get_project
+from app.services.audit_service import write_event
 
 
 class AgentServiceError(Exception):
@@ -131,6 +136,41 @@ def _money(value: Decimal | float | int | None) -> float:
     return round(float(value or 0), 2)
 
 
+def _approved_quotation_summary(quotation: CustomerQuotation | None) -> QuotationSummary | None:
+    if not quotation or quotation.status != "approved":
+        return None
+    try:
+        raw_lines = json.loads(quotation.line_items_json or "[]")
+    except (TypeError, ValueError, json.JSONDecodeError):
+        raw_lines = []
+    lines = [
+        QuotationLineSummary(
+            description=str(item.get("description") or "Item"),
+            quantity=_money(item.get("quantity")),
+            unit=str(item.get("unit") or "Unit"),
+            unit_price=_money(item.get("unit_price")),
+            tax_rate=_money(item.get("tax_rate")),
+            line_total=_money(item.get("line_total")),
+        )
+        for item in raw_lines
+        if isinstance(item, dict)
+    ] if isinstance(raw_lines, list) else []
+    return QuotationSummary(
+        id=quotation.id,
+        quotation_number=quotation.quotation_number,
+        title=quotation.title,
+        subtotal=_money(quotation.subtotal),
+        tax_total=_money(quotation.tax_total),
+        grand_total=_money(quotation.grand_total),
+        valid_until=quotation.valid_until,
+        status=quotation.status,
+        decision_comment=quotation.decision_comment,
+        created_at=quotation.created_at,
+        approved_at=quotation.decided_at,
+        lines=lines,
+    )
+
+
 def _approval_map(db: Session, transactions: list[AgentTransaction]) -> dict[str, TransactionApproval]:
     if not transactions:
         return {}
@@ -145,16 +185,33 @@ def _is_posted(transaction: AgentTransaction, approvals: dict[str, TransactionAp
     return approval is None or approval.status == "approved"
 
 
-def _current_balance(profile: AgentProfile, approvals: dict[str, TransactionApproval] | None = None) -> Decimal:
+def _archived_balance(db: Session, profile_id: str) -> Decimal:
+    rows = list(db.scalars(select(Archive).where(
+        Archive.agent_profile_id == profile_id,
+        Archive.type == "agent_transactions",
+        Archive.status.in_(["ready", "cleaned"]),
+    )).all())
+    total = Decimal("0.00")
+    for row in rows:
+        try:
+            finance = json.loads(row.meta_json or "{}").get("finance", {})
+            total += Decimal(str(finance.get("total_credit", 0))) - Decimal(str(finance.get("total_debit", 0)))
+        except (TypeError, ValueError, json.JSONDecodeError):
+            continue
+    return total
+
+
+def _current_balance(db: Session, profile: AgentProfile, approvals: dict[str, TransactionApproval] | None = None) -> Decimal:
     approval_by_transaction = approvals if approvals is not None else {}
-    return Decimal(profile.opening_balance or 0) + sum(
+    live_total = sum(
         (
             Decimal(transaction.credit or 0) - Decimal(transaction.debit or 0)
             for transaction in profile.transactions
-            if _is_posted(transaction, approval_by_transaction)
+            if transaction.archived_at is None and _is_posted(transaction, approval_by_transaction)
         ),
         Decimal("0.00"),
     )
+    return Decimal(profile.opening_balance or 0) + _archived_balance(db, profile.id) + live_total
 
 
 def list_agents(db: Session, actor: CurrentSession) -> list[AgentListItem]:
@@ -199,7 +256,7 @@ def list_agents(db: Session, actor: CurrentSession) -> list[AgentListItem]:
                 city=profile.city,
                 is_active=membership.is_active and membership.user.is_active,
                 customer_count=len(profile.customers),
-                current_balance=_money(_current_balance(profile, approvals)),
+                current_balance=_money(_current_balance(db, profile, approvals)),
             )
         )
     if created_profile:
@@ -239,9 +296,12 @@ def get_agent_overview(db: Session, actor: CurrentSession, membership_id: str) -
     membership = _load_agent_membership(db, actor.membership.company_id, membership_id)
     profile = _load_profile(db, membership)
 
-    ordered_transactions = sorted(profile.transactions, key=lambda item: (item.transaction_date, item.created_at))
+    ordered_transactions = sorted(
+        (item for item in profile.transactions if item.archived_at is None),
+        key=lambda item: (item.transaction_date, item.created_at),
+    )
     approvals = _approval_map(db, ordered_transactions)
-    running_balance = Decimal(profile.opening_balance or 0)
+    running_balance = Decimal(profile.opening_balance or 0) + _archived_balance(db, profile.id)
     transaction_summaries: list[AgentTransactionSummary] = []
     for transaction in ordered_transactions:
         approval = approvals.get(transaction.id)
@@ -251,6 +311,7 @@ def get_agent_overview(db: Session, actor: CurrentSession, membership_id: str) -
         transaction_summaries.append(
             AgentTransactionSummary(
                 id=transaction.id,
+                project_id=transaction.project_id,
                 transaction_date=transaction.transaction_date,
                 reference=transaction.reference,
                 transaction_type=transaction.transaction_type,
@@ -270,7 +331,7 @@ def get_agent_overview(db: Session, actor: CurrentSession, membership_id: str) -
         actor.membership.company_id,
         [customer.id for customer in customers],
     )
-    current_balance = _current_balance(profile, approvals)
+    current_balance = _current_balance(db, profile, approvals)
     customer_summaries: list[AgentCustomerSummary] = []
     for customer in customers:
         request = latest_requests.get(customer.id)
@@ -279,17 +340,29 @@ def get_agent_overview(db: Session, actor: CurrentSession, membership_id: str) -
         customer_summaries.append(AgentCustomerSummary(
             id=customer.id,
             customer_name=customer.customer_name,
-            company_name=customer.company_name,
+            company_name="",
             email=customer.email,
             phone=customer.phone,
-            address=customer.address,
+            alternate_phone=customer.alternate_phone,
+            address=customer.site_address or customer.address,
+            billing_address=customer.billing_address,
+            site_address=customer.site_address or customer.address,
+            district=customer.district,
+            state=customer.state,
+            postal_code=customer.postal_code,
+            consumer_number=customer.consumer_number,
+            electricity_provider=customer.electricity_provider,
+            customer_type=customer.customer_type,
+            lead_source=customer.lead_source,
             project_name=customer.project_name,
             status=customer.status,
             outstanding_balance=_money(customer.outstanding_balance),
             quotation_request_status=request.status if request else None,
             quotation_status=quotation.status if quotation else None,
+            project_id=project.id if project else None,
             project_number=project.project_number if project else None,
             project_status=project.status if project else None,
+            approved_quotation=_approved_quotation_summary(quotation),
             can_edit=(
                 _has_unlimited_customer_edits(actor)
                 or (
@@ -334,8 +407,13 @@ def update_agent_profile(
     _assert_can_edit_profile(actor, membership_id)
     membership = _load_agent_membership(db, actor.membership.company_id, membership_id)
     profile = _load_profile(db, membership)
+    before = {field: getattr(profile, field) for field in payload.model_dump()}
     for field, value in payload.model_dump().items():
         setattr(profile, field, value)
+    write_event(
+        db, company_id=profile.company_id, event="agent.profile_updated", entity="agent_profile",
+        entity_id=profile.id, actor=actor, changes={"before": before, "after": payload.model_dump()},
+    )
     db.commit()
     return get_agent_overview(db, actor, membership_id)
 
@@ -367,15 +445,31 @@ def create_agent_customer(
         company_id=actor.membership.company_id,
         agent_profile_id=profile.id,
         customer_name=payload.customer_name,
-        company_name=payload.company_name,
+        company_name="",
         email=payload.email.lower(),
         phone=payload.phone,
-        address=payload.address,
+        alternate_phone=payload.alternate_phone,
+        address=payload.site_address or payload.address,
+        billing_address=payload.billing_address,
+        site_address=payload.site_address or payload.address,
+        district=payload.district,
+        state=payload.state,
+        postal_code=payload.postal_code,
+        consumer_number=payload.consumer_number,
+        electricity_provider=payload.electricity_provider,
+        customer_type=payload.customer_type,
+        lead_source=payload.lead_source,
         project_name=payload.project_name,
         status="registered",
         outstanding_balance=Decimal("0.00"),
     )
     db.add(customer)
+    db.flush()
+    write_event(
+        db, company_id=customer.company_id, event="customer.created", entity="customer",
+        entity_id=customer.id, actor=actor, customer_id=customer.id,
+        changes={"customer_name": customer.customer_name, "agent_profile_id": profile.id},
+    )
     db.commit()
     db.expire_all()
     return get_agent_overview(db, actor, membership_id)
@@ -417,10 +511,20 @@ def update_agent_customer(
         raise AgentConflictError("A customer with this phone or email already exists")
 
     customer.customer_name = payload.customer_name
-    customer.company_name = payload.company_name
+    customer.company_name = ""
     customer.email = payload.email.lower()
     customer.phone = payload.phone
-    customer.address = payload.address
+    customer.alternate_phone = payload.alternate_phone
+    customer.address = payload.site_address or payload.address
+    customer.billing_address = payload.billing_address
+    customer.site_address = payload.site_address or payload.address
+    customer.district = payload.district
+    customer.state = payload.state
+    customer.postal_code = payload.postal_code
+    customer.consumer_number = payload.consumer_number
+    customer.electricity_provider = payload.electricity_provider
+    customer.customer_type = payload.customer_type
+    customer.lead_source = payload.lead_source
     customer.project_name = payload.project_name
     if own_agent_edit:
         db.add(AgentCustomerEdit(
@@ -428,6 +532,11 @@ def update_agent_customer(
             customer_id=customer.id,
             edited_by_membership_id=actor.membership.id,
         ))
+    write_event(
+        db, company_id=customer.company_id, event="customer.updated", entity="customer",
+        entity_id=customer.id, actor=actor, customer_id=customer.id,
+        changes={"customer_name": customer.customer_name, "phone": customer.phone, "project_name": customer.project_name},
+    )
 
     try:
         db.commit()
@@ -451,6 +560,7 @@ def create_agent_transaction(
 
     membership = _load_agent_membership(db, actor.membership.company_id, membership_id)
     profile = _load_profile(db, membership)
+    project = get_project(db, actor, payload.project_id) if payload.project_id else None
     transaction = AgentTransaction(
         company_id=actor.membership.company_id,
         agent_profile_id=profile.id,
@@ -461,6 +571,7 @@ def create_agent_transaction(
         description=payload.description,
         debit=Decimal(str(payload.debit)),
         credit=Decimal(str(payload.credit)),
+        project_id=project.id if project else None,
     )
     db.add(transaction)
     db.flush()
@@ -476,6 +587,11 @@ def create_agent_transaction(
         decision_comment="Entered by an authorized administrator" if approval_status == "approved" else "Awaiting administrator approval",
     )
     db.add(approval)
+    write_event(
+        db, company_id=transaction.company_id, event="transaction.created", entity="agent_transaction",
+        entity_id=transaction.id, actor=actor, project_id=transaction.project_id,
+        changes={"type": transaction.transaction_type, "debit": str(transaction.debit), "credit": str(transaction.credit), "approval_status": approval_status},
+    )
     db.commit()
     transaction_id = transaction.id
     db.expire_all()

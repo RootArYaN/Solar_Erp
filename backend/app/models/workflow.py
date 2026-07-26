@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 
-from sqlalchemy import DateTime, ForeignKey, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -68,6 +68,55 @@ class CustomerProject(TimestampMixin, Base):
     status: Mapped[str] = mapped_column(String(32), default="planning", index=True, nullable=False)
     capacity_kw: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=Decimal("0.00"), nullable=False)
     approved_value: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=Decimal("0.00"), nullable=False)
+    site_address: Mapped[str] = mapped_column(String(320), default="", nullable=False)
+    payment_mode: Mapped[str] = mapped_column(String(12), default="", index=True, nullable=False)
+    loan_status: Mapped[str] = mapped_column(String(32), default="not_required", nullable=False)
+    documentation_status: Mapped[str] = mapped_column(String(32), default="pending", nullable=False)
+    registration_status: Mapped[str] = mapped_column(String(32), default="pending", nullable=False)
+    material_status: Mapped[str] = mapped_column(String(32), default="pending", nullable=False)
+    installation_status: Mapped[str] = mapped_column(String(32), default="pending", nullable=False)
+    dcr_status: Mapped[str] = mapped_column(String(32), default="pending", nullable=False)
+    subsidy_status: Mapped[str] = mapped_column(String(32), default="pending", nullable=False)
+    subsidiary_payment_status: Mapped[str] = mapped_column(String(32), default="pending", nullable=False)
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    archived_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    archive_id: Mapped[str | None] = mapped_column(String(36), index=True, nullable=True)
+    is_locked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+
+class MaterialRequest(TimestampMixin, Base):
+    __tablename__ = "material_requests"
+    __table_args__ = (
+        UniqueConstraint("project_id", name="uq_material_request_project"),
+        UniqueConstraint("company_id", "record_number", name="uq_company_material_request_number"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    company_id: Mapped[str] = mapped_column(ForeignKey("companies.id", ondelete="CASCADE"), index=True, nullable=False)
+    project_id: Mapped[str] = mapped_column(ForeignKey("customer_projects.id", ondelete="CASCADE"), index=True, nullable=False)
+    record_number: Mapped[str] = mapped_column(String(40), nullable=False)
+    status: Mapped[str] = mapped_column(String(24), default="draft", index=True, nullable=False)
+    requested_by_membership_id: Mapped[str] = mapped_column(ForeignKey("memberships.id", ondelete="RESTRICT"), nullable=False)
+    purpose: Mapped[str] = mapped_column(String(240), nullable=False)
+    needed_at_site_by: Mapped[date | None] = mapped_column(Date, nullable=True)
+    lines_json: Mapped[str] = mapped_column(Text, default="[]", nullable=False)
+    version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+
+
+class ProjectTimeline(TimestampMixin, Base):
+    __tablename__ = "project_timelines"
+    __table_args__ = (UniqueConstraint("project_id", name="uq_project_timeline_project"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    company_id: Mapped[str] = mapped_column(ForeignKey("companies.id", ondelete="CASCADE"), index=True, nullable=False)
+    project_id: Mapped[str] = mapped_column(ForeignKey("customer_projects.id", ondelete="CASCADE"), index=True, nullable=False)
+    payment_mode: Mapped[str] = mapped_column(String(12), default="", nullable=False)
+    current_step: Mapped[str] = mapped_column(String(64), default="documents_uploaded", index=True, nullable=False)
+    progress: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    steps_json: Mapped[str] = mapped_column(Text, default="[]", nullable=False)
+    updated_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("memberships.id", ondelete="SET NULL"), nullable=True
+    )
 
 
 class TransactionApproval(TimestampMixin, Base):

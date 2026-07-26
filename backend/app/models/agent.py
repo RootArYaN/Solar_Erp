@@ -40,13 +40,26 @@ class AgentCustomer(TimestampMixin, Base):
         ForeignKey("memberships.id", ondelete="SET NULL"), index=True, nullable=True
     )
     customer_name: Mapped[str] = mapped_column(String(160), nullable=False)
-    company_name: Mapped[str] = mapped_column(String(160), default="", nullable=False)
+    company_name: Mapped[str] = mapped_column(String(160), default="", nullable=False)  # legacy, hidden in B2C UI
     email: Mapped[str] = mapped_column(String(320), default="", nullable=False)
     phone: Mapped[str] = mapped_column(String(32), default="", nullable=False)
-    address: Mapped[str] = mapped_column(String(320), default="", nullable=False)
+    alternate_phone: Mapped[str] = mapped_column(String(32), default="", nullable=False)
+    address: Mapped[str] = mapped_column(String(320), default="", nullable=False)  # legacy site address
+    billing_address: Mapped[str] = mapped_column(String(320), default="", nullable=False)
+    site_address: Mapped[str] = mapped_column(String(320), default="", nullable=False)
+    district: Mapped[str] = mapped_column(String(80), default="", nullable=False)
+    state: Mapped[str] = mapped_column(String(80), default="Gujarat", nullable=False)
+    postal_code: Mapped[str] = mapped_column(String(16), default="", nullable=False)
+    consumer_number: Mapped[str] = mapped_column(String(80), default="", index=True, nullable=False)
+    electricity_provider: Mapped[str] = mapped_column(String(100), default="", nullable=False)
+    customer_type: Mapped[str] = mapped_column(String(32), default="residential", index=True, nullable=False)
+    lead_source: Mapped[str] = mapped_column(String(80), default="", nullable=False)
     project_name: Mapped[str] = mapped_column(String(180), default="", nullable=False)
     status: Mapped[str] = mapped_column(String(32), default="active", index=True, nullable=False)
     outstanding_balance: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=Decimal("0.00"), nullable=False)
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    archived_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    archive_id: Mapped[str | None] = mapped_column(String(36), index=True, nullable=True)
 
     agent: Mapped[AgentProfile] = relationship(back_populates="customers")
 
@@ -78,5 +91,9 @@ class AgentTransaction(TimestampMixin, Base):
     description: Mapped[str] = mapped_column(String(240), default="", nullable=False)
     debit: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=Decimal("0.00"), nullable=False)
     credit: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=Decimal("0.00"), nullable=False)
+    project_id: Mapped[str | None] = mapped_column(String(36), index=True, nullable=True)
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    archived_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    archive_id: Mapped[str | None] = mapped_column(String(36), index=True, nullable=True)
 
     agent: Mapped[AgentProfile] = relationship(back_populates="transactions")

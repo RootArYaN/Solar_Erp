@@ -39,6 +39,7 @@ import { AgentCustomerDialog } from './AgentCustomerDialog'
 import { AgentProfileDialog } from './AgentProfileDialog'
 import { AgentTransactionDialog } from './AgentTransactionDialog'
 import { QuotationRequestDialog } from './QuotationRequestDialog'
+import { KpiGrid, WorkspacePage, WorkspaceToolbar } from '../workspace'
 
 const currency = new Intl.NumberFormat('en-IN', {
   style: 'currency',
@@ -258,8 +259,8 @@ export function AgentOverviewPage({ session }: { session: Session }) {
   }
 
   return (
-    <section className="agent-page">
-      <header className="agent-workspace-toolbar">
+    <WorkspacePage className="agent-page">
+      <WorkspaceToolbar className="agent-workspace-toolbar">
         <div className="agent-global-search">
           <Search size={17} />
           <input
@@ -361,9 +362,9 @@ export function AgentOverviewPage({ session }: { session: Session }) {
             </button>
           )}
         </div>
-      </header>
+      </WorkspaceToolbar>
 
-
+      <div className="agent-page__body">
       {loading && !overview ? (
         <div className="agent-loading">Loading…</div>
       ) : !overview ? (
@@ -391,7 +392,7 @@ export function AgentOverviewPage({ session }: { session: Session }) {
               </div>
             </motion.article>
 
-            <div className="agent-kpi-grid">
+            <KpiGrid columns={3} className="agent-kpi-grid">
               <motion.article initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.04 }}>
                 <div className="agent-kpi__icon"><UsersRound size={20} /></div>
                 <span>Customers</span>
@@ -409,7 +410,7 @@ export function AgentOverviewPage({ session }: { session: Session }) {
                 <span>Outstanding</span>
                 <strong>{currency.format(overview.customer_outstanding)}</strong>
               </motion.article>
-            </div>
+            </KpiGrid>
           </section>
 
           <div className="agent-tables-grid">
@@ -483,12 +484,13 @@ export function AgentOverviewPage({ session }: { session: Session }) {
           </div>
         </>
       )}
+      </div>
 
       {editingProfile && overview && <AgentProfileDialog profile={overview.profile} busy={busy} onClose={() => setEditingProfile(false)} onSubmit={saveProfile} />}
       {registeringCustomer && <AgentCustomerDialog busy={busy} onClose={() => setRegisteringCustomer(false)} onSubmit={registerCustomer} />}
       {editingCustomer && <AgentCustomerDialog customer={editingCustomer} busy={busy} onClose={() => setEditingCustomer(null)} onSubmit={saveCustomer} />}
       {quotationCustomer && <QuotationRequestDialog customer={quotationCustomer} busy={busy} onClose={() => setQuotationCustomer(null)} onSubmit={requestQuotation} />}
       {postingTransaction && <AgentTransactionDialog busy={busy} onClose={() => setPostingTransaction(false)} onSubmit={postTransaction} />}
-    </section>
+    </WorkspacePage>
   )
 }

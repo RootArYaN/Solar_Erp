@@ -8,6 +8,8 @@ from app.core.config import settings
 from app.core.security import hash_password
 from app.models.agent import AgentCustomer, AgentProfile, AgentTransaction
 from app.models.auth import Company, Membership, Permission, Role, User
+from app.models.finance import FinanceCategory, FinancialAccount
+from app.models.operations import InventoryLocation, PricingBook
 from app.models.workflow import TransactionApproval
 
 PERMISSIONS = {
@@ -69,6 +71,14 @@ PERMISSIONS = {
     "roles.manage": ("Manage roles", "Create custom roles and change role permissions."),
     "finance.view": ("View finance", "View ledgers, invoices and company financial reports."),
     "finance.manage": ("Manage finance", "Create and post finance transactions."),
+    "archive.view": ("View data archive", "View archive packages and job history."),
+    "archive.create": ("Create archives", "Create project, customer and transaction archives."),
+    "archive.download": ("Download archives", "Download verified archive ZIP packages."),
+    "archive.verify": ("Verify archives", "Verify archive files and checksums."),
+    "archive.cleanup": ("Clean archived data", "Remove eligible active copies after archive verification."),
+    "archive.restore": ("Restore archives", "Restore records and files from an archive."),
+    "archive.purge": ("Purge archives", "Permanently remove archive packages."),
+    "events.view": ("View event history", "View the append-only event history."),
 }
 
 ROLE_BLUEPRINTS = {
@@ -109,6 +119,9 @@ ROLE_BLUEPRINTS = {
             "quotations.approve",
             "projects.view",
             "agents.transactions.approve",
+            "archive.view",
+            "archive.download",
+            "events.view",
         ],
     },
     "company_admin": {
@@ -167,34 +180,46 @@ def _seed_agent_workspace(db: Session, company: Company, agent_role: Role) -> No
         db.flush()
 
     customer_rows = [
-        ("Mehul Patel", "Patel Textiles", "mehul@pateltextiles.in", "+91 98980 11001", "Udhna, Surat", "250 kW Rooftop EPC", "active", "185000.00"),
-        ("Nisha Desai", "Desai Foods", "nisha@desaifoods.in", "+91 98251 22002", "Palsana, Surat", "500 kW Industrial Solar", "active", "420000.00"),
-        ("Harsh Mehta", "Mehta Residency", "harsh@mehtaresidency.in", "+91 99090 33003", "Adajan, Surat", "40 kW Residential Society", "proposal", "75000.00"),
-        ("Krupa Shah", "Shah Ceramics", "krupa@shahceramics.in", "+91 97277 44004", "Morbi, Gujarat", "1 MW Captive Solar", "on_hold", "625000.00"),
+        ("Mehul Patel", "mehul@example.com", "+91 98980 11001", "Udhna, Surat", "3.24 kW Residential Rooftop", "active", "18500.00", "PGVCL-1001", "PGVCL", "residential"),
+        ("Nisha Desai", "nisha@example.com", "+91 98251 22002", "Palsana, Surat", "5.00 kW Residential Rooftop", "active", "42000.00", "PGVCL-1002", "PGVCL", "residential"),
+        ("Harsh Mehta", "harsh@example.com", "+91 99090 33003", "Adajan, Surat", "3.60 kW Residential Rooftop", "proposal", "75000.00", "DGVCL-1003", "DGVCL", "residential"),
+        ("Krupa Shah", "krupa@example.com", "+91 97277 44004", "Morbi, Gujarat", "6.00 kW Residential Rooftop", "on_hold", "62500.00", "PGVCL-1004", "PGVCL", "residential"),
     ]
-    for name, company_name, customer_email, phone, address, project, status, outstanding in customer_rows:
+    for name, customer_email, phone, address, project, status, outstanding, consumer_number, provider, customer_type in customer_rows:
         customer = db.scalar(
             select(AgentCustomer).where(
                 AgentCustomer.agent_profile_id == profile.id,
                 AgentCustomer.customer_name == name,
-                AgentCustomer.project_name == project,
             )
         )
         if not customer:
-            db.add(
-                AgentCustomer(
-                    company_id=company.id,
-                    agent_profile_id=profile.id,
-                    customer_name=name,
-                    company_name=company_name,
-                    email=customer_email,
-                    phone=phone,
-                    address=address,
-                    project_name=project,
-                    status=status,
-                    outstanding_balance=Decimal(outstanding),
-                )
+            customer = AgentCustomer(
+                company_id=company.id,
+                agent_profile_id=profile.id,
+                customer_name=name,
+                email=customer_email,
+                phone=phone,
+                address=address,
+                project_name=project,
+                status=status,
+                outstanding_balance=Decimal(outstanding),
             )
+            db.add(customer)
+        customer.company_name = ""
+        customer.email = customer_email
+        customer.phone = phone
+        customer.address = address
+        customer.billing_address = address
+        customer.site_address = address
+        customer.district = "Surat" if "Surat" in address else "Morbi"
+        customer.state = "Gujarat"
+        customer.consumer_number = consumer_number
+        customer.electricity_provider = provider
+        customer.customer_type = customer_type
+        customer.lead_source = "Agent referral"
+        customer.project_name = project
+        customer.status = status
+        customer.outstanding_balance = Decimal(outstanding)
 
     transaction_rows = [
         (-35, "AGT-OPEN-001", "opening_adjustment", "Opening balance verification", "0.00", "2500.00"),
@@ -235,7 +260,45 @@ def _seed_agent_workspace(db: Session, company: Company, agent_role: Role) -> No
             ))
 
 
+def _seed_business_defaults(db: Session, company: Company, membership: Membership) -> None:
+    account_defaults = [
+        ("Office Cash", "cash", "", ""),
+        ("Primary Bank Account", "bank", "", ""),
+    ]
+    for name, account_type, bank_name, masked in account_defaults:
+        row = db.scalar(select(FinancialAccount).where(FinancialAccount.company_id == company.id, FinancialAccount.name == name))
+        if not row:
+            db.add(FinancialAccount(company_id=company.id, name=name, account_type=account_type, bank_name=bank_name, masked_account_number=masked, opening_balance=Decimal("0.00")))
+
+    category_defaults = [
+        ("customer_payment", "Customer Payment", "income"),
+        ("subsidy_received", "Subsidy Received", "income"),
+        ("office_rent", "Office Rent", "expense"),
+        ("salary", "Salary", "expense"),
+        ("agent_commission", "Agent Commission", "expense"),
+        ("transport", "Transport", "expense"),
+        ("fuel", "Fuel", "expense"),
+        ("installation_labour", "Installation Labour", "expense"),
+        ("site_expense", "Site Expense", "expense"),
+        ("bank_charges", "Bank Charges", "expense"),
+        ("marketing", "Marketing", "expense"),
+        ("miscellaneous", "Miscellaneous", "expense"),
+    ]
+    for code, name, category_type in category_defaults:
+        row = db.scalar(select(FinanceCategory).where(FinanceCategory.company_id == company.id, FinanceCategory.code == code))
+        if not row:
+            db.add(FinanceCategory(company_id=company.id, code=code, name=name, category_type=category_type))
+
+    if not db.scalar(select(InventoryLocation).where(InventoryLocation.company_id == company.id, InventoryLocation.name == "Main Warehouse")):
+        db.add(InventoryLocation(company_id=company.id, name="Main Warehouse", location_type="warehouse", address=""))
+
+    if not db.scalar(select(PricingBook).where(PricingBook.company_id == company.id, PricingBook.is_default.is_(True))):
+        db.add(PricingBook(company_id=company.id, name="Master Price List", version=1, is_default=True, is_active=True, created_by=membership.id, updated_by=membership.id))
+
+
 def seed_development_data(db: Session) -> None:
+    if settings.is_production:
+        raise RuntimeError("Development seed data is disabled in production")
     company = db.scalar(select(Company).where(Company.code == settings.seed_company_code.upper()))
     if not company:
         company = Company(name=settings.seed_company_name, code=settings.seed_company_code.upper())
@@ -310,4 +373,5 @@ def seed_development_data(db: Session) -> None:
         membership.role = roles_by_code["super_admin"]
 
     _seed_agent_workspace(db, company, roles_by_code["agent"])
+    _seed_business_defaults(db, company, membership)
     db.commit()
