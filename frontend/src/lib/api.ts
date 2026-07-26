@@ -13,6 +13,9 @@ import type {
   CreateUserInput,
   ManagedUser,
   Permission,
+  ProjectTimeline,
+  ProjectTimelineListItem,
+  ProjectTimelineStepInput,
   Role,
   Session,
   UpdateAgentProfileInput,
@@ -213,3 +216,21 @@ export function getApprovalCenter(token: string): Promise<ApprovalCenter> { retu
 export function generateQuotation(token: string, requestId: string, input: GenerateQuotationInput) { return apiRequest(`/workflow/quotation-requests/${requestId}/quotation`, { method: 'POST', token, body: input, idempotencyKey: crypto.randomUUID() }) }
 export function decideQuotation(token: string, quotationId: string, input: ApprovalDecisionInput) { return apiRequest(`/workflow/quotations/${quotationId}/decision`, { method: 'POST', token, body: input, idempotencyKey: crypto.randomUUID() }) }
 export function decideTransaction(token: string, approvalId: string, input: ApprovalDecisionInput) { return apiRequest(`/workflow/transactions/${approvalId}/decision`, { method: 'POST', token, body: input, idempotencyKey: crypto.randomUUID() }) }
+
+
+export function getProjectTimelines(token: string): Promise<ProjectTimelineListItem[]> {
+  return apiRequest('/workflow/projects/timelines', { token })
+}
+
+export function getProjectTimeline(token: string, projectId: string): Promise<ProjectTimeline> {
+  return apiRequest(`/workflow/projects/${projectId}/timeline`, { token })
+}
+
+export function setProjectPaymentMode(token: string, projectId: string, paymentMode: 'cash' | 'loan'): Promise<ProjectTimeline> {
+  return apiRequest(`/workflow/projects/${projectId}/payment-mode`, { method: 'PATCH', token, body: { payment_mode: paymentMode } })
+}
+
+export function updateProjectTimelineStep(token: string, projectId: string, stepKey: string, input: ProjectTimelineStepInput): Promise<ProjectTimeline> {
+  return apiRequest(`/workflow/projects/${projectId}/timeline/${stepKey}`, { method: 'PATCH', token, body: input })
+}
+

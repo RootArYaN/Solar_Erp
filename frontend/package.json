@@ -7,12 +7,15 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-     "test": "vitest run",
+    "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test"
   },
   "dependencies": {
+    "@capacitor/android": "^8.4.2",
+    "@capacitor/core": "^8.4.2",
+    "@capacitor/ios": "^8.4.2",
     "lucide-react": "0.468.0",
     "motion": "11.15.0",
     "react": "18.3.1",
@@ -20,18 +23,19 @@
     "react-router-dom": "6.28.0"
   },
   "devDependencies": {
-    "@types/react": "18.3.18",
-    "@types/react-dom": "18.3.5",
-    "@vitejs/plugin-react": "4.3.4",
-    "typescript": "5.7.3",
-    "vite": "5.4.14",
+    "@capacitor/cli": "^8.4.2",
     "@playwright/test": "^1.55.0",
     "@testing-library/jest-dom": "^6.8.0",
     "@testing-library/react": "^16.3.0",
     "@testing-library/user-event": "^14.6.1",
+    "@types/react": "18.3.18",
+    "@types/react-dom": "18.3.5",
+    "@vitejs/plugin-react": "4.3.4",
     "@vitest/coverage-v8": "^3.2.4",
     "jsdom": "^26.1.0",
     "msw": "^2.10.4",
+    "typescript": "5.7.3",
+    "vite": "5.4.14",
     "vitest": "^3.2.4"
   }
 }

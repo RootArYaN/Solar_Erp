@@ -441,6 +441,7 @@ export function CustomerDataUploadPage({ session }: { session: Session }) {
     supportingDocumentsRef.current.forEach((document) => URL.revokeObjectURL(document.url))
   }, [])
 
+
   const completedFields = useMemo(
     () => Object.values(data).filter((value) => value.trim()).length,
     [data],
@@ -450,6 +451,7 @@ export function CustomerDataUploadPage({ session }: { session: Session }) {
     setDirty(true)
     setData((current) => ({ ...current, [field]: value }))
   }
+
 
   function openTemplateEditor() {
     setEditingTemplateTab(activeTab === 'merged' ? 'feasibility' : activeTab)
@@ -530,6 +532,14 @@ export function CustomerDataUploadPage({ session }: { session: Session }) {
     reader.readAsDataURL(file)
   }
 
+  function chooseSupportingDocuments() {
+    if (!data.name.trim()) {
+      toast({ message: 'Enter the customer name before uploading documents', variant: 'warning' })
+      return
+    }
+    supportingInputRef.current?.click()
+  }
+
   function handleSupportingDocuments(files?: FileList | null) {
     if (!files?.length) return
     const selectedType = supportingDocumentTypes.find((type) => type.value === supportingType)
@@ -553,8 +563,8 @@ export function CustomerDataUploadPage({ session }: { session: Session }) {
         size: file.size,
         mimeType: file.type,
         url: URL.createObjectURL(file),
-        status: 'pending',
-        progress: 0,
+        status: 'ready',
+        progress: 100,
         failureMessage: null,
         previewExpiresAt: null,
         archivedAt: null,
@@ -571,18 +581,11 @@ export function CustomerDataUploadPage({ session }: { session: Session }) {
   }
 
 
-  function retrySupportingDocument(id: string) {
-    setSupportingDocuments((current) => current.map((document) => document.id === id
-      ? { ...document, status: 'pending', progress: 0, failureMessage: null }
-      : document))
-    toast({ message: 'Upload queued for retry when the secure upload endpoint is connected', variant: 'info' })
-  }
-
   function toggleSupportingDocumentArchive() {
     if (!documentToArchive) return
     const restoring = Boolean(documentToArchive.archivedAt)
     setSupportingDocuments((current) => current.map((item) => item.id === documentToArchive.id
-      ? { ...item, archivedAt: restoring ? null : new Date().toISOString(), status: restoring ? 'pending' : 'cancelled', progress: restoring ? 0 : item.progress }
+      ? { ...item, archivedAt: restoring ? null : new Date().toISOString(), status: restoring ? 'ready' : 'cancelled', progress: restoring ? 100 : item.progress }
       : item))
     setDirty(true)
     toast({ message: `${documentToArchive.label} ${restoring ? 'restored' : 'archived'}`, variant: 'success' })
@@ -695,8 +698,8 @@ export function CustomerDataUploadPage({ session }: { session: Session }) {
                   <input disabled={!access.canCreate} value={customDocumentLabel} onChange={(event) => setCustomDocumentLabel(event.target.value)} placeholder="e.g. Passport" />
                 </label>
               )}
-              <button className="customer-supporting-upload-button" disabled={!access.canCreate} onClick={() => supportingInputRef.current?.click()}>
-                <Upload size={15} /> Upload files
+              <button className="customer-supporting-upload-button" disabled={!access.canCreate} onClick={chooseSupportingDocuments}>
+                <Upload size={15} /> Add documents
               </button>
               <input
                 ref={supportingInputRef}
@@ -722,7 +725,7 @@ export function CustomerDataUploadPage({ session }: { session: Session }) {
                       <strong>{document.label}</strong>
                       <span title={document.name}>{document.name}</span>
                       <small>{(document.size / 1024).toFixed(0)} KB</small>
-                      {document.archivedAt ? <small>Archived · restorable</small> : <UploadStatus status={document.status} progress={document.progress} failureMessage={document.failureMessage} onRetry={() => retrySupportingDocument(document.id)} onCancel={access.canArchive ? () => setDocumentToArchive(document) : undefined} />}
+                      {document.archivedAt ? <small>Archived · restorable</small> : <UploadStatus status={document.status} progress={document.progress} failureMessage={document.failureMessage} onCancel={access.canArchive ? () => setDocumentToArchive(document) : undefined} />}
                     </div>
                     <div className="supporting-doc-actions">
                       {!document.archivedAt && <button onClick={() => window.open(document.url, '_blank')} aria-label={`Preview ${document.name}`} title="Preview"><Eye size={13} /></button>}

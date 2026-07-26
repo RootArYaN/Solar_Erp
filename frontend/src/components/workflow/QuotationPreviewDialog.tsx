@@ -1,0 +1,119 @@
+import { CheckCircle2, Download, FileText } from 'lucide-react'
+import {
+  downloadQuotationPdf,
+  formatQuotationMoney,
+  type QuotationDocumentData,
+} from '../../lib/quotation-document'
+import { Modal } from '../admin/Modal'
+
+const dateFormatter = new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium' })
+
+function statusLabel(status: string) {
+  return status.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase())
+}
+
+export function QuotationPreviewDialog({
+  quotation,
+  customerName,
+  companyName = '',
+  phone = '',
+  email = '',
+  address = '',
+  siteAddress = '',
+  capacityKw,
+  notes = '',
+  agentName = '',
+  onClose,
+}: QuotationDocumentData & { onClose: () => void }) {
+  const canDownload = quotation.status === 'approved'
+  const displayLines = quotation.lines.length > 0 ? quotation.lines : [{
+    description: quotation.title,
+    quantity: 1,
+    unit: 'Lot',
+    unit_price: quotation.subtotal,
+    tax_rate: quotation.subtotal > 0 ? (quotation.tax_total / quotation.subtotal) * 100 : 0,
+    line_total: quotation.grand_total,
+  }]
+
+  function download() {
+    downloadQuotationPdf({ quotation, customerName, companyName, phone, email, address, siteAddress, capacityKw, notes, agentName })
+  }
+
+  return <Modal
+    title="Quotation preview"
+    subtitle={`${quotation.quotation_number} · ${statusLabel(quotation.status)}`}
+    className="quotation-preview-modal"
+    onClose={onClose}
+  >
+    <div className="quotation-preview-shell">
+      <article className="quotation-document">
+        <header className="quotation-document__header">
+          <div className="quotation-document__brand">
+            <span className="quotation-document__mark"><FileText size={20} /></span>
+            <div><strong>Shree Enterprise</strong><small>Solar EPC quotation</small></div>
+          </div>
+          <span className={`quotation-document__status quotation-document__status--${quotation.status}`}>
+            {quotation.status === 'approved' && <CheckCircle2 size={14} />}
+            {statusLabel(quotation.status)}
+          </span>
+        </header>
+
+        <div className="quotation-document__meta">
+          <section><small>Quotation</small><strong>{quotation.quotation_number}</strong></section>
+          <section><small>Created</small><strong>{dateFormatter.format(new Date(quotation.created_at))}</strong></section>
+          <section><small>Valid until</small><strong>{quotation.valid_until ? dateFormatter.format(new Date(quotation.valid_until)) : 'Not specified'}</strong></section>
+        </div>
+
+        <div className="quotation-document__customer">
+          <div><small>Prepared for</small><h3>{customerName}</h3><p>{companyName || 'Individual customer'}</p></div>
+          <div className="quotation-document__contact">
+            {phone && <span>{phone}</span>}
+            {email && <span>{email}</span>}
+            {(siteAddress || address) && <span>{siteAddress || address}</span>}
+          </div>
+        </div>
+
+        <div className="quotation-document__title">
+          <div><small>Proposal</small><h2>{quotation.title}</h2></div>
+          {capacityKw !== undefined && <strong>{capacityKw} kW</strong>}
+        </div>
+
+        <div className="quotation-document__table-wrap">
+          <table className="quotation-document__table">
+            <thead><tr><th>Item</th><th>Qty</th><th>Rate</th><th>Tax</th><th>Amount</th></tr></thead>
+            <tbody>
+              {displayLines.map((line, index) => <tr key={`${line.description}-${index}`}>
+                <td><strong>{line.description}</strong><small>{line.unit}</small></td>
+                <td>{line.quantity}</td>
+                <td>{formatQuotationMoney(line.unit_price)}</td>
+                <td>{line.tax_rate}%</td>
+                <td><strong>{formatQuotationMoney(line.line_total)}</strong></td>
+              </tr>)}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="quotation-document__footer">
+          <div className="quotation-document__note">
+            {notes && <><small>Note</small><p>{notes}</p></>}
+            {agentName && <span>Agent: {agentName}</span>}
+            {quotation.approved_at && <span>Approved on {dateFormatter.format(new Date(quotation.approved_at))}</span>}
+          </div>
+          <dl className="quotation-document__totals">
+            <div><dt>Subtotal</dt><dd>{formatQuotationMoney(quotation.subtotal)}</dd></div>
+            <div><dt>Tax</dt><dd>{formatQuotationMoney(quotation.tax_total)}</dd></div>
+            <div><dt>Grand total</dt><dd>{formatQuotationMoney(quotation.grand_total)}</dd></div>
+          </dl>
+        </div>
+      </article>
+    </div>
+
+    <footer className="quotation-preview-actions">
+      <span>{canDownload ? 'Approved quotation is ready for agent download.' : 'Download unlocks after approval.'}</span>
+      <div>
+        <button type="button" className="secondary-button" onClick={onClose}>Close</button>
+        {canDownload && <button type="button" className="primary-button primary-button--compact" onClick={download}><Download size={15} /> Download PDF</button>}
+      </div>
+    </footer>
+  </Modal>
+}

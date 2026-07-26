@@ -13,6 +13,7 @@ import { SolarPricingPage } from './components/pricing/SolarPricingPage'
 import { ProtectedRoute } from './components/routing/ProtectedRoute'
 import { ActiveDevicesPage } from './components/security/ActiveDevicesPage'
 import { ApprovalCenterPage } from './components/workflow/ApprovalCenterPage'
+import { ProjectTimelinePage } from './components/workflow/ProjectTimelinePage'
 import { useToast } from './components/ui/ToastProvider'
 import { getCurrentSession, logout } from './lib/api'
 import { AUTH_SESSION_EVENT, loadSession, type SessionEndReason } from './lib/auth-storage'
@@ -93,6 +94,7 @@ export default function App() {
         <Route path="customers" element={session && <ProtectedRoute session={session} permissions={[PERMISSIONS.customers.view]}><CustomerWorkspacePage session={session} /></ProtectedRoute>} />
         <Route path="administration" element={session && <ProtectedRoute session={session} permissions={[PERMISSIONS.users.view, PERMISSIONS.roles.view]}><AdminPage session={session} /></ProtectedRoute>} />
         <Route path="agents" element={session && <ProtectedRoute session={session} permissions={[PERMISSIONS.agents.view]}><AgentOverviewPage session={session} /></ProtectedRoute>} />
+        <Route path="projects" element={session && <ProtectedRoute session={session} permissions={[PERMISSIONS.projects.view]}><ProjectTimelinePage session={session} /></ProtectedRoute>} />
         <Route path="approvals" element={session && <ProtectedRoute session={session} permissions={[PERMISSIONS.quotations.approve]}><ApprovalCenterPage session={session} /></ProtectedRoute>} />
         <Route path="customer-documents" element={session && <ProtectedRoute session={session} permissions={[PERMISSIONS.documents.view]}><CustomerDataUploadPage session={session} /></ProtectedRoute>} />
         <Route path="posters" element={session && <ProtectedRoute session={session} permissions={[PERMISSIONS.posters.view]}><PosterUploadPage session={session} /></ProtectedRoute>} />

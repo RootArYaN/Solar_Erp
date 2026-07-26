@@ -15,12 +15,15 @@ export function QuotationBuilderDialog({ request, busy, onClose, onSubmit }: {
 }) {
   const [title, setTitle] = useState(request.quotation?.title || `${request.proposed_capacity_kw} kW solar EPC · ${request.customer_name}`)
   const [validUntil, setValidUntil] = useState(() => {
+    if (request.quotation?.valid_until) return request.quotation.valid_until.slice(0, 10)
     const date = new Date(); date.setDate(date.getDate() + 30); return date.toISOString().slice(0, 10)
   })
-  const [lines, setLines] = useState<QuotationLineInput[]>([
-    newLine('Solar modules, inverter and balance of system'),
-    { ...newLine('Installation, testing and commissioning'), tax_rate: 18 },
-  ])
+  const [lines, setLines] = useState<QuotationLineInput[]>(() => request.quotation?.lines.length
+    ? request.quotation.lines.map(({ description, quantity, unit, unit_price, tax_rate }) => ({ description, quantity, unit, unit_price, tax_rate }))
+    : [
+      newLine('Solar modules, inverter and balance of system'),
+      { ...newLine('Installation, testing and commissioning'), tax_rate: 18 },
+    ])
 
   const totals = useMemo(() => lines.reduce((result, line) => {
     const base = Number(line.quantity || 0) * Number(line.unit_price || 0)
@@ -36,7 +39,7 @@ export function QuotationBuilderDialog({ request, busy, onClose, onSubmit }: {
     await onSubmit({ title, valid_until: validUntil ? new Date(`${validUntil}T18:29:59Z`).toISOString() : null, lines })
   }
 
-  return <Modal title="Generate quotation" onClose={onClose}>
+  return <Modal title={request.quotation ? "Revise quotation" : "Generate quotation"} className="quotation-builder-modal" onClose={onClose}>
     <form className="admin-form quotation-builder" onSubmit={submit}>
       <div className="workflow-customer-strip"><strong>{request.customer_name}</strong><span>{request.agent_name} · {request.proposed_capacity_kw} kW</span></div>
       <div className="admin-form__grid"><label className="field"><span>Quotation title</span><input required value={title} onChange={(event) => setTitle(event.target.value)} /></label><label className="field"><span>Valid until</span><input type="date" value={validUntil} onChange={(event) => setValidUntil(event.target.value)} /></label></div>

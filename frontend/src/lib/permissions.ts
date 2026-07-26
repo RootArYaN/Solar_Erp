@@ -54,6 +54,7 @@ export const PERMISSIONS = {
     edit: 'documents.edit',
     archive: 'documents.archive',
     approve: 'documents.approve',
+    manage: 'documents.manage',
   },
   posters: {
     view: 'posters.view',
@@ -95,9 +96,10 @@ export function hasEveryPermission(session: Session, permissions: string[]): boo
 export function getModuleAccess(session: Session, module: ModulePermissionKey): ModuleAccess {
   const group = PERMISSIONS[module] as PermissionGroup
   const canView = hasPermission(session, group.view)
-  const canCreate = Boolean(group.create && hasPermission(session, group.create))
-  const canEdit = Boolean(group.edit && hasPermission(session, group.edit))
-  const canArchive = Boolean(group.archive && hasPermission(session, group.archive))
-  const canApprove = Boolean(group.approve && hasPermission(session, group.approve))
+  const canManage = Boolean(group.manage && hasPermission(session, group.manage))
+  const canCreate = canManage || Boolean(group.create && hasPermission(session, group.create))
+  const canEdit = canManage || Boolean(group.edit && hasPermission(session, group.edit))
+  const canArchive = canManage || Boolean(group.archive && hasPermission(session, group.archive))
+  const canApprove = canManage || Boolean(group.approve && hasPermission(session, group.approve))
   return { canView, canCreate, canEdit, canArchive, canApprove, readOnly: canView && !canCreate && !canEdit && !canArchive && !canApprove }
 }

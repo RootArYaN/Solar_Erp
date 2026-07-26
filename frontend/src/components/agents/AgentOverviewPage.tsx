@@ -3,6 +3,7 @@ import {
   ArrowUpRight,
   BriefcaseBusiness,
   CircleDollarSign,
+  Download,
   Edit3,
   Mail,
   MapPin,
@@ -22,6 +23,7 @@ import {
   updateAgentCustomer,
   updateAgentProfile,
 } from '../../lib/api'
+import { downloadQuotationPdf } from '../../lib/quotation-document'
 import type {
   AgentListItem,
   AgentCustomer,
@@ -241,6 +243,20 @@ export function AgentOverviewPage({ session }: { session: Session }) {
     }
   }
 
+  function downloadApprovedQuotation(customer: AgentCustomer) {
+    if (!customer.approved_quotation) return
+    downloadQuotationPdf({
+      quotation: customer.approved_quotation,
+      customerName: customer.customer_name,
+      companyName: customer.company_name,
+      phone: customer.phone,
+      email: customer.email,
+      address: customer.address,
+      notes: customer.project_name,
+      agentName: overview?.profile.full_name || '',
+    })
+  }
+
   return (
     <section className="agent-page">
       <header className="agent-workspace-toolbar">
@@ -416,10 +432,11 @@ export function AgentOverviewPage({ session }: { session: Session }) {
                           <td data-label="Status"><span className={`customer-status customer-status--${customer.status}`}>{customer.status.replaceAll('_', ' ')}</span></td>
                           <td data-label="Outstanding" className="numeric-cell"><strong>{currency.format(customer.outstanding_balance)}</strong></td>
                           <td data-label="Action"><div className="agent-customer-actions">
-                            {customer.can_edit && <button className="table-action-button table-action-button--neutral" onClick={() => setEditingCustomer(customer)}><Edit3 size={12} /> Edit</button>}
+                            {customer.approved_quotation && <button className="table-action-button table-action-button--download" type="button" onClick={() => downloadApprovedQuotation(customer)}><Download size={12} /> Download quote</button>}
+                            {customer.can_edit && <button className="table-action-button table-action-button--neutral" type="button" onClick={() => setEditingCustomer(customer)}><Edit3 size={12} /> Edit</button>}
                             {canRequestQuotations && !['pending', 'quotation_ready', 'pending_approval', 'approved'].includes(customer.quotation_status || customer.quotation_request_status || '')
-                              ? <button className="table-action-button" onClick={() => setQuotationCustomer(customer)}>Request quotation</button>
-                              : !customer.can_edit && <small>{customer.project_number ? 'Project created' : customer.quotation_request_status ? 'With admin' : '—'}</small>}
+                              ? <button className="table-action-button" type="button" onClick={() => setQuotationCustomer(customer)}>Request quotation</button>
+                              : !customer.approved_quotation && !customer.can_edit && <small>{customer.project_number ? 'Project created' : customer.quotation_request_status ? 'With admin' : '—'}</small>}
                           </div></td>
                         </tr>
                       ))}

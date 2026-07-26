@@ -109,6 +109,7 @@ export type AgentCustomer = {
   quotation_status: string | null
   project_number: string | null
   project_status: string | null
+  approved_quotation: WorkflowQuotation | null
   can_edit: boolean
 }
 
@@ -164,6 +165,7 @@ export type CreateQuotationRequestInput = {
   notes: string
 }
 
+
 export type QuotationLineInput = {
   description: string
   quantity: number
@@ -179,8 +181,17 @@ export type GenerateQuotationInput = {
 }
 
 export type ApprovalDecisionInput = {
-  decision: 'approved' | 'rejected'
+  decision: 'approved' | 'condition' | 'rejected'
   comment: string
+}
+
+export type WorkflowQuotationLine = {
+  description: string
+  quantity: number
+  unit: string
+  unit_price: number
+  tax_rate: number
+  line_total: number
 }
 
 export type WorkflowQuotation = {
@@ -194,6 +205,8 @@ export type WorkflowQuotation = {
   status: string
   decision_comment: string
   created_at: string
+  approved_at: string | null
+  lines: WorkflowQuotationLine[]
 }
 
 export type QuotationRequestSummary = {
@@ -201,6 +214,9 @@ export type QuotationRequestSummary = {
   customer_id: string
   customer_name: string
   company_name: string
+  customer_phone: string
+  customer_email: string
+  customer_address: string
   agent_membership_id: string
   agent_name: string
   requirement_summary: string
@@ -234,4 +250,43 @@ export type TransactionApprovalSummary = {
 export type ApprovalCenter = {
   quotation_requests: QuotationRequestSummary[]
   transactions: TransactionApprovalSummary[]
+}
+
+
+export type ProjectTimelineStep = {
+  key: string
+  name: string
+  status: 'pending' | 'current' | 'completed'
+  completed_at: string | null
+  completed_by: string
+  note: string
+  event_date: string | null
+  locked: boolean
+}
+
+export type ProjectTimelineListItem = {
+  project_id: string
+  project_number: string
+  project_name: string
+  customer_name: string
+  customer_phone: string
+  project_status: string
+  payment_mode: '' | 'cash' | 'loan'
+  current_step: string
+  current_step_name: string
+  progress: number
+  updated_at: string
+}
+
+export type ProjectTimeline = ProjectTimelineListItem & {
+  capacity_kw: number
+  approved_value: number
+  can_manage: boolean
+  steps: ProjectTimelineStep[]
+}
+
+export type ProjectTimelineStepInput = {
+  action: 'complete' | 'reopen'
+  note?: string
+  event_date?: string | null
 }
