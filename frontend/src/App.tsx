@@ -1,24 +1,26 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { Navigate, Route, Routes, useNavigate } from 'react-router-dom'
 import { AppShell } from './components/AppShell'
-import { Dashboard } from './components/Dashboard'
 import { LoginPage } from './components/LoginPage'
-import { AdminPage } from './components/admin/AdminPage'
-import { AgentOverviewPage } from './components/agents/AgentOverviewPage'
-import { CustomerWorkspacePage } from './components/customers/CustomerWorkspacePage'
-import { CustomerDataUploadPage } from './components/documents/CustomerDataUploadPage'
-import { InventoryPage } from './components/inventory/InventoryPage'
-import { PosterUploadPage } from './components/posters/PosterUploadPage'
-import { SolarPricingPage } from './components/pricing/SolarPricingPage'
 import { ProtectedRoute } from './components/routing/ProtectedRoute'
-import { ActiveDevicesPage } from './components/security/ActiveDevicesPage'
-import { ApprovalCenterPage } from './components/workflow/ApprovalCenterPage'
-import { ProjectTimelinePage } from './components/workflow/ProjectTimelinePage'
 import { useToast } from './components/ui/ToastProvider'
-import { getCurrentSession, logout } from './lib/api'
+import { ApiError, getCurrentSession, logout, refreshCurrentSession } from './lib/api'
 import { AUTH_SESSION_EVENT, loadSession, type SessionEndReason } from './lib/auth-storage'
 import { PERMISSIONS } from './lib/permissions'
 import type { Session } from './types'
+
+const Dashboard = lazy(() => import('./components/Dashboard').then((module) => ({ default: module.Dashboard })))
+const AdminPage = lazy(() => import('./components/admin/AdminPage').then((module) => ({ default: module.AdminPage })))
+const DataArchivePage = lazy(() => import('./components/archive/DataArchivePage').then((module) => ({ default: module.DataArchivePage })))
+const AgentOverviewPage = lazy(() => import('./components/agents/AgentOverviewPage').then((module) => ({ default: module.AgentOverviewPage })))
+const CustomerWorkspacePage = lazy(() => import('./components/customers/CustomerWorkspacePage').then((module) => ({ default: module.CustomerWorkspacePage })))
+const CustomerDataUploadPage = lazy(() => import('./components/documents/CustomerDataUploadPage').then((module) => ({ default: module.CustomerDataUploadPage })))
+const InventoryPage = lazy(() => import('./components/inventory/InventoryPage').then((module) => ({ default: module.InventoryPage })))
+const PosterUploadPage = lazy(() => import('./components/posters/PosterUploadPage').then((module) => ({ default: module.PosterUploadPage })))
+const SolarPricingPage = lazy(() => import('./components/pricing/SolarPricingPage').then((module) => ({ default: module.SolarPricingPage })))
+const ActiveDevicesPage = lazy(() => import('./components/security/ActiveDevicesPage').then((module) => ({ default: module.ActiveDevicesPage })))
+const ApprovalCenterPage = lazy(() => import('./components/workflow/ApprovalCenterPage').then((module) => ({ default: module.ApprovalCenterPage })))
+const ProjectTimelinePage = lazy(() => import('./components/workflow/ProjectTimelinePage').then((module) => ({ default: module.ProjectTimelinePage })))
 
 const sessionMessages: Partial<Record<SessionEndReason, string>> = {
   expired: 'Your session expired. Sign in again to continue.',
@@ -29,7 +31,7 @@ const sessionMessages: Partial<Record<SessionEndReason, string>> = {
 
 export default function App() {
   const [session, setSession] = useState<Session | null>(() => loadSession())
-  const [initializing, setInitializing] = useState(Boolean(loadSession()))
+  const [initializing, setInitializing] = useState(true)
   const [authNotice, setAuthNotice] = useState('')
   const navigate = useNavigate()
   const { toast } = useToast()
@@ -45,25 +47,22 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    const stored = loadSession()
-    if (!stored) {
-      setInitializing(false)
-      return
-    }
-
     let active = true
-    void getCurrentSession(stored.access_token)
-      .then((profile) => {
-        if (!active) return
-        const refreshed = loadSession() ?? stored
-        setSession({ ...refreshed, ...profile })
-      })
+    const stored = loadSession()
+    const task = stored
+      ? getCurrentSession(stored.access_token).then((profile) => ({ ...stored, ...profile }))
+      : refreshCurrentSession()
+
+    void task
+      .then((next) => { if (active) setSession(next as Session) })
       .catch((reason) => {
-        if (!active || !loadSession()) return
-        toast({ message: reason instanceof Error ? `${reason.message}. Using the saved session until connectivity returns.` : 'Could not validate the saved session.', variant: 'warning' })
+        if (!active) return
+        if (stored && !(reason instanceof ApiError && reason.status === 401)) {
+          toast({ message: reason instanceof Error ? `${reason.message}. Using the saved session until connectivity returns.` : 'Could not validate the saved session.', variant: 'warning' })
+          setSession(stored)
+        }
       })
       .finally(() => { if (active) setInitializing(false) })
-
     return () => { active = false }
   }, [toast])
 
@@ -87,7 +86,8 @@ export default function App() {
   if (initializing) return <main className="app-boot-screen"><div className="app-boot-spinner" /><strong>Validating session…</strong></main>
 
   return (
-    <Routes>
+    <Suspense fallback={<main className="app-boot-screen"><div className="app-boot-spinner" /><strong>Loading page…</strong></main>}>
+      <Routes>
       <Route path="/login" element={session ? <Navigate to="/app" replace /> : <LoginPage notice={authNotice} onAuthenticated={handleAuthenticated} />} />
       <Route path="/app" element={session ? <AppShell session={session} onLogout={handleLogout} /> : <Navigate to="/login" replace />}>
         <Route index element={session ? <ProtectedRoute session={session} permissions={[PERMISSIONS.dashboard.view]}><Dashboard session={session} /></ProtectedRoute> : null} />
@@ -101,8 +101,10 @@ export default function App() {
         <Route path="solar-pricing" element={session && <ProtectedRoute session={session} permissions={[PERMISSIONS.pricing.view]}><SolarPricingPage session={session} /></ProtectedRoute>} />
         <Route path="inventory" element={session && <ProtectedRoute session={session} permissions={[PERMISSIONS.inventory.view]}><InventoryPage session={session} /></ProtectedRoute>} />
         <Route path="security/devices" element={session && <ProtectedRoute session={session} permissions={[PERMISSIONS.security.view]}><ActiveDevicesPage session={session} /></ProtectedRoute>} />
+        <Route path="archives" element={session && <ProtectedRoute session={session} permissions={[PERMISSIONS.archive.view]}><DataArchivePage session={session} /></ProtectedRoute>} />
       </Route>
       <Route path="*" element={<Navigate to={session ? '/app' : '/login'} replace />} />
-    </Routes>
+      </Routes>
+    </Suspense>
   )
 }

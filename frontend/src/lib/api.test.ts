@@ -29,7 +29,7 @@ describe('api client', () => {
   it('clears an expired session when secure-cookie refresh fails', async () => {
     const session: Session = {
       access_token: 'expired-token', token_type: 'bearer', expires_at: '2026-01-01T00:00:00Z',
-      user: { id: 'u1', username: 'user', email: 'user@example.com', full_name: 'User' },
+    user: { id: 'u1', username: 'user', email: 'user@example.com', full_name: 'User', is_super_admin: false },
       company: { id: 'c1', name: 'Solar EPC', code: 'SOLAR' }, role: 'viewer', permissions: ['dashboard.view'],
     }
     saveSession(session, true)

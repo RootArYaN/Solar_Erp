@@ -66,6 +66,16 @@ export const PERMISSIONS = {
   users: { view: 'users.view', edit: 'users.manage' },
   roles: { view: 'roles.view', edit: 'roles.manage' },
   security: { view: 'security.sessions.view', edit: 'security.sessions.manage' },
+  archive: {
+    view: 'archive.view',
+    create: 'archive.create',
+    download: 'archive.download',
+    verify: 'archive.verify',
+    cleanup: 'archive.cleanup',
+    restore: 'archive.restore',
+    purge: 'archive.purge',
+  },
+  events: { view: 'events.view' },
 } as const
 
 export type ModulePermissionKey = keyof typeof PERMISSIONS
@@ -82,7 +92,7 @@ export type ModuleAccess = {
 }
 
 function isPrivileged(session: Session): boolean {
-  return session.role === 'super_admin'
+  return session.user.is_super_admin || session.role === 'super_admin'
 }
 
 export function hasPermission(session: Session, permission: string): boolean {

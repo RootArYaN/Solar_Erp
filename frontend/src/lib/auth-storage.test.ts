@@ -4,7 +4,7 @@ import type { Session } from '../types'
 
 const session: Session = {
   access_token: 'token', token_type: 'bearer', expires_at: '2099-01-01T00:00:00Z', membership_id: 'm1',
-  user: { id: 'u1', username: 'test.user', email: 'user@example.com', full_name: 'Test User' },
+  user: { id: 'u1', username: 'test.user', email: 'user@example.com', full_name: 'Test User', is_super_admin: false },
   company: { id: 'c1', name: 'Solar EPC', code: 'SOLAR' }, role: 'company_admin', permissions: [],
 }
 

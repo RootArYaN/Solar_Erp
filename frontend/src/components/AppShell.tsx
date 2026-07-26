@@ -1,4 +1,4 @@
-import { BadgeIndianRupee, Boxes, Building2, ClipboardCheck, ContactRound, FileUp, ImageUp, LayoutDashboard, ListChecks, LogOut, Menu, PanelLeftClose, PanelLeftOpen, ShieldCheck, Users, UsersRound, X } from 'lucide-react'
+import { Archive, BadgeIndianRupee, Boxes, Building2, ClipboardCheck, ContactRound, FileUp, ImageUp, LayoutDashboard, ListChecks, LogOut, Menu, PanelLeftClose, PanelLeftOpen, ShieldCheck, Users, UsersRound, X } from 'lucide-react'
 import { useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { hasEveryPermission, hasPermission, PERMISSIONS } from '../lib/permissions'
@@ -21,6 +21,7 @@ export function AppShell({ session, onLogout }: { session: Session; onLogout: ()
     { to: '/app/posters', label: 'Posters', title: 'Poster upload', icon: ImageUp, permission: PERMISSIONS.posters.view },
     { to: '/app/solar-pricing', label: 'Solar pricing', title: 'Solar pricing', icon: BadgeIndianRupee, permission: PERMISSIONS.pricing.view },
     { to: '/app/security/devices', label: 'Devices', title: 'Active devices', icon: ShieldCheck, permission: PERMISSIONS.security.view },
+    { to: '/app/archives', label: 'Data archive', title: 'Archived data and event history', icon: Archive, permission: PERMISSIONS.archive.view },
   ]
 
   return (

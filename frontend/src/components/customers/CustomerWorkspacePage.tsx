@@ -11,6 +11,7 @@ import {
   RotateCcw,
   Search,
   Send,
+  Trash2,
 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { FieldErrors } from '../../contracts/api-contracts'
@@ -24,7 +25,6 @@ import { AlertDialog } from '../ui/AlertDialog'
 import { DataFreshness, EmptyState, ErrorState, LoadingSkeleton, ReadOnlyNotice } from '../ui/PageState'
 import { useToast } from '../ui/ToastProvider'
 
-const repository = createCustomerFlowRepository()
 const currency = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 })
 
 function decimalToNumber(value: string): number {
@@ -42,6 +42,7 @@ function currentRevision(snapshot: CustomerFlowSnapshot | null) {
 }
 
 export function CustomerWorkspacePage({ session }: { session: Session }) {
+  const repository = useMemo(() => createCustomerFlowRepository(session.access_token), [session.access_token])
   const [customers, setCustomers] = useState<Customer[]>([])
   const [selectedId, setSelectedId] = useState('')
   const [snapshot, setSnapshot] = useState<CustomerFlowSnapshot | null>(null)
@@ -134,23 +135,15 @@ export function CustomerWorkspacePage({ session }: { session: Session }) {
     if (!snapshot || !quotation) return
     setWorking(true)
     try {
-      setSnapshot(await repository.approveQuotation(snapshot.customer.id, quotation.id, approvalComment.trim()))
-      toast({ message: 'Quotation revision approved', variant: 'success' })
+      const next = await repository.approveQuotation(snapshot.customer.id, quotation.id, approvalComment.trim())
+      setSnapshot(next)
+      setCustomers((current) => current.map((customer) => customer.id === next.customer.id ? next.customer : customer))
+      setPurpose(next.material_request?.purpose ?? 'Initial project material allocation')
+      setNeededBy(next.material_request?.needed_at_site_by ?? '')
+      setMaterialLines(next.material_request?.lines ?? [])
+      toast({ message: next.project ? 'Quotation approved and linked project created' : 'Quotation approved', variant: 'success' })
     } catch (reason) {
       toast({ message: reason instanceof Error ? reason.message : 'Could not approve quotation', variant: 'error' })
-    } finally {
-      setWorking(false)
-    }
-  }
-
-  async function convertToProject() {
-    if (!snapshot || !quotation) return
-    setWorking(true)
-    try {
-      setSnapshot(await repository.createProject(snapshot.customer.id, quotation.id))
-      toast({ message: 'Project created from approved quotation', variant: 'success' })
-    } catch (reason) {
-      toast({ message: reason instanceof Error ? reason.message : 'Could not create project', variant: 'error' })
     } finally {
       setWorking(false)
     }
@@ -163,6 +156,12 @@ export function CustomerWorkspacePage({ session }: { session: Session }) {
 
   function updateMaterialLine(id: string, patch: Partial<MaterialRequestLine>) {
     setMaterialLines((current) => current.map((line) => line.id === id ? { ...line, ...patch } : line))
+    setDirty(true)
+  }
+
+  function removeMaterialLine(id: string) {
+    setMaterialLines((current) => current.filter((line) => line.id !== id))
+    setFieldErrors({})
     setDirty(true)
   }
 
@@ -266,11 +265,11 @@ export function CustomerWorkspacePage({ session }: { session: Session }) {
 
                   <article className={`flow-stage-card ${snapshot.project ? 'flow-stage-card--complete' : ''}`}>
                     <header><div className="flow-stage-number">3</div><div><span>Project</span><strong>{snapshot.project?.record_number ?? 'Not created'}</strong></div>{snapshot.project ? <CheckCircle2 className="flow-stage-check" size={17} /> : <LockKeyhole className="flow-stage-locked" size={16} />}</header>
-                    {!projectAccess.canView ? <EmptyState title="Restricted" /> : snapshot.project ? <div className="flow-stage-body"><h3>{snapshot.project.name}</h3><dl><div><dt>Status</dt><dd>{snapshot.project.status}</dd></div><div><dt>Capacity</dt><dd>{snapshot.project.capacity_kw} kW</dd></div><div><dt>Approved value</dt><dd>{currency.format(decimalToNumber(snapshot.project.approved_value))}</dd></div></dl></div> : <div className="flow-stage-body flow-stage-body--locked"><div className="locked-stage-message"><LockKeyhole size={18} /><div><strong>Quotation approval required</strong></div></div>{projectAccess.canCreate && <button className="primary-button primary-button--compact stage-action" onClick={() => void convertToProject()} disabled={working || revision?.status !== 'approved'}><Plus size={15} /> Create project</button>}</div>}
+                    {!projectAccess.canView ? <EmptyState title="Restricted" /> : snapshot.project ? <div className="flow-stage-body"><h3>{snapshot.project.name}</h3><dl><div><dt>Status</dt><dd>{snapshot.project.status}</dd></div><div><dt>Capacity</dt><dd>{snapshot.project.capacity_kw} kW</dd></div><div><dt>Approved value</dt><dd>{currency.format(decimalToNumber(snapshot.project.approved_value))}</dd></div></dl><div className="workflow-link-note"><CheckCircle2 size={13} /> Linked to {quotation?.record_number}</div></div> : <div className="flow-stage-body flow-stage-body--locked"><div className="locked-stage-message"><LockKeyhole size={18} /><div><strong>{revision?.status === 'approved' ? 'Creating linked project' : 'Quotation approval required'}</strong><span>{revision?.status === 'approved' ? 'Refresh if the project does not appear.' : 'Approval automatically creates the project record.'}</span></div></div></div>}
                   </article>
                 </section>
 
-                <section className="material-request-card">
+                <section className={`material-request-card ${snapshot.project ? 'material-request-card--enabled' : ''}`}>
                   <header><div><span>Next step</span><h2>Material request</h2>{snapshot.material_request?.record_number && <p>{snapshot.material_request.record_number}</p>}</div>{dirty && <small>Unsaved changes</small>}</header>
                   {!requestAccess.canView ? <EmptyState title="Restricted" /> : !snapshot.project ? <EmptyState title="Project required" /> : <>
                     <div className="material-request-meta">
@@ -278,7 +277,24 @@ export function CustomerWorkspacePage({ session }: { session: Session }) {
                       <label><span>Needed at site by</span><input type="date" value={neededBy} onChange={(event) => { setNeededBy(event.target.value); setDirty(true) }} disabled={!requestAccess.canEdit && !requestAccess.canCreate} /></label>
                     </div>
                     <div className="material-lines">
-                      {materialLines.map((line, index) => <div className="material-line" key={line.id}><input value={line.description} onChange={(event) => updateMaterialLine(line.id, { description: event.target.value })} placeholder="Material description" disabled={!requestAccess.canEdit && !requestAccess.canCreate} /><input value={line.requested_quantity} inputMode="decimal" onChange={(event) => updateMaterialLine(line.id, { requested_quantity: event.target.value })} aria-label="Requested quantity" disabled={!requestAccess.canEdit && !requestAccess.canCreate} /><input value={line.unit} onChange={(event) => updateMaterialLine(line.id, { unit: event.target.value })} aria-label="Unit" disabled={!requestAccess.canEdit && !requestAccess.canCreate} /><small className="field-error">{fieldErrors[`lines.${index}.description`]?.[0] ?? fieldErrors[`lines.${index}.requested_quantity`]?.[0]}</small></div>)}
+                      {materialLines.map((line, index) => (
+                        <div className="material-line" key={line.id}>
+                          <input value={line.description} onChange={(event) => updateMaterialLine(line.id, { description: event.target.value })} placeholder="Material description" disabled={!requestAccess.canEdit && !requestAccess.canCreate} />
+                          <input value={line.requested_quantity} inputMode="decimal" onChange={(event) => updateMaterialLine(line.id, { requested_quantity: event.target.value })} aria-label="Requested quantity" disabled={!requestAccess.canEdit && !requestAccess.canCreate} />
+                          <input value={line.unit} onChange={(event) => updateMaterialLine(line.id, { unit: event.target.value })} aria-label="Unit" disabled={!requestAccess.canEdit && !requestAccess.canCreate} />
+                          <button
+                            className="material-line-delete"
+                            type="button"
+                            onClick={() => removeMaterialLine(line.id)}
+                            disabled={materialLines.length === 1 || (!requestAccess.canEdit && !requestAccess.canCreate)}
+                            aria-label={`Delete material row ${index + 1}`}
+                            title={materialLines.length === 1 ? 'At least one material row is required' : 'Delete row'}
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                          <small className="field-error">{fieldErrors[`lines.${index}.description`]?.[0] ?? fieldErrors[`lines.${index}.requested_quantity`]?.[0]}</small>
+                        </div>
+                      ))}
                       {materialLines.length === 0 && <EmptyState title="No material lines" />}
                     </div>
                     <footer><button className="secondary-button" onClick={addMaterialLine} disabled={!requestAccess.canCreate && !requestAccess.canEdit}><Plus size={14} /> Add line</button><button className="primary-button primary-button--compact" onClick={() => void saveMaterialDraft()} disabled={working || (!requestAccess.canCreate && !requestAccess.canEdit)}><Send size={14} /> Save draft</button></footer>

@@ -19,15 +19,10 @@ function emitSessionChange(session: Session | null, reason?: SessionEndReason): 
   window.dispatchEvent(new CustomEvent(AUTH_SESSION_EVENT, { detail: { session, reason } }))
 }
 
-function storageFor(remember: boolean): Storage {
-  return remember ? localStorage : sessionStorage
-}
-
 export function saveSession(session: Session, remember: boolean): void {
   localStorage.removeItem(STORAGE_KEY)
-  sessionStorage.removeItem(STORAGE_KEY)
-  storageFor(remember).setItem(STORAGE_KEY, JSON.stringify(session))
-  localStorage.setItem(STORAGE_MODE_KEY, remember ? 'local' : 'session')
+  sessionStorage.setItem(STORAGE_KEY, JSON.stringify(session))
+  localStorage.setItem(STORAGE_MODE_KEY, remember ? 'persistent-cookie' : 'session-cookie')
   emitSessionChange(session)
 }
 
@@ -37,10 +32,8 @@ export function replaceSession(session: Session): void {
 }
 
 export function loadStoredSession(): StoredSession {
-  const local = localStorage.getItem(STORAGE_KEY)
-  const sessionValue = sessionStorage.getItem(STORAGE_KEY)
-  const raw = local ?? sessionValue
-  if (!raw) return { session: null, remember: localStorage.getItem(STORAGE_MODE_KEY) !== 'session' }
+  const raw = sessionStorage.getItem(STORAGE_KEY)
+  if (!raw) return { session: null, remember: localStorage.getItem(STORAGE_MODE_KEY) !== 'session-cookie' }
 
   try {
     const parsed = JSON.parse(raw) as Partial<Session>
@@ -53,7 +46,7 @@ export function loadStoredSession(): StoredSession {
       clearSession('invalid', false)
       return { session: null, remember: true }
     }
-    return { session: parsed as Session, remember: Boolean(local) }
+    return { session: parsed as Session, remember: localStorage.getItem(STORAGE_MODE_KEY) !== 'session-cookie' }
   } catch {
     clearSession('invalid', false)
     return { session: null, remember: true }

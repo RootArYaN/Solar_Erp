@@ -6,7 +6,7 @@ import { ProtectedRoute } from './ProtectedRoute'
 
 const base: Session = {
   access_token: 'token', token_type: 'bearer', expires_at: '2099-01-01T00:00:00Z',
-  user: { id: 'u1', username: 'user', email: 'user@example.com', full_name: 'User' }, company: { id: 'c1', name: 'Company', code: 'CO' }, role: 'viewer', permissions: [],
+  user: { id: 'u1', username: 'user', email: 'user@example.com', full_name: 'User', is_super_admin: false }, company: { id: 'c1', name: 'Company', code: 'CO' }, role: 'viewer', permissions: [],
 }
 
 describe('ProtectedRoute', () => {

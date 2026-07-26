@@ -39,11 +39,14 @@ export function QuotationBuilderDialog({ request, busy, onClose, onSubmit }: {
     await onSubmit({ title, valid_until: validUntil ? new Date(`${validUntil}T18:29:59Z`).toISOString() : null, lines })
   }
 
-  return <Modal title={request.quotation ? "Revise quotation" : "Generate quotation"} className="quotation-builder-modal" onClose={onClose}>
+  return <Modal className="quotation-builder-modal" title={request.quotation ? "Revise quotation" : "Generate quotation"} onClose={onClose}>
     <form className="admin-form quotation-builder" onSubmit={submit}>
       <div className="workflow-customer-strip"><strong>{request.customer_name}</strong><span>{request.agent_name} · {request.proposed_capacity_kw} kW</span></div>
       <div className="admin-form__grid"><label className="field"><span>Quotation title</span><input required value={title} onChange={(event) => setTitle(event.target.value)} /></label><label className="field"><span>Valid until</span><input type="date" value={validUntil} onChange={(event) => setValidUntil(event.target.value)} /></label></div>
       <div className="quotation-lines">
+        <div className="quotation-line quotation-line--header" aria-hidden="true">
+          <span>Description</span><span>Qty</span><span>Unit</span><span>Unit price</span><span>Tax %</span><span />
+        </div>
         {lines.map((line, index) => <div className="quotation-line" key={index}>
           <input required value={line.description} onChange={(event) => patchLine(index, { description: event.target.value })} placeholder="Line description" />
           <input required min="0.01" step="0.01" type="number" value={line.quantity} onChange={(event) => patchLine(index, { quantity: Number(event.target.value) })} aria-label="Quantity" />

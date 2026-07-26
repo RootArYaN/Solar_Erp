@@ -1,12 +1,13 @@
 import { Archive, Download, Eye, FileDown, FileSpreadsheet, FileText, Pencil, Printer, RotateCcw, Save, Upload, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { UploadStatus as UploadState } from '../../contracts/api-contracts'
+import { downloadStoredFile, getDocumentCustomerOptions, getStoredFiles, setStoredFileStatus, uploadStoredFile } from '../../lib/api'
 import { validateUpload } from '../../lib/file-validation'
 import { createBrowserStateRepository } from '../../lib/repositories/browser-state-repository'
 import { getModuleAccess } from '../../lib/permissions'
 import { useOnlineStatus } from '../../lib/use-online-status'
 import { useUnsavedChanges } from '../../lib/use-unsaved-changes'
-import type { Session } from '../../types'
+import type { DocumentCustomerOption, Session, StoredFile } from '../../types'
 import { UploadStatus } from '../files/UploadStatus'
 import { AlertDialog } from '../ui/AlertDialog'
 import { DataFreshness, ReadOnlyNotice } from '../ui/PageState'
@@ -426,6 +427,10 @@ export function CustomerDataUploadPage({ session }: { session: Session }) {
   const [supportingType, setSupportingType] = useState('aadhaar_front')
   const [customDocumentLabel, setCustomDocumentLabel] = useState('')
   const [supportingDocuments, setSupportingDocuments] = useState<SupportingDocument[]>([])
+  const [customerOptions, setCustomerOptions] = useState<DocumentCustomerOption[]>([])
+  const [linkedCustomerId, setLinkedCustomerId] = useState('')
+  const [savedFiles, setSavedFiles] = useState<StoredFile[]>([])
+  const [savedFilesLoading, setSavedFilesLoading] = useState(false)
   useUnsavedChanges(dirty || supportingDocuments.length > 0 || Boolean(signature))
   const fileInputRef = useRef<HTMLInputElement>(null)
   const signatureInputRef = useRef<HTMLInputElement>(null)
@@ -441,6 +446,40 @@ export function CustomerDataUploadPage({ session }: { session: Session }) {
     supportingDocumentsRef.current.forEach((document) => URL.revokeObjectURL(document.url))
   }, [])
 
+  useEffect(() => {
+    let active = true
+    void getDocumentCustomerOptions()
+      .then((items) => {
+        if (!active) return
+        setCustomerOptions(items)
+        setLinkedCustomerId((current) => current || items[0]?.id || '')
+      })
+      .catch((reason) => {
+        if (active) toast({ message: reason instanceof Error ? reason.message : 'Could not load ERP customers', variant: 'error' })
+      })
+    return () => { active = false }
+  }, [toast])
+
+  useEffect(() => {
+    let active = true
+    if (!linkedCustomerId) {
+      setSavedFiles([])
+      return () => { active = false }
+    }
+    setSavedFilesLoading(true)
+    void getStoredFiles('customer_document', linkedCustomerId)
+      .then((result) => { if (active) setSavedFiles(result.data) })
+      .catch((reason) => {
+        if (active) toast({ message: reason instanceof Error ? reason.message : 'Could not load saved documents', variant: 'error' })
+      })
+      .finally(() => { if (active) setSavedFilesLoading(false) })
+    return () => { active = false }
+  }, [linkedCustomerId, toast])
+
+  const linkedCustomer = useMemo(
+    () => customerOptions.find((item) => item.id === linkedCustomerId) ?? null,
+    [customerOptions, linkedCustomerId],
+  )
 
   const completedFields = useMemo(
     () => Object.values(data).filter((value) => value.trim()).length,
@@ -533,6 +572,10 @@ export function CustomerDataUploadPage({ session }: { session: Session }) {
   }
 
   function chooseSupportingDocuments() {
+    if (!linkedCustomer) {
+      toast({ message: 'Select an ERP customer before uploading documents', variant: 'warning' })
+      return
+    }
     if (!data.name.trim()) {
       toast({ message: 'Enter the customer name before uploading documents', variant: 'warning' })
       return
@@ -540,57 +583,123 @@ export function CustomerDataUploadPage({ session }: { session: Session }) {
     supportingInputRef.current?.click()
   }
 
-  function handleSupportingDocuments(files?: FileList | null) {
-    if (!files?.length) return
+  async function handleSupportingDocuments(files?: FileList | null) {
+    if (!files?.length || !linkedCustomer) return
     const selectedType = supportingDocumentTypes.find((type) => type.value === supportingType)
     const label = supportingType === 'other'
       ? customDocumentLabel.trim() || 'Other Document'
       : selectedType?.label ?? 'Supporting Document'
-    const accepted: SupportingDocument[] = []
+    const accepted: { file: File; document: SupportingDocument }[] = []
     const rejected: string[] = []
 
     Array.from(files).forEach((file) => {
-      const validation = validateUpload(file, { maxBytes: 10 * 1024 * 1024, allowedMimeTypes: ['image/*', 'application/pdf'] })
+      const validation = validateUpload(file, { maxBytes: 10 * 1024 * 1024, allowedMimeTypes: ['image/png', 'image/jpeg', 'application/pdf'] })
       if ('message' in validation) {
         rejected.push(validation.message)
         return
       }
       accepted.push({
-        id: crypto.randomUUID(),
-        type: supportingType,
-        label,
-        name: file.name,
-        size: file.size,
-        mimeType: file.type,
-        url: URL.createObjectURL(file),
-        status: 'ready',
-        progress: 100,
-        failureMessage: null,
-        previewExpiresAt: null,
-        archivedAt: null,
+        file,
+        document: {
+          id: crypto.randomUUID(),
+          type: supportingType,
+          label,
+          name: file.name,
+          size: file.size,
+          mimeType: file.type,
+          url: URL.createObjectURL(file),
+          status: 'uploading',
+          progress: 15,
+          failureMessage: null,
+          previewExpiresAt: null,
+          archivedAt: null,
+        },
       })
     })
 
     if (accepted.length) {
-      setSupportingDocuments((current) => [...current, ...accepted])
+      setSupportingDocuments((current) => [...current, ...accepted.map((item) => item.document)])
       setDirty(true)
-      toast({ message: `${accepted.length} document${accepted.length === 1 ? '' : 's'} added`, variant: 'success' })
+      const results = await Promise.allSettled(accepted.map(async ({ file, document }) => {
+        const stored = await uploadStoredFile({
+          file,
+          ownerType: 'customer_document',
+          ownerId: linkedCustomer.id,
+          customerId: linkedCustomer.id,
+          projectId: linkedCustomer.project_id || undefined,
+        })
+        return { temporaryId: document.id, stored }
+      }))
+
+      let savedCount = 0
+      results.forEach((result, index) => {
+        const temporaryId = accepted[index].document.id
+        if (result.status === 'fulfilled') {
+          savedCount += 1
+          const stored = result.value.stored
+          setSupportingDocuments((current) => current.map((item) => item.id === temporaryId
+            ? { ...item, id: stored.id, status: 'ready', progress: 100, failureMessage: null }
+            : item))
+          setSavedFiles((current) => [stored, ...current.filter((item) => item.id !== stored.id)])
+        } else {
+          const message = result.reason instanceof Error ? result.reason.message : 'Secure upload failed'
+          setSupportingDocuments((current) => current.map((item) => item.id === temporaryId
+            ? { ...item, status: 'failed', progress: 0, failureMessage: message }
+            : item))
+        }
+      })
+      if (savedCount) toast({ message: `${savedCount} document${savedCount === 1 ? '' : 's'} saved securely`, variant: 'success' })
     }
     if (rejected.length) toast({ message: `Skipped: ${rejected.join('; ')}`, variant: 'warning' })
     if (supportingInputRef.current) supportingInputRef.current.value = ''
   }
 
 
-  function toggleSupportingDocumentArchive() {
+  async function toggleSupportingDocumentArchive() {
     if (!documentToArchive) return
-    const restoring = Boolean(documentToArchive.archivedAt)
-    setSupportingDocuments((current) => current.map((item) => item.id === documentToArchive.id
-      ? { ...item, archivedAt: restoring ? null : new Date().toISOString(), status: restoring ? 'ready' : 'cancelled', progress: restoring ? 100 : item.progress }
-      : item))
-    setDirty(true)
-    toast({ message: `${documentToArchive.label} ${restoring ? 'restored' : 'archived'}`, variant: 'success' })
-    setDocumentToArchive(null)
+    const target = documentToArchive
+    const restoring = Boolean(target.archivedAt)
+    try {
+      const isSaved = savedFiles.some((item) => item.id === target.id)
+      if (!isSaved) {
+        setSupportingDocuments((current) => current.filter((item) => item.id !== target.id))
+        URL.revokeObjectURL(target.url)
+        toast({ message: `${target.label} removed`, variant: 'success' })
+        return
+      }
+      const stored = await setStoredFileStatus(target.id, restoring ? 'active' : 'archived')
+      setSupportingDocuments((current) => current.map((item) => item.id === target.id
+        ? { ...item, archivedAt: stored.archived_at, status: restoring ? 'ready' : 'cancelled', progress: restoring ? 100 : item.progress }
+        : item))
+      setSavedFiles((current) => current.map((item) => item.id === stored.id ? stored : item))
+      setDirty(true)
+      toast({ message: `${target.label} ${restoring ? 'restored' : 'archived'}`, variant: 'success' })
+    } catch (reason) {
+      toast({ message: reason instanceof Error ? reason.message : 'Could not update document', variant: 'error' })
+    } finally {
+      setDocumentToArchive(null)
+    }
   }
+
+  async function toggleSavedFile(file: StoredFile) {
+    try {
+      const next = await setStoredFileStatus(file.id, file.status === 'archived' ? 'active' : 'archived')
+      setSavedFiles((current) => current.map((item) => item.id === next.id ? next : item))
+      toast({ message: `${file.name} ${next.status === 'archived' ? 'archived' : 'restored'}`, variant: 'success' })
+    } catch (reason) {
+      toast({ message: reason instanceof Error ? reason.message : 'Could not update document', variant: 'error' })
+    }
+  }
+
+  async function downloadSavedFile(file: StoredFile) {
+    try {
+      await downloadStoredFile(file.id, file.name)
+      toast({ message: `Downloading ${file.name}`, variant: 'info' })
+    } catch (reason) {
+      toast({ message: reason instanceof Error ? reason.message : 'Could not download document', variant: 'error' })
+    }
+  }
+
 
   function downloadTemplate() {
     const headers = Object.keys(initialData)
@@ -653,6 +762,19 @@ export function CustomerDataUploadPage({ session }: { session: Session }) {
 
         <div className="customer-doc-form-scroll">
           <FormSection title="Customer Information">
+            <label className="customer-doc-field">
+              <span>ERP customer *</span>
+              <select disabled={!canModify || customerOptions.length === 0} value={linkedCustomerId} onChange={(event) => {
+                const nextId = event.target.value
+                setLinkedCustomerId(nextId)
+                const option = customerOptions.find((item) => item.id === nextId)
+                if (option && !data.name.trim()) setField('name', option.customer_name)
+              }}>
+                <option value="">Select customer</option>
+                {customerOptions.map((option) => <option value={option.id} key={option.id}>{option.customer_name}{option.project_number ? ` · ${option.project_number}` : ''}</option>)}
+              </select>
+              <small>{linkedCustomer?.project_number ? `Documents will be linked to ${linkedCustomer.project_number}` : 'Customer-level documents will be saved without a project link.'}</small>
+            </label>
             <DocField disabled={!canModify} label="Full Name of Consumer *" value={data.name} onChange={(value) => setField('name', value)} />
             <DocField disabled={!canModify} label="Address of Installation *" value={data.address} multiline onChange={(value) => setField('address', value)} />
             <div className="customer-doc-field-row">
@@ -704,12 +826,12 @@ export function CustomerDataUploadPage({ session }: { session: Session }) {
               <input
                 ref={supportingInputRef}
                 type="file"
-                accept="image/*,application/pdf"
+                accept="image/png,image/jpeg,application/pdf"
                 multiple
                 hidden
-                onChange={(event) => handleSupportingDocuments(event.target.files)}
+                onChange={(event) => void handleSupportingDocuments(event.target.files)}
               />
-              <small>Images or PDF · 10 MB max</small>
+              <small>PNG, JPG or PDF · 10 MB max</small>
             </div>
 
             {supportingDocuments.length > 0 && (
@@ -734,6 +856,25 @@ export function CustomerDataUploadPage({ session }: { session: Session }) {
                     </div>
                   </article>
                 ))}
+              </div>
+            )}
+
+            {(savedFilesLoading || savedFiles.some((file) => !supportingDocuments.some((document) => document.id === file.id))) && (
+              <div className="saved-document-block">
+                <div className="saved-document-block__title"><strong>Saved documents</strong><small>Stored in the ERP and included in linked archives.</small></div>
+                {savedFilesLoading && <div className="saved-document-empty">Loading saved documents…</div>}
+                {!savedFilesLoading && <div className="supporting-doc-list">
+                  {savedFiles.filter((file) => !supportingDocuments.some((document) => document.id === file.id)).map((file) => (
+                    <article className={file.status === 'archived' ? 'is-archived' : ''} key={file.id}>
+                      <div className="supporting-doc-thumbnail"><FileText size={20} /></div>
+                      <div><strong>{file.name}</strong><span>{file.mime_type}</span><small>{(file.size_bytes / 1024).toFixed(0)} KB · {file.status}</small></div>
+                      <div className="supporting-doc-actions">
+                        {file.status !== 'archived' && <button onClick={() => void downloadSavedFile(file)} title="Download"><Download size={13} /></button>}
+                        <button disabled={!access.canArchive} onClick={() => void toggleSavedFile(file)} title={file.status === 'archived' ? 'Restore' : 'Archive'}>{file.status === 'archived' ? <RotateCcw size={13} /> : <Archive size={13} />}</button>
+                      </div>
+                    </article>
+                  ))}
+                </div>}
               </div>
             )}
           </FormSection>

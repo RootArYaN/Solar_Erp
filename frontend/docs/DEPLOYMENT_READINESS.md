@@ -1,0 +1,78 @@
+# Deployment readiness
+
+## Ready before cloud integration
+
+- Central `/api/v1` frontend client
+- Same-origin Vite proxy for local work
+- Strict configurable CORS
+- Environment validation
+- Secure refresh cookie
+- Revocable sessions
+- Database migrations separated from production startup
+- Health and readiness endpoints
+- Private local storage root
+- Streaming uploads/downloads
+- Database-backed archive jobs
+- Standalone worker command
+- Pagination and archive/event indexes
+- Route-based frontend code splitting
+- Production source maps disabled
+- Production API docs disabled
+- Request IDs, safe errors and security headers
+
+## Recommended local commands
+
+```bash
+python -m app.db.migrate upgrade
+python -m app.db.maintenance
+uvicorn app.main:app --host 127.0.0.1 --port 8000
+python -m app.workers.archive_worker
+```
+
+Frontend development continues through the existing Vite project. The supplied `vite.config.ts` proxies `/api` to `127.0.0.1:8000`.
+
+## Cloud target later
+
+```text
+Static frontend/CDN
+        ↓ same public origin
+Reverse proxy
+        ├── /        → React assets
+        └── /api/v1  → FastAPI
+                         ↓
+                    Managed PostgreSQL
+                         ↓
+                    Private object storage
+                         ↑
+                    Archive worker
+```
+
+## Before the first public release
+
+1. Put the patched source into the complete repository.
+2. Install from the lockfile and run the production frontend build.
+3. Run the migration against a database copy.
+4. Verify archive creation and restore with representative documents.
+5. Configure HTTPS and secure cookies.
+6. Configure a non-default private secret.
+7. Keep database and storage private from the public internet.
+8. Configure backups and test one restore.
+9. Add gateway rate limiting and upload malware scanning.
+10. Replace local storage with an S3-compatible adapter before using ephemeral containers.
+
+## Container notes
+
+- Run as a non-root user.
+- Keep application files read-only.
+- Mount only `STORAGE_PATH` and a small temp directory as writable.
+- Run API and worker as separate process types from the same image.
+- Execute migrations as a release command, not in every production API process.
+- Do not use temporary container disk as the permanent archive store.
+
+## Frontend build limitation in this delivery
+
+The frontend baseline ZIP provided only source files and did not include `package.json`, a lockfile or installed modules. Compiler syntax transpilation passed for all 61 TypeScript/TSX files, but the final Vite bundle must be built from the complete repository before deployment.
+
+## Backend packaging limitation in this delivery
+
+The backend source ZIP also does not include a dependency lockfile or container definition. Python imports and targeted workflows passed in the available runtime. Build the production image from the complete repository with pinned dependencies.

@@ -24,6 +24,7 @@ export function LoginForm({ onAuthenticated, notice }: { onAuthenticated: (sessi
       const session = await login({
         username: username.trim(),
         password,
+        remember,
       })
       saveSession(session, remember)
       toast({ message: 'Signed in successfully', variant: 'success' })
