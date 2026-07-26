@@ -35,17 +35,26 @@ export type CustomerContact = {
   is_primary: boolean
 }
 
-export type CustomerStatus = 'lead' | 'qualified' | 'active' | 'on_hold' | 'completed'
+export type CustomerStatus = 'lead' | 'registered' | 'quotation_requested' | 'qualified' | 'active' | 'on_hold' | 'completed'
 
 export type Customer = EntityBase & {
   display_name: string
   legal_name: string
-  customer_type: 'individual' | 'business'
+  customer_type: 'residential' | 'commercial' | 'society' | 'institutional'
   status: CustomerStatus
   primary_contact_id: UUID | null
   contacts: CustomerContact[]
   addresses: Address[]
   assigned_agent_id: UUID | null
+  alternate_phone: string
+  billing_address: string
+  site_address: string
+  district: string
+  state: string
+  postal_code: string
+  consumer_number: string
+  electricity_provider: string
+  lead_source: string
 }
 
 export type SiteStatus = 'survey_pending' | 'surveyed' | 'quotation_ready' | 'approved' | 'converted'
@@ -118,6 +127,16 @@ export type Project = EntityBase & {
   planned_start_date: string | null
   target_completion_date: string | null
   project_manager_id: UUID | null
+  site_address: string
+  payment_mode: '' | 'cash' | 'loan'
+  loan_status: string
+  documentation_status: string
+  registration_status: string
+  material_status: string
+  installation_status: string
+  dcr_status: string
+  subsidy_status: string
+  subsidiary_payment_status: string
 }
 
 export type MaterialRequestStatus = 'draft' | 'submitted' | 'approved' | 'issued' | 'cancelled'
@@ -141,10 +160,76 @@ export type MaterialRequest = EntityBase & {
   lines: MaterialRequestLine[]
 }
 
+export type CustomerDocument = {
+  id: UUID
+  name: string
+  owner_type: string
+  status: string
+  project_id: UUID | null
+  created_at: UTCTimestamp
+}
+
+export type CustomerPayment = {
+  id: UUID
+  transaction_number: string
+  transaction_date: string
+  direction: 'credit' | 'debit'
+  amount: DecimalString
+  source_type: string
+  description: string
+  payment_method: string
+  account_name: string
+  reference_number: string
+  status: string
+}
+
+export type CustomerLoan = {
+  id: UUID
+  project_id: UUID
+  bank_name: string
+  application_number: string
+  requested_amount: DecimalString
+  approved_amount: DecimalString
+  customer_contribution: DecimalString
+  application_status: string
+  documentation_status: string
+  first_disbursement_amount: DecimalString
+  second_disbursement_amount: DecimalString
+  emi_amount: DecimalString
+  loan_status: string
+  note: string
+}
+
+export type CustomerActivity = {
+  id: UUID
+  event: string
+  entity: string
+  project_id: UUID | null
+  changes: Record<string, unknown>
+  user_role: string
+  created_at: UTCTimestamp
+}
+
+export type CustomerTimelineStep = {
+  key: string
+  name: string
+  status: string
+  event_date: string | null
+  completed_at: UTCTimestamp | null
+  note: string
+  updated_by: string
+}
+
 export type CustomerFlowSnapshot = {
   customer: Customer
   sites: CustomerSite[]
   quotations: Quotation[]
+  projects: Project[]
   project: Project | null
   material_request: MaterialRequest | null
+  timeline: CustomerTimelineStep[]
+  documents: CustomerDocument[]
+  payments: CustomerPayment[]
+  loan: CustomerLoan | null
+  activity: CustomerActivity[]
 }

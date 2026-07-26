@@ -1,256 +1,55 @@
-import { Archive, Download, Eye, FileImage, FileText, RotateCcw, Search, Upload, X } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
-import type { UploadStatus as UploadState } from '../../contracts/api-contracts'
-import { validateUpload } from '../../lib/file-validation'
+import { Archive, Download, FileImage, ImageUp, LoaderCircle, RefreshCw, RotateCcw } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
+import type { FormEvent } from 'react'
+import { createPoster, getPosters, setPosterStatus } from '../../api/operations'
+import { downloadStoredFile, uploadStoredFile } from '../../api/files'
+import type { Poster } from '../../erp-types'
 import { getModuleAccess } from '../../lib/permissions'
-import { useOnlineStatus } from '../../lib/use-online-status'
-import { useUnsavedChanges } from '../../lib/use-unsaved-changes'
 import type { Session } from '../../types'
-import { UploadStatus } from '../files/UploadStatus'
-import { AlertDialog } from '../ui/AlertDialog'
-import { DataFreshness, ReadOnlyNotice } from '../ui/PageState'
+import { Modal } from '../admin/Modal'
+import { EmptyState, ErrorState, LoadingSkeleton, ReadOnlyNotice } from '../ui/PageState'
 import { useToast } from '../ui/ToastProvider'
 
-type PosterFile = {
-  id: string
-  name: string
-  title: string
-  type: string
-  size: number
-  url: string
-  kind: 'image' | 'pdf'
-  status: UploadState
-  progress: number
-  failureMessage: string | null
-  previewExpiresAt: string | null
-  archivedAt: string | null
-}
-
-type PosterFilter = 'all' | 'image' | 'pdf' | 'archived'
-
-const acceptedPosterFormats = '.jpg,.jpeg,.png,.webp,.gif,.svg,.avif,.bmp,.pdf,image/*,application/pdf'
-
-function posterTitle(filename: string) {
-  return filename
-    .replace(/\.[^.]+$/, '')
-    .replaceAll(/[_-]+/g, ' ')
-    .replace(/\b\w/g, (letter) => letter.toUpperCase())
-}
-
-function fileSize(bytes: number) {
-  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-}
+const date = new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium' })
 
 export function PosterUploadPage({ session }: { session: Session }) {
-  const [posters, setPosters] = useState<PosterFile[]>([])
-  const [search, setSearch] = useState('')
-  const [filter, setFilter] = useState<PosterFilter>('all')
-  const [dragActive, setDragActive] = useState(false)
-  const [previewPoster, setPreviewPoster] = useState<PosterFile | null>(null)
-  const [posterToArchive, setPosterToArchive] = useState<PosterFile | null>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
-  const postersRef = useRef<PosterFile[]>([])
-  const { toast } = useToast()
+  const [posters, setPosters] = useState<Poster[] | null>(null)
+  const [status, setStatus] = useState<'active' | 'archived' | 'draft'>('active')
+  const [uploadOpen, setUploadOpen] = useState(false)
+  const [working, setWorking] = useState(false)
+  const [error, setError] = useState('')
   const access = getModuleAccess(session, 'posters')
-  const online = useOnlineStatus()
-  useUnsavedChanges(posters.length > 0)
+  const { toast } = useToast()
 
-  useEffect(() => {
-    postersRef.current = posters
-  }, [posters])
+  const load = useCallback(async () => { setError(''); try { setPosters(await getPosters(status)) } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not load posters') } }, [status])
+  useEffect(() => { void load() }, [load])
 
-  useEffect(() => () => {
-    postersRef.current.forEach((poster) => URL.revokeObjectURL(poster.url))
-  }, [])
-
-  const visiblePosters = useMemo(() => {
-    const term = search.trim().toLowerCase()
-    return posters.filter((poster) => (
-      (filter === 'archived' ? Boolean(poster.archivedAt) : !poster.archivedAt && (filter === 'all' || poster.kind === filter))
-      && (!term || `${poster.title} ${poster.name}`.toLowerCase().includes(term))
-    ))
-  }, [filter, posters, search])
-
-  function addPosters(files?: FileList | File[] | null) {
-    if (!files || files.length === 0) return
-    const accepted: PosterFile[] = []
-    const rejected: string[] = []
-
-    Array.from(files).forEach((file) => {
-      const kind = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf') ? 'pdf' : 'image'
-      const validation = validateUpload(file, { maxBytes: 25 * 1024 * 1024, allowedMimeTypes: ['image/*', 'application/pdf'] })
-      if ('message' in validation) {
-        rejected.push(validation.message)
-        return
-      }
-      accepted.push({
-        id: crypto.randomUUID(),
-        name: file.name,
-        title: posterTitle(file.name),
-        type: file.type || file.name.split('.').pop()?.toUpperCase() || 'File',
-        size: file.size,
-        url: URL.createObjectURL(file),
-        kind,
-        status: 'pending',
-        progress: 0,
-        failureMessage: null,
-        previewExpiresAt: null,
-        archivedAt: null,
-      })
-    })
-
-    if (accepted.length) {
-      setPosters((current) => [...accepted, ...current])
-      toast({ message: `${accepted.length} poster${accepted.length === 1 ? '' : 's'} added`, variant: 'success' })
-    }
-    if (rejected.length) {
-      toast({ message: `Skipped: ${rejected.join('; ')}`, variant: 'warning' })
-    }
-    if (inputRef.current) inputRef.current.value = ''
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setWorking(true)
+    const form = event.currentTarget; const values = new FormData(form); const file = values.get('file')
+    if (!(file instanceof File) || !file.size) { toast({ message: 'Choose a poster file', variant: 'warning' }); setWorking(false); return }
+    try {
+      const stored = await uploadStoredFile({ file, ownerType: 'poster', ownerId: session.company.id })
+      await createPoster({ title: String(values.get('title') || file.name), description: String(values.get('description') || ''), category: String(values.get('category') || 'General'), file_id: stored.id })
+      setUploadOpen(false); await load(); toast({ message: 'Poster uploaded to the shared library', variant: 'success' })
+    } catch (reason) { toast({ message: reason instanceof Error ? reason.message : 'Could not upload poster', variant: 'error' }) }
+    finally { setWorking(false) }
   }
 
-
-  function retryPoster(id: string) {
-    setPosters((current) => current.map((poster) => poster.id === id
-      ? { ...poster, status: 'pending', progress: 0, failureMessage: null }
-      : poster))
-    toast({ message: 'Upload queued for retry when the signed upload endpoint is connected', variant: 'info' })
+  async function change(row: Poster, next: Poster['status']) {
+    try { await setPosterStatus(row.id, next); await load(); toast({ message: next === 'archived' ? 'Poster archived' : 'Poster restored', variant: 'success' }) }
+    catch (reason) { toast({ message: reason instanceof Error ? reason.message : 'Could not update poster', variant: 'error' }) }
   }
 
-  function togglePosterArchive() {
-    if (!posterToArchive) return
-    const restoring = Boolean(posterToArchive.archivedAt)
-    setPosters((current) => current.map((item) => item.id === posterToArchive.id
-      ? { ...item, archivedAt: restoring ? null : new Date().toISOString(), status: restoring ? 'pending' : 'cancelled', progress: restoring ? 0 : item.progress }
-      : item))
-    if (!restoring && previewPoster?.id === posterToArchive.id) setPreviewPoster(null)
-    toast({ message: `${posterToArchive.title} ${restoring ? 'restored' : 'archived'}`, variant: 'success' })
-    setPosterToArchive(null)
-  }
+  if (!posters && !error) return <section className="erp-page"><LoadingSkeleton rows={6} /></section>
+  if (!posters) return <section className="erp-page"><ErrorState message={error} onRetry={() => void load()} /></section>
 
-  function renamePoster(id: string, title: string) {
-    setPosters((current) => current.map((poster) => poster.id === id ? { ...poster, title } : poster))
-  }
+  return <section className="erp-page">
+    <header className="erp-page-head"><div><span>Marketing library</span><h1>Posters</h1><p>Persistent campaign files available to authorized agents and admins.</p></div><div className="erp-head-actions"><button className="secondary-button" onClick={() => void load()}><RefreshCw size={15} /> Refresh</button>{access.canCreate && <button className="primary-button" onClick={() => setUploadOpen(true)}><ImageUp size={15} /> Upload poster</button>}</div></header>
+    {access.readOnly && <ReadOnlyNotice />}
+    <div className="erp-tabs">{(['active', 'archived', 'draft'] as const).map((value) => <button className={status === value ? 'is-active' : ''} key={value} onClick={() => setStatus(value)}>{value[0].toUpperCase() + value.slice(1)}</button>)}</div>
+    {posters.length ? <div className="poster-grid poster-grid--persistent">{posters.map((row) => <article className="poster-card" key={row.id}><div className="poster-card__preview"><FileImage size={34} /><span>{row.mime_type === 'application/pdf' ? 'PDF poster' : 'Image poster'}</span></div><div className="poster-card__body"><span className="soft-badge">{row.category}</span><h2>{row.title}</h2><p>{row.description || row.file_name}</p><small>Uploaded {date.format(new Date(row.created_at))}</small></div><footer><button className="secondary-button" onClick={() => void downloadStoredFile(row.file_id, row.file_name)}><Download size={14} /> Download</button>{row.status === 'archived' ? access.canEdit && <button className="secondary-button" onClick={() => void change(row, 'active')}><RotateCcw size={14} /> Restore</button> : access.canArchive && <button className="secondary-button" onClick={() => void change(row, 'archived')}><Archive size={14} /> Archive</button>}</footer></article>)}</div> : <EmptyState title={`No ${status} posters`} message="Upload a campaign poster or change the selected status." />}
 
-  function notifyDownload(poster: PosterFile) {
-    toast({ message: `Downloading ${poster.name}`, variant: 'info' })
-  }
-
-  return (
-    <>
-      <section className="poster-page">
-        <DataFreshness offline={!online} stale updatedAt={null} />
-        {access.readOnly && <ReadOnlyNotice />}
-        <header className="poster-toolbar">
-          <div><strong>Posters</strong></div>
-          <div className="poster-toolbar__controls">
-            <div className="search-control poster-search">
-              <Search size={15} />
-              <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search posters" />
-            </div>
-            <div className="poster-filter" aria-label="Poster type filter">
-              {(['all', 'image', 'pdf', 'archived'] as PosterFilter[]).map((value) => (
-                <button key={value} className={filter === value ? 'active' : ''} onClick={() => setFilter(value)}>
-                  {value === 'all' ? 'All' : value === 'image' ? 'Images' : value === 'pdf' ? 'PDF' : 'Archived'}
-                </button>
-              ))}
-            </div>
-            <button className="primary-button primary-button--compact" disabled={!access.canCreate} onClick={() => inputRef.current?.click()}><Upload size={15} /> Upload</button>
-            <input ref={inputRef} type="file" accept={acceptedPosterFormats} multiple hidden onChange={(event) => addPosters(event.target.files)} />
-          </div>
-        </header>
-
-        <div
-          className={`poster-drop-zone ${dragActive ? 'poster-drop-zone--active' : ''}`}
-          onDragEnter={(event) => { event.preventDefault(); setDragActive(true) }}
-          onDragOver={(event) => event.preventDefault()}
-          onDragLeave={(event) => {
-            if (!event.currentTarget.contains(event.relatedTarget as Node)) setDragActive(false)
-          }}
-          onDrop={(event) => {
-            event.preventDefault()
-            if (!access.canCreate) return
-            setDragActive(false)
-            addPosters(event.dataTransfer.files)
-          }}
-        >
-          <Upload size={18} />
-          <span>Drop posters here</span>
-          <small>Images or PDF · 25 MB max</small>
-        </div>
-
-        <div className="poster-library-heading">
-          <span>{visiblePosters.length} / {posters.length}</span>
-        </div>
-
-        <div className="poster-grid">
-          {visiblePosters.map((poster) => (
-            <article className={`poster-card ${poster.archivedAt ? 'is-archived' : ''}`} key={poster.id}>
-              <button className="poster-frame" disabled={Boolean(poster.archivedAt)} onClick={() => setPreviewPoster(poster)} aria-label={`Preview ${poster.title}`}>
-                <div className="poster-frame__mat">
-                  {poster.kind === 'image'
-                    ? <img src={poster.url} alt={poster.title} />
-                    : <object data={`${poster.url}#toolbar=0&navpanes=0&scrollbar=0`} type="application/pdf" tabIndex={-1} aria-label={poster.title}>
-                        <FileText size={36} />
-                      </object>}
-                </div>
-                <span className={`poster-format poster-format--${poster.kind}`}>{poster.kind === 'pdf' ? 'PDF' : 'IMAGE'}</span>
-              </button>
-              <div className="poster-card__details">
-                <input disabled={!access.canEdit || Boolean(poster.archivedAt)} value={poster.title} onChange={(event) => renamePoster(poster.id, event.target.value)} aria-label="Poster title" />
-                <span title={poster.name}>{poster.name}</span>
-                <small>{fileSize(poster.size)}</small>
-                {poster.archivedAt ? <small>Archived · restorable</small> : <UploadStatus status={poster.status} progress={poster.progress} failureMessage={poster.failureMessage} onRetry={() => retryPoster(poster.id)} onCancel={access.canArchive ? () => setPosterToArchive(poster) : undefined} />}
-              </div>
-              <div className="poster-card__actions">
-                {!poster.archivedAt && <button onClick={() => setPreviewPoster(poster)} title="Preview" aria-label={`Preview ${poster.title}`}><Eye size={14} /></button>}
-                {!poster.archivedAt && <a href={poster.url} download={poster.name} onClick={() => notifyDownload(poster)} title="Download" aria-label={`Download ${poster.title}`}><Download size={14} /></a>}
-                <button onClick={() => setPosterToArchive(poster)} disabled={!access.canArchive} title={poster.archivedAt ? 'Restore' : 'Archive'} aria-label={`${poster.archivedAt ? 'Restore' : 'Archive'} ${poster.title}`}>{poster.archivedAt ? <RotateCcw size={14} /> : <Archive size={14} />}</button>
-              </div>
-            </article>
-          ))}
-
-          {visiblePosters.length === 0 && (
-            <button className="poster-empty-card" disabled={!access.canCreate} onClick={() => inputRef.current?.click()}>
-              <div><FileImage size={27} /></div>
-              <strong>{posters.length ? 'No matches' : 'Upload poster'}</strong>
-            </button>
-          )}
-        </div>
-      </section>
-
-      {previewPoster && (
-        <div className="poster-preview-layer" role="presentation" onMouseDown={(event) => {
-          if (event.target === event.currentTarget) setPreviewPoster(null)
-        }}>
-          <section className="poster-preview-dialog" role="dialog" aria-modal="true" aria-label={`Preview ${previewPoster.title}`}>
-            <header>
-              <div><strong>{previewPoster.title}</strong><span>{fileSize(previewPoster.size)}</span></div>
-              <div>
-                <a href={previewPoster.url} download={previewPoster.name} onClick={() => notifyDownload(previewPoster)}><Download size={15} /> Download</a>
-                <button onClick={() => setPreviewPoster(null)} aria-label="Close poster preview"><X size={17} /></button>
-              </div>
-            </header>
-            <div className="poster-preview-content">
-              {previewPoster.kind === 'image'
-                ? <img src={previewPoster.url} alt={previewPoster.title} />
-                : <object data={previewPoster.url} type="application/pdf" aria-label={previewPoster.title}>
-                    <p>Preview unavailable. <a href={previewPoster.url} target="_blank" rel="noreferrer">Open PDF</a></p>
-                  </object>}
-            </div>
-          </section>
-        </div>
-      )}
-
-      <AlertDialog
-        open={Boolean(posterToArchive)}
-        title={`${posterToArchive?.archivedAt ? 'Restore' : 'Archive'} ${posterToArchive?.title ?? 'poster'}?`}
-        confirmLabel={posterToArchive?.archivedAt ? 'Restore poster' : 'Archive poster'}
-        icon="warning"
-        onCancel={() => setPosterToArchive(null)}
-        onConfirm={togglePosterArchive}
-      />
-    </>
-  )
+    {uploadOpen && <Modal title="Upload poster" subtitle="JPEG, PNG, WebP and PDF are supported." onClose={() => setUploadOpen(false)}><form className="erp-form" onSubmit={submit}><div className="erp-form-grid"><label><span>Title</span><input name="title" required /></label><label><span>Category</span><input name="category" defaultValue="Residential campaign" /></label><label className="erp-form-wide"><span>Description</span><textarea name="description" /></label><label className="erp-form-wide"><span>Poster file</span><input name="file" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" required /></label></div><footer className="erp-form-actions"><button type="button" className="secondary-button" onClick={() => setUploadOpen(false)}>Cancel</button><button className="primary-button" disabled={working}>{working && <LoaderCircle className="spin" size={14} />} Upload</button></footer></form></Modal>}
+  </section>
 }

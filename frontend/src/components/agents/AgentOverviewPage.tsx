@@ -123,7 +123,7 @@ export function AgentOverviewPage({ session }: { session: Session }) {
     const term = customerSearch.trim().toLowerCase()
     if (!overview || !term) return overview?.customers ?? []
     return overview.customers.filter((customer) => (
-      `${customer.customer_name} ${customer.company_name} ${customer.phone} ${customer.project_name} ${customer.status}`
+      `${customer.customer_name} ${customer.consumer_number} ${customer.phone} ${customer.project_name} ${customer.status}`
         .toLowerCase()
         .includes(term)
     ))
@@ -150,7 +150,7 @@ export function AgentOverviewPage({ session }: { session: Session }) {
           .includes(term)
       )).slice(0, 6),
       customers: searchScope === 'agents' ? [] : (overview?.customers ?? []).filter((customer) => (
-        `${customer.customer_name} ${customer.company_name} ${customer.email} ${customer.phone} ${customer.project_name}`
+        `${customer.customer_name} ${customer.consumer_number} ${customer.email} ${customer.phone} ${customer.project_name}`
           .toLowerCase()
           .includes(term)
       )).slice(0, 6),
@@ -248,7 +248,7 @@ export function AgentOverviewPage({ session }: { session: Session }) {
     downloadQuotationPdf({
       quotation: customer.approved_quotation,
       customerName: customer.customer_name,
-      companyName: customer.company_name,
+      companyName: '',
       phone: customer.phone,
       email: customer.email,
       address: customer.address,
@@ -316,7 +316,7 @@ export function AgentOverviewPage({ session }: { session: Session }) {
                       }}
                     >
                       <div className="customer-avatar">{customer.customer_name.slice(0, 1).toUpperCase()}</div>
-                      <span><strong>{customer.customer_name}</strong><small>{customer.company_name || customer.project_name || 'Customer'}</small></span>
+                      <span><strong>{customer.customer_name}</strong><small>{customer.consumer_number || customer.project_name || customer.customer_type}</small></span>
                     </button>
                   ))}
                 </section>
@@ -425,7 +425,7 @@ export function AgentOverviewPage({ session }: { session: Session }) {
                     <tbody>
                       {filteredCustomers.map((customer) => (
                         <tr key={customer.id}>
-                          <td data-label="Customer"><div className="customer-identity"><div className="customer-avatar">{customer.customer_name.slice(0, 1)}</div><span><strong>{customer.customer_name}</strong><small>{customer.company_name}</small></span></div></td>
+                          <td data-label="Customer"><div className="customer-identity"><div className="customer-avatar">{customer.customer_name.slice(0, 1)}</div><span><strong>{customer.customer_name}</strong><small>{customer.consumer_number || customer.customer_type}</small></span></div></td>
                           <td data-label="Contact"><div className="table-contact"><strong>{customer.phone || '—'}</strong><small>{customer.email || customer.address}</small></div></td>
                           <td data-label="Project"><strong className="project-name">{customer.project_name || 'Not assigned'}</strong>{customer.project_number && <small>{customer.project_number} · {customer.project_status?.replaceAll('_', ' ')}</small>}</td>
                           <td data-label="Workflow"><span className={`workflow-status workflow-status--${customer.quotation_status || customer.quotation_request_status || 'not_requested'}`}>{(customer.quotation_status || customer.quotation_request_status || 'not requested').replaceAll('_', ' ')}</span></td>

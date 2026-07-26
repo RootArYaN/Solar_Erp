@@ -1,44 +1,66 @@
 import {
-  Archive,
+  BadgeIndianRupee,
+  Building2,
+  CalendarClock,
   CheckCircle2,
-  ChevronRight,
-  Clock3,
-  LockKeyhole,
+  ClipboardList,
+  FileText,
+  FolderKanban,
+  History,
+  Landmark,
   MapPin,
+  Pencil,
   Phone,
   Plus,
   RefreshCw,
-  RotateCcw,
   Search,
-  Send,
-  Trash2,
+  Upload,
 } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
-import type { FieldErrors } from '../../contracts/api-contracts'
-import type { Customer, CustomerFlowSnapshot, MaterialRequestLine } from '../../contracts/domain-contracts'
+import { useEffect, useMemo, useState } from 'react'
+import { createBill, createFinanceTransaction, getFinanceCategories, getFinancialAccounts, saveCustomerLoan } from '../../api/finance'
+import { downloadStoredFile, uploadStoredFile } from '../../api/files'
+import type { Customer, CustomerFlowSnapshot } from '../../contracts/domain-contracts'
+import type { FinanceCategory, FinancialAccount } from '../../erp-types'
 import { getModuleAccess } from '../../lib/permissions'
 import { createCustomerFlowRepository } from '../../lib/repositories/customer-flow-repository'
-import { validateMaterialRequestDraft } from '../../lib/validation/material-request'
-import { useUnsavedChanges } from '../../lib/use-unsaved-changes'
 import type { Session } from '../../types'
-import { AlertDialog } from '../ui/AlertDialog'
-import { DataFreshness, EmptyState, ErrorState, LoadingSkeleton, ReadOnlyNotice } from '../ui/PageState'
+import { Modal } from '../admin/Modal'
+import { EmptyState, ErrorState, LoadingSkeleton, ReadOnlyNotice } from '../ui/PageState'
 import { useToast } from '../ui/ToastProvider'
 
-const currency = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 })
+type Tab = 'overview' | 'projects' | 'timeline' | 'quotations' | 'documents' | 'payments' | 'loan' | 'activity'
 
-function decimalToNumber(value: string): number {
-  const parsed = Number(value)
-  return Number.isFinite(parsed) ? parsed : 0
-}
+const money = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 })
+const dateTime = new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium', timeStyle: 'short' })
+const shortDate = new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium' })
 
-function formatAddress(parts: Array<string | undefined>): string {
-  return parts.filter(Boolean).join(', ')
-}
-
-function currentRevision(snapshot: CustomerFlowSnapshot | null) {
+function revision(snapshot: CustomerFlowSnapshot | null) {
   const quotation = snapshot?.quotations[0]
-  return quotation?.revisions.find((revision) => revision.id === quotation.current_revision_id) ?? null
+  return quotation?.revisions.find((row) => row.id === quotation.current_revision_id) ?? quotation?.revisions[0] ?? null
+}
+
+function label(value: string) {
+  return value.replaceAll('_', ' ').replace(/\b\w/g, (match) => match.toUpperCase())
+}
+
+function customerForm(snapshot: CustomerFlowSnapshot) {
+  const contact = snapshot.customer.contacts[0]
+  return {
+    full_name: snapshot.customer.display_name,
+    phone: contact?.phone ?? '',
+    alternate_phone: snapshot.customer.alternate_phone ?? contact?.alternate_phone ?? '',
+    email: contact?.email ?? '',
+    billing_address: snapshot.customer.billing_address ?? '',
+    site_address: snapshot.customer.site_address ?? snapshot.customer.addresses[0]?.line_1 ?? '',
+    district: snapshot.customer.district ?? '',
+    state: snapshot.customer.state || 'Gujarat',
+    postal_code: snapshot.customer.postal_code ?? '',
+    consumer_number: snapshot.customer.consumer_number ?? '',
+    electricity_provider: snapshot.customer.electricity_provider ?? '',
+    customer_type: snapshot.customer.customer_type,
+    lead_source: snapshot.customer.lead_source ?? '',
+    status: snapshot.customer.status,
+  }
 }
 
 export function CustomerWorkspacePage({ session }: { session: Session }) {
@@ -46,31 +68,30 @@ export function CustomerWorkspacePage({ session }: { session: Session }) {
   const [customers, setCustomers] = useState<Customer[]>([])
   const [selectedId, setSelectedId] = useState('')
   const [snapshot, setSnapshot] = useState<CustomerFlowSnapshot | null>(null)
+  const [tab, setTab] = useState<Tab>('overview')
+  const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
   const [detailLoading, setDetailLoading] = useState(false)
   const [error, setError] = useState('')
-  const [search, setSearch] = useState('')
-  const [approvalComment, setApprovalComment] = useState('Approved for project conversion.')
-  const [purpose, setPurpose] = useState('Initial project material allocation')
-  const [neededBy, setNeededBy] = useState('')
-  const [materialLines, setMaterialLines] = useState<MaterialRequestLine[]>([])
-  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
-  const [dirty, setDirty] = useState(false)
-  const [archiveOpen, setArchiveOpen] = useState(false)
+  const [editOpen, setEditOpen] = useState(false)
+  const [paymentOpen, setPaymentOpen] = useState(false)
+  const [loanOpen, setLoanOpen] = useState(false)
+  const [billOpen, setBillOpen] = useState(false)
   const [working, setWorking] = useState(false)
-  const [offline, setOffline] = useState(!navigator.onLine)
-  const [stale, setStale] = useState(false)
-  const nextCursor = useRef<string | null>(null)
+  const [accounts, setAccounts] = useState<FinancialAccount[]>([])
+  const [categories, setCategories] = useState<FinanceCategory[]>([])
   const { toast } = useToast()
 
   const customerAccess = getModuleAccess(session, 'customers')
-  const siteAccess = getModuleAccess(session, 'sites')
+  const documentAccess = getModuleAccess(session, 'documents')
   const quotationAccess = getModuleAccess(session, 'quotations')
-  const projectAccess = getModuleAccess(session, 'projects')
-  const requestAccess = getModuleAccess(session, 'materialRequests')
-  const revision = currentRevision(snapshot)
-  const quotation = snapshot?.quotations[0] ?? null
-  const site = snapshot?.sites[0] ?? null
+  const financeAccess = getModuleAccess(session, 'finance')
+  const currentRevision = revision(snapshot)
+  const project = snapshot?.project ?? null
+  const totalReceived = snapshot?.payments.filter((row) => row.direction === 'credit' && row.status === 'posted').reduce((sum, row) => sum + Number(row.amount), 0) ?? 0
+  const totalRefunded = snapshot?.payments.filter((row) => row.direction === 'debit' && row.status === 'posted').reduce((sum, row) => sum + Number(row.amount), 0) ?? 0
+  const approvedValue = Number(project?.approved_value ?? currentRevision?.grand_total ?? 0)
+  const balance = Math.max(0, approvedValue - totalReceived + totalRefunded)
 
   async function loadCustomers() {
     setLoading(true)
@@ -78,9 +99,7 @@ export function CustomerWorkspacePage({ session }: { session: Session }) {
     try {
       const page = await repository.listCustomers(null)
       setCustomers(page.items)
-      nextCursor.current = page.next_cursor
       setSelectedId((current) => current || page.items[0]?.id || '')
-      setStale(!navigator.onLine)
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Could not load customers')
     } finally {
@@ -88,234 +107,276 @@ export function CustomerWorkspacePage({ session }: { session: Session }) {
     }
   }
 
-  async function loadSnapshot(customerId: string) {
-    if (!customerId) {
-      setSnapshot(null)
-      return
-    }
+  async function loadSnapshot(customerId = selectedId) {
+    if (!customerId) return
     setDetailLoading(true)
     setError('')
     try {
-      const next = await repository.getSnapshot(customerId)
-      setSnapshot(next)
-      setPurpose(next.material_request?.purpose ?? 'Initial project material allocation')
-      setNeededBy(next.material_request?.needed_at_site_by ?? '')
-      setMaterialLines(next.material_request?.lines ?? [])
-      setDirty(false)
+      setSnapshot(await repository.getSnapshot(customerId))
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Could not load customer workflow')
+      setError(reason instanceof Error ? reason.message : 'Could not load customer details')
     } finally {
       setDetailLoading(false)
     }
   }
 
   useEffect(() => { void loadCustomers() }, [])
-  useEffect(() => { void loadSnapshot(selectedId) }, [selectedId])
-
+  useEffect(() => { if (selectedId) void loadSnapshot(selectedId) }, [selectedId])
   useEffect(() => {
-    const onOnline = () => { setOffline(false); setStale(true) }
-    const onOffline = () => { setOffline(true); setStale(true) }
-    window.addEventListener('online', onOnline)
-    window.addEventListener('offline', onOffline)
-    return () => {
-      window.removeEventListener('online', onOnline)
-      window.removeEventListener('offline', onOffline)
-    }
-  }, [])
-
-  useUnsavedChanges(dirty)
+    if (!paymentOpen) return
+    void Promise.all([getFinancialAccounts(), getFinanceCategories()]).then(([nextAccounts, nextCategories]) => {
+      setAccounts(nextAccounts)
+      setCategories(nextCategories)
+    }).catch(() => undefined)
+  }, [paymentOpen])
 
   const visibleCustomers = useMemo(() => {
     const term = search.trim().toLowerCase()
     if (!term) return customers
-    return customers.filter((customer) => `${customer.display_name} ${customer.legal_name} ${customer.record_number}`.toLowerCase().includes(term))
+    return customers.filter((row) => `${row.display_name} ${row.record_number} ${row.consumer_number} ${row.contacts[0]?.phone ?? ''}`.toLowerCase().includes(term))
   }, [customers, search])
 
   async function approveQuotation() {
-    if (!snapshot || !quotation) return
+    if (!snapshot || !snapshot.quotations[0]) return
     setWorking(true)
     try {
-      const next = await repository.approveQuotation(snapshot.customer.id, quotation.id, approvalComment.trim())
+      const next = await repository.approveQuotation(snapshot.customer.id, snapshot.quotations[0].id, 'Approved for B2C project conversion.')
       setSnapshot(next)
-      setCustomers((current) => current.map((customer) => customer.id === next.customer.id ? next.customer : customer))
-      setPurpose(next.material_request?.purpose ?? 'Initial project material allocation')
-      setNeededBy(next.material_request?.needed_at_site_by ?? '')
-      setMaterialLines(next.material_request?.lines ?? [])
-      toast({ message: next.project ? 'Quotation approved and linked project created' : 'Quotation approved', variant: 'success' })
+      toast({ message: 'Quotation approved and project workspace updated', variant: 'success' })
     } catch (reason) {
       toast({ message: reason instanceof Error ? reason.message : 'Could not approve quotation', variant: 'error' })
-    } finally {
-      setWorking(false)
-    }
+    } finally { setWorking(false) }
   }
 
-  function addMaterialLine() {
-    setMaterialLines((current) => [...current, { id: crypto.randomUUID(), item_id: null, description: '', requested_quantity: '1.00', unit: 'Nos', required_by: neededBy || null, note: '' }])
-    setDirty(true)
-  }
-
-  function updateMaterialLine(id: string, patch: Partial<MaterialRequestLine>) {
-    setMaterialLines((current) => current.map((line) => line.id === id ? { ...line, ...patch } : line))
-    setDirty(true)
-  }
-
-  function removeMaterialLine(id: string) {
-    setMaterialLines((current) => current.filter((line) => line.id !== id))
-    setFieldErrors({})
-    setDirty(true)
-  }
-
-  async function saveMaterialDraft() {
-    if (!snapshot) return
-    const errors = validateMaterialRequestDraft(purpose, materialLines)
-    setFieldErrors(errors)
-    if (Object.keys(errors).length) return
-
-    setWorking(true)
-    try {
-      setSnapshot(await repository.saveMaterialRequest(snapshot.customer.id, { purpose: purpose.trim(), needed_at_site_by: neededBy || null, lines: materialLines }))
-      setDirty(false)
-      toast({ message: 'Material-request draft saved', variant: 'success' })
-    } catch (reason) {
-      toast({ message: reason instanceof Error ? reason.message : 'Could not save material request', variant: 'error' })
-    } finally {
-      setWorking(false)
-    }
-  }
-
-  async function changeArchiveState() {
+  async function saveCustomer(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
     if (!snapshot) return
     setWorking(true)
+    const form = new FormData(event.currentTarget)
+    const input = Object.fromEntries(form.entries())
     try {
-      const next = snapshot.customer.archived_at
-        ? await repository.restoreCustomer(snapshot.customer.id)
-        : await repository.archiveCustomer(snapshot.customer.id, 'Archived from customer workspace')
+      const next = await repository.updateCustomer(snapshot.customer.id, input)
       setSnapshot(next)
-      setCustomers((current) => current.map((customer) => customer.id === next.customer.id ? next.customer : customer))
-      setArchiveOpen(false)
-      toast({ message: next.customer.archived_at ? 'Customer archived' : 'Customer restored', variant: 'success' })
+      setCustomers((current) => current.map((row) => row.id === next.customer.id ? next.customer : row))
+      setEditOpen(false)
+      toast({ message: 'Customer details updated', variant: 'success' })
     } catch (reason) {
-      toast({ message: reason instanceof Error ? reason.message : 'Could not update archive status', variant: 'error' })
+      toast({ message: reason instanceof Error ? reason.message : 'Could not update customer', variant: 'error' })
+    } finally { setWorking(false) }
+  }
+
+  async function recordPayment(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!snapshot) return
+    const form = new FormData(event.currentTarget)
+    const amount = Number(form.get('amount') || 0)
+    const direction = String(form.get('direction') || 'credit')
+    setWorking(true)
+    try {
+      await createFinanceTransaction({
+        transaction_date: form.get('transaction_date'), direction, amount,
+        category_id: form.get('category_id') || null, account_id: form.get('account_id'),
+        payment_method: form.get('payment_method'), party_type: 'customer', party_name: snapshot.customer.display_name,
+        customer_id: snapshot.customer.id, project_id: project?.id ?? null,
+        source_type: form.get('source_type'), reference_number: form.get('reference_number'), description: form.get('description'),
+      })
+      await loadSnapshot()
+      setPaymentOpen(false)
+      toast({ message: direction === 'credit' ? 'Customer payment recorded' : 'Customer refund recorded', variant: 'success' })
+    } catch (reason) {
+      toast({ message: reason instanceof Error ? reason.message : 'Could not record payment', variant: 'error' })
+    } finally { setWorking(false) }
+  }
+
+  async function saveLoan(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!project) return
+    const form = new FormData(event.currentTarget)
+    const value = Object.fromEntries(form.entries()) as Record<string, unknown>
+    for (const field of ['requested_amount', 'approved_amount', 'customer_contribution', 'first_disbursement_amount', 'second_disbursement_amount', 'emi_amount']) value[field] = Number(value[field] || 0)
+    setWorking(true)
+    try {
+      await saveCustomerLoan(project.id, value)
+      await loadSnapshot()
+      setLoanOpen(false)
+      toast({ message: 'Customer loan updated', variant: 'success' })
+    } catch (reason) {
+      toast({ message: reason instanceof Error ? reason.message : 'Could not update loan', variant: 'error' })
+    } finally { setWorking(false) }
+  }
+
+
+  async function createSalesBill(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!snapshot) return
+    const form = new FormData(event.currentTarget)
+    setWorking(true)
+    try {
+      await createBill({
+        bill_type: 'sales', bill_number: form.get('bill_number'), bill_date: form.get('bill_date'),
+        customer_id: snapshot.customer.id, project_id: project?.id ?? null,
+        subtotal: Number(form.get('subtotal') || 0), tax_amount: Number(form.get('tax_amount') || 0),
+        due_date: form.get('due_date') || null, note: form.get('note'),
+      })
+      setBillOpen(false)
+      toast({ message: 'Customer sales bill created. Payment remains separate.', variant: 'success' })
+    } catch (reason) {
+      toast({ message: reason instanceof Error ? reason.message : 'Could not create sales bill', variant: 'error' })
+    } finally { setWorking(false) }
+  }
+
+  async function uploadDocument(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    if (!file || !snapshot) return
+    setWorking(true)
+    try {
+      await uploadStoredFile({ file, ownerType: 'customer_document', ownerId: snapshot.customer.id, customerId: snapshot.customer.id, projectId: project?.id })
+      await loadSnapshot()
+      toast({ message: 'Customer document uploaded', variant: 'success' })
+    } catch (reason) {
+      toast({ message: reason instanceof Error ? reason.message : 'Could not upload document', variant: 'error' })
     } finally {
       setWorking(false)
+      event.target.value = ''
     }
   }
+
+  if (loading) return <LoadingSkeleton rows={8} />
+  if (error && !snapshot) return <ErrorState message={error} onRetry={() => void loadCustomers()} />
 
   return (
-    <section className="customer-flow-page">
-      <DataFreshness offline={offline} stale={stale} updatedAt={snapshot?.customer.updated_at} />
-      {(customerAccess.readOnly || quotationAccess.readOnly || projectAccess.readOnly || requestAccess.readOnly) && <ReadOnlyNotice />}
+    <section className="customer-detail-page">
+      {(customerAccess.readOnly || documentAccess.readOnly) && <ReadOnlyNotice />}
+      <div className="customer-detail-layout">
+        <aside className="customer-directory">
+          <header><div><strong>Customers</strong><span>{visibleCustomers.length} B2C records</span></div><button onClick={() => void loadCustomers()} aria-label="Refresh customers"><RefreshCw size={15} /></button></header>
+          <label className="erp-search"><Search size={15} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Name, phone or consumer no." /></label>
+          <div className="customer-directory__list">
+            {visibleCustomers.map((row) => <button className={selectedId === row.id ? 'active' : ''} key={row.id} onClick={() => setSelectedId(row.id)}>
+              <span className="customer-avatar">{row.display_name.slice(0, 1).toUpperCase()}</span>
+              <span><strong>{row.display_name}</strong><small>{row.contacts[0]?.phone || row.record_number}</small></span>
+              <em>{label(row.status)}</em>
+            </button>)}
+            {!visibleCustomers.length && <EmptyState title="No customers found" />}
+          </div>
+        </aside>
 
-      {loading ? <LoadingSkeleton rows={7} /> : error && !snapshot ? <ErrorState message={error} onRetry={() => void loadCustomers()} /> : (
-        <div className="customer-flow-layout">
-          <aside className="customer-list-panel">
-            <div className="customer-list-heading">
-              <div><strong>Customers</strong><span>{visibleCustomers.length} records</span></div>
-              <button className="customer-list-refresh" onClick={() => void loadSnapshot(selectedId)} disabled={detailLoading} aria-label="Refresh selected customer"><RefreshCw size={13} /><span>Refresh</span></button>
-            </div>
-            <div className="customer-list-search"><Search size={15} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search customers" /></div>
-            <div className="customer-list-scroll">
-              {visibleCustomers.map((customer) => (
-                <button key={customer.id} className={selectedId === customer.id ? 'active' : ''} onClick={() => {
-                  if (dirty && !window.confirm('Discard unsaved material-request changes?')) return
-                  setSelectedId(customer.id)
-                }}>
-                  <div className="customer-list-avatar">{customer.display_name.slice(0, 1)}</div>
-                  <span><strong>{customer.display_name}</strong><small>{customer.record_number}</small><em className={`customer-status customer-status--${customer.status}`}>{customer.status.replaceAll('_', ' ')}</em></span>
-                  <ChevronRight size={15} />
-                </button>
-              ))}
-              {visibleCustomers.length === 0 && <EmptyState title="No customers" />}
-            </div>
-            {nextCursor.current && <button className="cursor-load-button">Load more customers</button>}
-          </aside>
+        <main className="customer-workspace">
+          {detailLoading || !snapshot ? <LoadingSkeleton rows={7} /> : <>
+            <header className="customer-workspace__header">
+              <div className="customer-title-block"><span className="customer-title-icon">{snapshot.customer.display_name.slice(0, 1)}</span><div><div className="customer-title-meta"><span>{snapshot.customer.record_number}</span><span>{label(snapshot.customer.customer_type)}</span><span className={`status-badge status-badge--${snapshot.customer.status}`}>{label(snapshot.customer.status)}</span></div><h1>{snapshot.customer.display_name}</h1><p><Phone size={13} /> {snapshot.customer.contacts[0]?.phone || 'No phone'} <MapPin size={13} /> {snapshot.customer.site_address || 'Site address pending'}</p></div></div>
+              <div className="customer-header-actions"><button className="secondary-button" onClick={() => void loadSnapshot()}><RefreshCw size={14} /> Refresh</button>{customerAccess.canEdit && <button className="primary-button primary-button--compact" onClick={() => setEditOpen(true)}><Pencil size={14} /> Edit</button>}</div>
+            </header>
 
-          <main className="customer-workspace">
-            {detailLoading ? <LoadingSkeleton rows={9} /> : error ? <ErrorState message={error} onRetry={() => void loadSnapshot(selectedId)} /> : snapshot && (
-              <>
-                <section className="customer-detail-card">
-                  <header className="customer-summary-header">
-                    <div className="customer-detail-title">
-                      <div>
-                        <span>{snapshot.customer.record_number}</span>
-                        <div className="customer-name-row"><h2>{snapshot.customer.display_name}</h2><em className={`customer-status customer-status--${snapshot.customer.status}`}>{snapshot.customer.status.replaceAll('_', ' ')}</em></div>
-                        {snapshot.customer.legal_name !== snapshot.customer.display_name && <p>{snapshot.customer.legal_name}</p>}
-                      </div>
-                    </div>
-                    {customerAccess.canArchive && <button className="customer-archive-button" onClick={() => setArchiveOpen(true)}>{snapshot.customer.archived_at ? <RotateCcw size={13} /> : <Archive size={13} />}{snapshot.customer.archived_at ? 'Restore' : 'Archive'}</button>}
-                  </header>
-                  <div className="customer-summary-details">
-                    {snapshot.customer.contacts.map((contact) => <div className="customer-summary-detail" key={contact.id}><Phone size={13} /><div>{contact.full_name !== snapshot.customer.display_name && <strong>{contact.full_name}</strong>}<span>{[contact.designation, contact.phone, contact.email].filter(Boolean).join(' · ')}</span></div></div>)}
-                    {snapshot.customer.addresses.map((address) => <div className="customer-summary-detail" key={address.id}><MapPin size={13} /><div><small>{address.label}</small><span>{formatAddress([address.line_1, address.line_2, address.city, address.state, address.postal_code])}</span></div></div>)}
-                  </div>
-                  {snapshot.customer.archived_at && <div className="archive-banner">Archived {new Date(snapshot.customer.archived_at).toLocaleString('en-IN')} · {snapshot.customer.archive_reason}</div>}
-                </section>
+            <section className="customer-kpis">
+              <article><span><FolderKanban size={16} /></span><div><small>Current project</small><strong>{project?.record_number || 'Not created'}</strong><em>{project ? `${project.capacity_kw} kW · ${label(project.payment_mode || 'mode pending')}` : 'Approve quotation to create'}</em></div></article>
+              <article><span><CalendarClock size={16} /></span><div><small>Current stage</small><strong>{snapshot.timeline.find((row) => row.status === 'current')?.name || (project?.status ? label(project.status) : 'Quotation')}</strong><em>{project ? `${Math.round((snapshot.timeline.filter((row) => row.status === 'completed').length / Math.max(1, snapshot.timeline.length)) * 100)}% complete` : 'Project not started'}</em></div></article>
+              <article><span><BadgeIndianRupee size={16} /></span><div><small>Approved value</small><strong>{money.format(approvedValue)}</strong><em>{currentRevision?.record_number || 'No approved quotation'}</em></div></article>
+              <article><span><CheckCircle2 size={16} /></span><div><small>Received / pending</small><strong>{money.format(totalReceived)}</strong><em>{money.format(balance)} pending</em></div></article>
+            </section>
 
+            <nav className="workspace-tabs" aria-label="Customer detail sections">
+              {([
+                ['overview', Building2, 'Overview'], ['projects', FolderKanban, 'Projects'], ['timeline', CalendarClock, 'Timeline'],
+                ['quotations', ClipboardList, 'Quotations'], ['documents', FileText, 'Documents'], ['payments', BadgeIndianRupee, 'Payments'],
+                ['loan', Landmark, 'Loan'], ['activity', History, 'Activity'],
+              ] as Array<[Tab, typeof Building2, string]>).filter(([key]) => key !== 'loan' || project?.payment_mode === 'loan' || snapshot.loan).map(([key, Icon, text]) => <button className={tab === key ? 'active' : ''} onClick={() => setTab(key)} key={key}><Icon size={14} /> {text}</button>)}
+            </nav>
 
-                <section className="flow-stage-grid">
-                  <article className={`flow-stage-card ${site ? 'flow-stage-card--complete' : ''}`}>
-                    <header><div className="flow-stage-number">1</div><div><span>Site</span><strong>{site?.record_number ?? 'Not created'}</strong></div>{site && <CheckCircle2 className="flow-stage-check" size={17} />}</header>
-                    {siteAccess.canView ? snapshot.sites.map((site) => <div className="flow-stage-body" key={site.id}><h3>{site.name}</h3><p>{formatAddress([site.address.line_1, site.address.line_2, site.address.city])}</p><dl><div><dt>Proposed</dt><dd>{site.proposed_capacity_kw} kW</dd></div><div><dt>Meter</dt><dd>{site.meter_type.replaceAll('_', ' ')}</dd></div><div><dt>Status</dt><dd>{site.status.replaceAll('_', ' ')}</dd></div></dl></div>) : <EmptyState title="Restricted" />}
-                  </article>
+            <section className="workspace-tab-panel">
+              {tab === 'overview' && <OverviewTab snapshot={snapshot} />}
+              {tab === 'projects' && <ProjectsTab snapshot={snapshot} />}
+              {tab === 'timeline' && <TimelineTab snapshot={snapshot} />}
+              {tab === 'quotations' && <QuotationsTab snapshot={snapshot} canApprove={quotationAccess.canApprove} working={working} onApprove={approveQuotation} />}
+              {tab === 'documents' && <DocumentsTab snapshot={snapshot} canUpload={documentAccess.canCreate || documentAccess.canEdit} working={working} onUpload={uploadDocument} />}
+              {tab === 'payments' && <PaymentsTab snapshot={snapshot} approvedValue={approvedValue} totalReceived={totalReceived} balance={balance} canManage={financeAccess.canEdit || financeAccess.canCreate} onAdd={() => setPaymentOpen(true)} onBill={() => setBillOpen(true)} />}
+              {tab === 'loan' && <LoanTab snapshot={snapshot} canManage={financeAccess.canEdit} onEdit={() => setLoanOpen(true)} />}
+              {tab === 'activity' && <ActivityTab snapshot={snapshot} />}
+            </section>
+          </>}
+        </main>
+      </div>
 
-                  <article className={`flow-stage-card ${revision?.status === 'approved' ? 'flow-stage-card--complete' : 'flow-stage-card--current'}`}>
-                    <header><div className="flow-stage-number">2</div><div><span>Quotation</span><strong>{quotation?.record_number ?? 'Not created'}</strong></div>{revision?.status === 'approved' ? <CheckCircle2 className="flow-stage-check" size={17} /> : <Clock3 className="flow-stage-pending" size={17} />}</header>
-                    {!quotationAccess.canView ? <EmptyState title="Restricted" /> : quotation && revision ? <div className="flow-stage-body"><div className="stage-title-row"><h3>Revision {revision.revision_number}</h3><span className={`stage-status stage-status--${revision.status}`}>{revision.status.replaceAll('_', ' ')}</span></div><p>{quotation.title}</p><dl><div><dt>Total</dt><dd>{currency.format(decimalToNumber(revision.grand_total))}</dd></div><div><dt>Version</dt><dd>v{revision.version}</dd></div></dl>{revision.status === 'approved' ? <div className="approval-success"><CheckCircle2 size={15} /><span>Approved</span></div> : <div className="stage-approval-controls"><label className="compact-field"><span>Approval note</span><input value={approvalComment} onChange={(event) => setApprovalComment(event.target.value)} disabled={!quotationAccess.canApprove} /></label>{quotationAccess.canApprove && <button className="primary-button primary-button--compact stage-action" onClick={() => void approveQuotation()} disabled={working}><CheckCircle2 size={15} /> Approve quotation</button>}</div>}</div> : <EmptyState title="No quotation" />}
-                  </article>
-
-                  <article className={`flow-stage-card ${snapshot.project ? 'flow-stage-card--complete' : ''}`}>
-                    <header><div className="flow-stage-number">3</div><div><span>Project</span><strong>{snapshot.project?.record_number ?? 'Not created'}</strong></div>{snapshot.project ? <CheckCircle2 className="flow-stage-check" size={17} /> : <LockKeyhole className="flow-stage-locked" size={16} />}</header>
-                    {!projectAccess.canView ? <EmptyState title="Restricted" /> : snapshot.project ? <div className="flow-stage-body"><h3>{snapshot.project.name}</h3><dl><div><dt>Status</dt><dd>{snapshot.project.status}</dd></div><div><dt>Capacity</dt><dd>{snapshot.project.capacity_kw} kW</dd></div><div><dt>Approved value</dt><dd>{currency.format(decimalToNumber(snapshot.project.approved_value))}</dd></div></dl><div className="workflow-link-note"><CheckCircle2 size={13} /> Linked to {quotation?.record_number}</div></div> : <div className="flow-stage-body flow-stage-body--locked"><div className="locked-stage-message"><LockKeyhole size={18} /><div><strong>{revision?.status === 'approved' ? 'Creating linked project' : 'Quotation approval required'}</strong><span>{revision?.status === 'approved' ? 'Refresh if the project does not appear.' : 'Approval automatically creates the project record.'}</span></div></div></div>}
-                  </article>
-                </section>
-
-                <section className={`material-request-card ${snapshot.project ? 'material-request-card--enabled' : ''}`}>
-                  <header><div><span>Next step</span><h2>Material request</h2>{snapshot.material_request?.record_number && <p>{snapshot.material_request.record_number}</p>}</div>{dirty && <small>Unsaved changes</small>}</header>
-                  {!requestAccess.canView ? <EmptyState title="Restricted" /> : !snapshot.project ? <EmptyState title="Project required" /> : <>
-                    <div className="material-request-meta">
-                      <label><span>Purpose</span><input value={purpose} onChange={(event) => { setPurpose(event.target.value); setDirty(true) }} disabled={!requestAccess.canEdit && !requestAccess.canCreate} />{fieldErrors.purpose?.map((message) => <small className="field-error" key={message}>{message}</small>)}</label>
-                      <label><span>Needed at site by</span><input type="date" value={neededBy} onChange={(event) => { setNeededBy(event.target.value); setDirty(true) }} disabled={!requestAccess.canEdit && !requestAccess.canCreate} /></label>
-                    </div>
-                    <div className="material-lines">
-                      {materialLines.map((line, index) => (
-                        <div className="material-line" key={line.id}>
-                          <input value={line.description} onChange={(event) => updateMaterialLine(line.id, { description: event.target.value })} placeholder="Material description" disabled={!requestAccess.canEdit && !requestAccess.canCreate} />
-                          <input value={line.requested_quantity} inputMode="decimal" onChange={(event) => updateMaterialLine(line.id, { requested_quantity: event.target.value })} aria-label="Requested quantity" disabled={!requestAccess.canEdit && !requestAccess.canCreate} />
-                          <input value={line.unit} onChange={(event) => updateMaterialLine(line.id, { unit: event.target.value })} aria-label="Unit" disabled={!requestAccess.canEdit && !requestAccess.canCreate} />
-                          <button
-                            className="material-line-delete"
-                            type="button"
-                            onClick={() => removeMaterialLine(line.id)}
-                            disabled={materialLines.length === 1 || (!requestAccess.canEdit && !requestAccess.canCreate)}
-                            aria-label={`Delete material row ${index + 1}`}
-                            title={materialLines.length === 1 ? 'At least one material row is required' : 'Delete row'}
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                          <small className="field-error">{fieldErrors[`lines.${index}.description`]?.[0] ?? fieldErrors[`lines.${index}.requested_quantity`]?.[0]}</small>
-                        </div>
-                      ))}
-                      {materialLines.length === 0 && <EmptyState title="No material lines" />}
-                    </div>
-                    <footer><button className="secondary-button" onClick={addMaterialLine} disabled={!requestAccess.canCreate && !requestAccess.canEdit}><Plus size={14} /> Add line</button><button className="primary-button primary-button--compact" onClick={() => void saveMaterialDraft()} disabled={working || (!requestAccess.canCreate && !requestAccess.canEdit)}><Send size={14} /> Save draft</button></footer>
-                  </>}
-                </section>
-              </>
-            )}
-          </main>
-        </div>
-      )}
-
-      <AlertDialog
-        open={archiveOpen}
-        title={snapshot?.customer.archived_at ? 'Restore customer?' : 'Archive customer?'}
-        confirmLabel={snapshot?.customer.archived_at ? 'Restore customer' : 'Archive customer'}
-        variant="warning"
-        icon={snapshot?.customer.archived_at ? 'reset' : 'warning'}
-        loading={working}
-        onCancel={() => setArchiveOpen(false)}
-        onConfirm={changeArchiveState}
-      />
+      {editOpen && snapshot && <Modal title="Edit customer" subtitle="B2C customer and installation-site details" onClose={() => setEditOpen(false)}><CustomerEditForm snapshot={snapshot} working={working} onSubmit={saveCustomer} /></Modal>}
+      {paymentOpen && snapshot && <Modal title="Record customer money" subtitle="This posts once to the shared company finance ledger." onClose={() => setPaymentOpen(false)}><PaymentForm accounts={accounts} categories={categories} working={working} onSubmit={recordPayment} /></Modal>}
+      {billOpen && snapshot && <Modal title="Create customer sales bill" subtitle="The bill records the receivable; payment is posted separately." onClose={() => setBillOpen(false)}><SalesBillForm approvedValue={approvedValue} working={working} onSubmit={createSalesBill} /></Modal>}
+      {loanOpen && project && <Modal title="Customer solar loan" subtitle="Project-specific bank approval and disbursement details" onClose={() => setLoanOpen(false)}><LoanForm snapshot={snapshot!} working={working} onSubmit={saveLoan} /></Modal>}
     </section>
   )
+}
+
+function OverviewTab({ snapshot }: { snapshot: CustomerFlowSnapshot }) {
+  const contact = snapshot.customer.contacts[0]
+  const rows = [
+    ['Full name', snapshot.customer.display_name], ['Phone', contact?.phone], ['Alternate phone', snapshot.customer.alternate_phone], ['Email', contact?.email],
+    ['Consumer number', snapshot.customer.consumer_number], ['Electricity provider', snapshot.customer.electricity_provider], ['Customer type', label(snapshot.customer.customer_type)],
+    ['Assigned agent', snapshot.customer.assigned_agent_id ? 'Assigned' : 'Unassigned'], ['Lead source', snapshot.customer.lead_source], ['Status', label(snapshot.customer.status)],
+    ['Billing address', snapshot.customer.billing_address], ['Installation site', snapshot.customer.site_address], ['District / state', [snapshot.customer.district, snapshot.customer.state, snapshot.customer.postal_code].filter(Boolean).join(', ')],
+    ['Created', shortDate.format(new Date(snapshot.customer.created_at))], ['Last updated', dateTime.format(new Date(snapshot.customer.updated_at))],
+  ]
+  return <div className="detail-grid">{rows.map(([name, value]) => <div className="detail-field" key={name}><span>{name}</span><strong>{value || '—'}</strong></div>)}</div>
+}
+
+function ProjectsTab({ snapshot }: { snapshot: CustomerFlowSnapshot }) {
+  if (!snapshot.projects.length) return <EmptyState title="No project yet" message="Approve a quotation to create the customer project." />
+  return <div className="erp-table-wrap"><table className="erp-table"><thead><tr><th>Project</th><th>Site / capacity</th><th>Payment</th><th>Documentation</th><th>Material</th><th>Installation</th><th>Subsidy</th></tr></thead><tbody>{snapshot.projects.map((row) => <tr key={row.id}><td><strong>{row.record_number}</strong><small>{row.name}</small></td><td>{row.capacity_kw} kW<small>{row.site_address}</small></td><td><span className="soft-badge">{label(row.payment_mode || 'Pending')}</span></td><td>{label(row.documentation_status)}</td><td>{label(row.material_status)}</td><td>{label(row.installation_status)}</td><td>{label(row.subsidy_status)}</td></tr>)}</tbody></table></div>
+}
+
+function TimelineTab({ snapshot }: { snapshot: CustomerFlowSnapshot }) {
+  if (!snapshot.timeline.length) return <EmptyState title="Timeline not created" message="The project timeline starts after quotation approval." />
+  return <div className="customer-timeline">{snapshot.timeline.map((row) => <article className={`customer-timeline__row customer-timeline__row--${row.status}`} key={row.key}><span className="customer-timeline__marker" /><div><header><strong>{row.name}</strong><span>{label(row.status)}</span></header><p>{row.note || 'No note added.'}</p><footer>{row.event_date ? shortDate.format(new Date(row.event_date)) : row.completed_at ? dateTime.format(new Date(row.completed_at)) : 'Date pending'}{row.updated_by && ` · ${row.updated_by}`}</footer></div></article>)}</div>
+}
+
+function QuotationsTab({ snapshot, canApprove, working, onApprove }: { snapshot: CustomerFlowSnapshot; canApprove: boolean; working: boolean; onApprove: () => void }) {
+  if (!snapshot.quotations.length) return <EmptyState title="No quotations" />
+  return <div className="erp-table-wrap"><table className="erp-table"><thead><tr><th>Quotation</th><th>Date</th><th>Capacity / title</th><th>Amount</th><th>Status</th><th /></tr></thead><tbody>{snapshot.quotations.map((row, index) => { const rev = row.revisions.find((item) => item.id === row.current_revision_id) ?? row.revisions[0]; return <tr key={row.id}><td><strong>{row.record_number}</strong><small>{rev?.record_number}</small></td><td>{shortDate.format(new Date(row.created_at))}</td><td>{row.title}</td><td>{money.format(Number(rev?.grand_total ?? 0))}</td><td><span className="soft-badge">{label(rev?.status || 'draft')}</span></td><td>{index === 0 && canApprove && rev?.status === 'submitted' && <button className="primary-button primary-button--compact" disabled={working} onClick={onApprove}>Approve</button>}</td></tr> })}</tbody></table></div>
+}
+
+function DocumentsTab({ snapshot, canUpload, working, onUpload }: { snapshot: CustomerFlowSnapshot; canUpload: boolean; working: boolean; onUpload: (event: React.ChangeEvent<HTMLInputElement>) => void }) {
+  return <><div className="tab-toolbar"><div><strong>Customer documents</strong><span>{snapshot.documents.length} stored files</span></div>{canUpload && <label className="primary-button primary-button--compact"><Upload size={14} /> Upload<input hidden type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.docx,.xlsx" disabled={working} onChange={onUpload} /></label>}</div>{!snapshot.documents.length ? <EmptyState title="No documents uploaded" /> : <div className="erp-table-wrap"><table className="erp-table"><thead><tr><th>Document</th><th>Type</th><th>Project</th><th>Status</th><th>Uploaded</th><th /></tr></thead><tbody>{snapshot.documents.map((row) => <tr key={row.id}><td><strong>{row.name}</strong></td><td>{label(row.owner_type)}</td><td>{row.project_id ? 'Linked' : 'Customer'}</td><td><span className="soft-badge">{label(row.status)}</span></td><td>{shortDate.format(new Date(row.created_at))}</td><td><button className="secondary-button" onClick={() => void downloadStoredFile(row.id, row.name)}>Download</button></td></tr>)}</tbody></table></div>}</>
+}
+
+function PaymentsTab({ snapshot, approvedValue, totalReceived, balance, canManage, onAdd, onBill }: { snapshot: CustomerFlowSnapshot; approvedValue: number; totalReceived: number; balance: number; canManage: boolean; onAdd: () => void; onBill: () => void }) {
+  return <><section className="mini-kpis"><article><span>Approved</span><strong>{money.format(approvedValue)}</strong></article><article><span>Received</span><strong>{money.format(totalReceived)}</strong></article><article><span>Pending</span><strong>{money.format(balance)}</strong></article><article><span>Entries</span><strong>{snapshot.payments.length}</strong></article></section><div className="tab-toolbar"><div><strong>Customer money</strong><span>Shared with company finance—no duplicate ledger.</span></div>{canManage && <div><button className="secondary-button" onClick={onBill}><FileText size={14} /> Sales bill</button><button className="primary-button primary-button--compact" onClick={onAdd}><Plus size={14} /> Record money</button></div>}</div>{!snapshot.payments.length ? <EmptyState title="No customer transactions" /> : <div className="erp-table-wrap"><table className="erp-table"><thead><tr><th>Date</th><th>Transaction</th><th>Description</th><th>Account</th><th>Money in</th><th>Money out</th><th>Status</th></tr></thead><tbody>{snapshot.payments.map((row) => <tr key={row.id}><td>{shortDate.format(new Date(row.transaction_date))}</td><td><strong>{row.transaction_number}</strong><small>{row.reference_number}</small></td><td>{row.description || label(row.source_type)}</td><td>{row.account_name}<small>{label(row.payment_method)}</small></td><td className="money-in">{row.direction === 'credit' ? money.format(Number(row.amount)) : '—'}</td><td className="money-out">{row.direction === 'debit' ? money.format(Number(row.amount)) : '—'}</td><td>{label(row.status)}</td></tr>)}</tbody></table></div>}</>
+}
+
+function LoanTab({ snapshot, canManage, onEdit }: { snapshot: CustomerFlowSnapshot; canManage: boolean; onEdit: () => void }) {
+  const loan = snapshot.loan
+  return <><div className="tab-toolbar"><div><strong>Customer solar loan</strong><span>Separate from company borrowing.</span></div>{canManage && snapshot.project && <button className="primary-button primary-button--compact" onClick={onEdit}><Pencil size={14} /> {loan ? 'Update' : 'Create'} loan</button>}</div>{!loan ? <EmptyState title="No customer loan record" message="Create it only when the project uses loan payment mode." /> : <div className="detail-grid">{[
+    ['Bank', loan.bank_name], ['Application number', loan.application_number], ['Requested', money.format(Number(loan.requested_amount))], ['Approved', money.format(Number(loan.approved_amount))],
+    ['Customer contribution', money.format(Number(loan.customer_contribution))], ['Application status', label(loan.application_status)], ['Documents', label(loan.documentation_status)],
+    ['First disbursement', money.format(Number(loan.first_disbursement_amount))], ['Second disbursement', money.format(Number(loan.second_disbursement_amount))], ['EMI', money.format(Number(loan.emi_amount))], ['Loan status', label(loan.loan_status)], ['Note', loan.note],
+  ].map(([name, value]) => <div className="detail-field" key={name}><span>{name}</span><strong>{value || '—'}</strong></div>)}</div>}</>
+}
+
+function ActivityTab({ snapshot }: { snapshot: CustomerFlowSnapshot }) {
+  if (!snapshot.activity.length) return <EmptyState title="No activity yet" />
+  return <div className="activity-list">{snapshot.activity.map((row) => <article key={row.id}><span><History size={14} /></span><div><strong>{label(row.event.replace('.', ' '))}</strong><p>{label(row.entity)}{row.project_id ? ' · Project linked' : ''}</p><time>{dateTime.format(new Date(row.created_at))} · {label(row.user_role)}</time></div></article>)}</div>
+}
+
+function CustomerEditForm({ snapshot, working, onSubmit }: { snapshot: CustomerFlowSnapshot; working: boolean; onSubmit: (event: React.FormEvent<HTMLFormElement>) => void }) {
+  const form = customerForm(snapshot)
+  return <form className="erp-form" onSubmit={onSubmit}><div className="erp-form-grid">
+    <label><span>Full name</span><input name="full_name" defaultValue={form.full_name} required /></label><label><span>Customer type</span><select name="customer_type" defaultValue={form.customer_type}><option value="residential">Residential</option><option value="commercial">Commercial</option><option value="society">Society</option><option value="institutional">Institutional</option></select></label>
+    <label><span>Phone</span><input name="phone" defaultValue={form.phone} required /></label><label><span>Alternate phone</span><input name="alternate_phone" defaultValue={form.alternate_phone} /></label>
+    <label><span>Email</span><input name="email" type="email" defaultValue={form.email} /></label><label><span>Consumer number</span><input name="consumer_number" defaultValue={form.consumer_number} /></label>
+    <label><span>Electricity provider</span><input name="electricity_provider" defaultValue={form.electricity_provider} /></label><label><span>Lead source</span><input name="lead_source" defaultValue={form.lead_source} /></label>
+    <label className="erp-form-wide"><span>Installation site</span><textarea name="site_address" defaultValue={form.site_address} /></label><label className="erp-form-wide"><span>Billing address</span><textarea name="billing_address" defaultValue={form.billing_address} /></label>
+    <label><span>District</span><input name="district" defaultValue={form.district} /></label><label><span>State</span><input name="state" defaultValue={form.state} /></label><label><span>Postal code</span><input name="postal_code" defaultValue={form.postal_code} /></label><label><span>Status</span><select name="status" defaultValue={form.status}><option value="lead">Lead</option><option value="registered">Registered</option><option value="quotation_requested">Quotation requested</option><option value="active">Active</option><option value="on_hold">On hold</option><option value="completed">Completed</option></select></label>
+  </div><footer className="erp-form-actions"><button type="submit" className="primary-button" disabled={working}>Save customer</button></footer></form>
+}
+
+function PaymentForm({ accounts, categories, working, onSubmit }: { accounts: FinancialAccount[]; categories: FinanceCategory[]; working: boolean; onSubmit: (event: React.FormEvent<HTMLFormElement>) => void }) {
+  return <form className="erp-form" onSubmit={onSubmit}><div className="erp-form-grid"><label><span>Date</span><input type="date" name="transaction_date" defaultValue={new Date().toISOString().slice(0, 10)} required /></label><label><span>Direction</span><select name="direction"><option value="credit">Money in</option><option value="debit">Refund / money out</option></select></label><label><span>Amount</span><input type="number" min="0.01" step="0.01" name="amount" required /></label><label><span>Account</span><select name="account_id" required><option value="">Select account</option>{accounts.map((row) => <option value={row.id} key={row.id}>{row.name}</option>)}</select></label><label><span>Category</span><select name="category_id"><option value="">No category</option>{categories.map((row) => <option value={row.id} key={row.id}>{row.name}</option>)}</select></label><label><span>Payment method</span><select name="payment_method"><option value="bank">Bank</option><option value="cash">Cash</option><option value="upi">UPI</option><option value="cheque">Cheque</option></select></label><label><span>Type</span><select name="source_type"><option value="customer_payment">Customer payment</option><option value="customer_advance">Advance</option><option value="loan_disbursement">Loan disbursement</option><option value="subsidy_received">Subsidy received</option><option value="customer_refund">Refund</option></select></label><label><span>Reference</span><input name="reference_number" /></label><label className="erp-form-wide"><span>Description</span><input name="description" placeholder="Short payment note" /></label></div><footer className="erp-form-actions"><button className="primary-button" disabled={working || !accounts.length}>Post transaction</button></footer></form>
+}
+
+function LoanForm({ snapshot, working, onSubmit }: { snapshot: CustomerFlowSnapshot; working: boolean; onSubmit: (event: React.FormEvent<HTMLFormElement>) => void }) {
+  const loan = snapshot.loan
+  return <form className="erp-form" onSubmit={onSubmit}><div className="erp-form-grid"><label><span>Bank</span><input name="bank_name" defaultValue={loan?.bank_name} /></label><label><span>Application number</span><input name="application_number" defaultValue={loan?.application_number} /></label><label><span>Requested amount</span><input type="number" name="requested_amount" defaultValue={loan?.requested_amount ?? 0} /></label><label><span>Approved amount</span><input type="number" name="approved_amount" defaultValue={loan?.approved_amount ?? 0} /></label><label><span>Customer contribution</span><input type="number" name="customer_contribution" defaultValue={loan?.customer_contribution ?? 0} /></label><label><span>Application status</span><select name="application_status" defaultValue={loan?.application_status ?? 'draft'}>{['draft','applied','documents_pending','submitted_to_bank','under_review','conditionally_approved','approved','rejected','cancelled'].map((row) => <option key={row}>{row}</option>)}</select></label><label><span>Document status</span><select name="documentation_status" defaultValue={loan?.documentation_status ?? 'pending'}><option>pending</option><option>submitted</option><option>approved</option><option>rejected</option></select></label><label><span>Loan status</span><select name="loan_status" defaultValue={loan?.loan_status ?? 'draft'}>{['draft','applied','documents_pending','submitted_to_bank','under_review','conditionally_approved','approved','partially_disbursed','fully_disbursed','rejected','cancelled'].map((row) => <option key={row}>{row}</option>)}</select></label><label><span>First disbursement</span><input type="number" name="first_disbursement_amount" defaultValue={loan?.first_disbursement_amount ?? 0} /></label><label><span>Second disbursement</span><input type="number" name="second_disbursement_amount" defaultValue={loan?.second_disbursement_amount ?? 0} /></label><label><span>EMI amount</span><input type="number" name="emi_amount" defaultValue={loan?.emi_amount ?? 0} /></label><label className="erp-form-wide"><span>Note</span><textarea name="note" defaultValue={loan?.note} /></label></div><footer className="erp-form-actions"><button className="primary-button" disabled={working}>Save loan</button></footer></form>
+}
+
+
+function SalesBillForm({ approvedValue, working, onSubmit }: { approvedValue: number; working: boolean; onSubmit: (event: React.FormEvent<HTMLFormElement>) => void }) {
+  const today = new Date().toISOString().slice(0, 10)
+  return <form className="erp-form" onSubmit={onSubmit}><div className="erp-form-grid"><label><span>Bill number</span><input name="bill_number" required /></label><label><span>Bill date</span><input type="date" name="bill_date" defaultValue={today} required /></label><label><span>Due date</span><input type="date" name="due_date" /></label><label><span>Subtotal</span><input type="number" name="subtotal" min="0" step="0.01" defaultValue={approvedValue} required /></label><label><span>Tax</span><input type="number" name="tax_amount" min="0" step="0.01" defaultValue="0" /></label><label className="erp-form-wide"><span>Note</span><textarea name="note" /></label></div><footer className="erp-form-actions"><button className="primary-button" disabled={working}>Create sales bill</button></footer></form>
 }

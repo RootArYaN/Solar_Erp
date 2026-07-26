@@ -14,6 +14,7 @@ const AdminPage = lazy(() => import('./components/admin/AdminPage').then((module
 const DataArchivePage = lazy(() => import('./components/archive/DataArchivePage').then((module) => ({ default: module.DataArchivePage })))
 const AgentOverviewPage = lazy(() => import('./components/agents/AgentOverviewPage').then((module) => ({ default: module.AgentOverviewPage })))
 const CustomerWorkspacePage = lazy(() => import('./components/customers/CustomerWorkspacePage').then((module) => ({ default: module.CustomerWorkspacePage })))
+const FinancePage = lazy(() => import('./components/finance/FinancePage').then((module) => ({ default: module.FinancePage })))
 const CustomerDataUploadPage = lazy(() => import('./components/documents/CustomerDataUploadPage').then((module) => ({ default: module.CustomerDataUploadPage })))
 const InventoryPage = lazy(() => import('./components/inventory/InventoryPage').then((module) => ({ default: module.InventoryPage })))
 const PosterUploadPage = lazy(() => import('./components/posters/PosterUploadPage').then((module) => ({ default: module.PosterUploadPage })))
@@ -99,6 +100,7 @@ export default function App() {
         <Route path="customer-documents" element={session && <ProtectedRoute session={session} permissions={[PERMISSIONS.documents.view]}><CustomerDataUploadPage session={session} /></ProtectedRoute>} />
         <Route path="posters" element={session && <ProtectedRoute session={session} permissions={[PERMISSIONS.posters.view]}><PosterUploadPage session={session} /></ProtectedRoute>} />
         <Route path="solar-pricing" element={session && <ProtectedRoute session={session} permissions={[PERMISSIONS.pricing.view]}><SolarPricingPage session={session} /></ProtectedRoute>} />
+        <Route path="finance" element={session && <ProtectedRoute session={session} permissions={[PERMISSIONS.finance.view]}><FinancePage session={session} /></ProtectedRoute>} />
         <Route path="inventory" element={session && <ProtectedRoute session={session} permissions={[PERMISSIONS.inventory.view]}><InventoryPage session={session} /></ProtectedRoute>} />
         <Route path="security/devices" element={session && <ProtectedRoute session={session} permissions={[PERMISSIONS.security.view]}><ActiveDevicesPage session={session} /></ProtectedRoute>} />
         <Route path="archives" element={session && <ProtectedRoute session={session} permissions={[PERMISSIONS.archive.view]}><DataArchivePage session={session} /></ProtectedRoute>} />

@@ -9,6 +9,7 @@ import { apiRequest } from '../../api/client'
 export type CustomerFlowRepository = {
   listCustomers(cursor?: string | null): Promise<PaginatedList<Customer>>
   getSnapshot(customerId: UUID): Promise<CustomerFlowSnapshot>
+  updateCustomer(customerId: UUID, input: Record<string, unknown>): Promise<CustomerFlowSnapshot>
   approveQuotation(customerId: UUID, quotationId: UUID, comment: string): Promise<CustomerFlowSnapshot>
   saveMaterialRequest(customerId: UUID, input: Pick<MaterialRequest, 'purpose' | 'needed_at_site_by' | 'lines'>): Promise<CustomerFlowSnapshot>
   archiveCustomer(customerId: UUID, reason: string): Promise<CustomerFlowSnapshot>
@@ -24,6 +25,9 @@ export function createCustomerFlowRepository(token?: string): CustomerFlowReposi
     },
     getSnapshot(customerId) {
       return apiRequest<CustomerFlowSnapshot>(`/customer-flow/customers/${customerId}`, options)
+    },
+    updateCustomer(customerId, input) {
+      return apiRequest<CustomerFlowSnapshot>(`/customer-flow/customers/${customerId}`, { ...options, method: 'PATCH', body: input })
     },
     async approveQuotation(customerId, quotationId, comment) {
       await apiRequest(`/workflow/quotations/${quotationId}/decision`, {

@@ -100,9 +100,19 @@ export type AgentCustomer = {
   id: string
   customer_name: string
   company_name: string
+  alternate_phone: string
   email: string
   phone: string
   address: string
+  billing_address: string
+  site_address: string
+  district: string
+  state: string
+  postal_code: string
+  consumer_number: string
+  electricity_provider: string
+  customer_type: 'residential' | 'commercial' | 'society' | 'institutional'
+  lead_source: string
   project_name: string
   status: string
   outstanding_balance: number
@@ -155,10 +165,20 @@ export type CreateAgentTransactionInput = {
 
 export type CreateAgentCustomerInput = {
   customer_name: string
-  company_name: string
+  company_name?: string
   email: string
   phone: string
+  alternate_phone: string
   address: string
+  billing_address: string
+  site_address: string
+  district: string
+  state: string
+  postal_code: string
+  consumer_number: string
+  electricity_provider: string
+  customer_type: 'residential' | 'commercial' | 'society' | 'institutional'
+  lead_source: string
   project_name: string
 }
 

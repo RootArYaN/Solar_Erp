@@ -56,6 +56,7 @@ export const PERMISSIONS = {
     approve: 'documents.approve',
     manage: 'documents.manage',
   },
+  finance: { view: 'finance.view', manage: 'finance.manage' },
   posters: {
     view: 'posters.view',
     create: 'posters.create',

@@ -1,4 +1,4 @@
-import { Archive, BadgeIndianRupee, Boxes, Building2, ClipboardCheck, ContactRound, FileUp, ImageUp, LayoutDashboard, ListChecks, LogOut, Menu, PanelLeftClose, PanelLeftOpen, ShieldCheck, Users, UsersRound, X } from 'lucide-react'
+import { Archive, BadgeIndianRupee, Boxes, Building2, ClipboardCheck, ContactRound, FileUp, ImageUp, LayoutDashboard, ListChecks, LogOut, Menu, PanelLeftClose, PanelLeftOpen, ShieldCheck, Users, UsersRound, WalletCards, X } from 'lucide-react'
 import { useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { hasEveryPermission, hasPermission, PERMISSIONS } from '../lib/permissions'
@@ -16,8 +16,9 @@ export function AppShell({ session, onLogout }: { session: Session; onLogout: ()
     { to: '/app/agents', label: 'Agents', title: 'Agents', icon: ContactRound, permission: PERMISSIONS.agents.view },
     { to: '/app/projects', label: 'Projects', title: 'Project timelines', icon: ListChecks, permission: PERMISSIONS.projects.view },
     { to: '/app/approvals', label: 'Approvals', title: 'Quotation and transaction approvals', icon: ClipboardCheck, permission: PERMISSIONS.quotations.approve },
+    { to: '/app/finance', label: 'Finance', title: 'Company finance', icon: WalletCards, permission: PERMISSIONS.finance.view },
     { to: '/app/inventory', label: 'Inventory', title: 'Solar inventory', icon: Boxes, permission: PERMISSIONS.inventory.view },
-    { to: '/app/customer-documents', label: 'Customer data', title: 'Customer data upload', icon: FileUp, permission: PERMISSIONS.documents.view },
+    { to: '/app/customer-documents', label: 'Documents', title: 'Customer documents', icon: FileUp, permission: PERMISSIONS.documents.view },
     { to: '/app/posters', label: 'Posters', title: 'Poster upload', icon: ImageUp, permission: PERMISSIONS.posters.view },
     { to: '/app/solar-pricing', label: 'Solar pricing', title: 'Solar pricing', icon: BadgeIndianRupee, permission: PERMISSIONS.pricing.view },
     { to: '/app/security/devices', label: 'Devices', title: 'Active devices', icon: ShieldCheck, permission: PERMISSIONS.security.view },
