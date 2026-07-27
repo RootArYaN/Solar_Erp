@@ -1,4 +1,4 @@
-import type { Bill, BillList, CompanyLoan, FinanceCategory, FinanceOverview, FinanceTransaction, FinanceTransactionList, FinancialAccount, Profitability } from '../erp-types'
+import type { Bill, BillCustomerOption, BillList, CompanyLoan, FinanceCategory, FinanceOverview, FinanceTransaction, FinanceTransactionList, FinancialAccount, Profitability } from '../erp-types'
 import { createClientId } from '../lib/client-id'
 import { apiRequest } from './client'
 
@@ -8,9 +8,11 @@ export const createFinancialAccount = (body: Record<string, unknown>): Promise<F
 export const getFinanceCategories = (): Promise<FinanceCategory[]> => apiRequest('/finance/categories')
 export const getFinanceTransactions = (query = ''): Promise<FinanceTransactionList> => apiRequest(`/finance/transactions${query ? `?${query}` : ''}`)
 export const createFinanceTransaction = (body: Record<string, unknown>): Promise<FinanceTransaction> => apiRequest('/finance/transactions', { method: 'POST', body, idempotencyKey: createClientId() })
+export const reverseFinanceTransaction = (id: string, body: Record<string, unknown>): Promise<FinanceTransaction> => apiRequest(`/finance/transactions/${id}/reverse`, { method: 'POST', body, idempotencyKey: createClientId() })
 export const transferFinancialAccounts = (body: Record<string, unknown>): Promise<FinanceTransaction[]> => apiRequest('/finance/transfers', { method: 'POST', body, idempotencyKey: createClientId() })
 export const getExpenses = (query = ''): Promise<FinanceTransactionList> => apiRequest(`/finance/expenses${query ? `?${query}` : ''}`)
 export const getBills = (query = ''): Promise<BillList> => apiRequest(`/finance/bills${query ? `?${query}` : ''}`)
+export const getBillCustomers = (): Promise<BillCustomerOption[]> => apiRequest('/finance/bill-customers')
 export const createBill = (body: Record<string, unknown>): Promise<Bill> => apiRequest('/finance/bills', { method: 'POST', body, idempotencyKey: createClientId() })
 export const recordBillPayment = (id: string, body: Record<string, unknown>): Promise<Bill> => apiRequest(`/finance/bills/${id}/payments`, { method: 'POST', body, idempotencyKey: createClientId() })
 export const getCompanyLoans = (): Promise<CompanyLoan[]> => apiRequest('/finance/company-loans')

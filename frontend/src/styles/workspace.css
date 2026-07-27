@@ -833,3 +833,11 @@ body,
     display: grid;
   }
 }
+
+.entity-edit-dialog { width: min(720px, calc(100vw - 24px)); max-height: min(780px, calc(100dvh - 24px)); overflow: hidden; display: flex; flex-direction: column; }
+.entity-edit-dialog__body { min-height: 0; overflow: auto; }
+.entity-edit-dialog__footer { display: flex; justify-content: flex-end; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--border, #e5e7eb); background: var(--card, #fff); }
+.entity-edit-dialog__conflict { display: flex; align-items: flex-start; gap: 10px; padding: 10px; margin-bottom: 10px; border: 1px solid #f59e0b55; border-radius: 10px; background: #f59e0b12; }
+.entity-edit-dialog__conflict div { flex: 1; min-width: 0; }
+.entity-edit-dialog__conflict p { margin: 2px 0 0; }
+@media (max-width: 640px) { .entity-edit-dialog { width: 100vw; height: 100dvh; max-height: 100dvh; border-radius: 0; } .entity-edit-dialog__footer { padding-bottom: max(10px, env(safe-area-inset-bottom)); } }

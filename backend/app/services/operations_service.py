@@ -9,6 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.deps import CurrentSession
+from app.core.concurrency import RecordConflictError, verify_version
 from app.models.agent import AgentCustomer
 from app.models.operations import (
     DocumentTemplate,
@@ -63,7 +64,7 @@ def _f(value) -> float:
 
 
 def _location_summary(row: InventoryLocation) -> InventoryLocationSummary:
-    return InventoryLocationSummary(id=row.id, name=row.name, location_type=row.location_type, address=row.address, is_active=row.is_active)
+    return InventoryLocationSummary(id=row.id, version=row.version, name=row.name, location_type=row.location_type, address=row.address, is_active=row.is_active)
 
 
 def _inventory_maps(db: Session, company_id: str):
@@ -113,7 +114,7 @@ def inventory_summary(db: Session, actor: CurrentSession) -> InventorySummary:
         stock_value += on_hand * Decimal(item.unit_cost or 0)
         total_quantity += on_hand
         item_summaries.append(InventoryItemSummary(
-            id=item.id, sku=item.sku, name=item.name, category=item.category, unit=item.unit,
+            id=item.id, version=item.version, sku=item.sku, name=item.name, category=item.category, unit=item.unit,
             supplier_name=item.supplier_name, unit_cost=_f(item.unit_cost), reorder_level=_f(item.reorder_level),
             quantity_on_hand=_f(on_hand), reserved_quantity=_f(reserved), available_quantity=_f(available),
             location_id=primary.location_id if primary else None,
@@ -227,7 +228,7 @@ def save_pricing(db: Session, actor: CurrentSession, payload: SavePricingBookReq
 
 def _poster_summary(db: Session,row: Poster)->PosterSummary:
     file=db.get(StoredFile,row.file_id)
-    return PosterSummary(id=row.id,title=row.title,description=row.description,file_id=row.file_id,file_name=file.name if file else '',mime_type=file.mime_type if file else '',category=row.category,status=row.status,created_at=row.created_at,updated_at=row.updated_at)
+    return PosterSummary(id=row.id,version=row.version,title=row.title,description=row.description,file_id=row.file_id,file_name=file.name if file else '',mime_type=file.mime_type if file else '',category=row.category,status=row.status,created_at=row.created_at,updated_at=row.updated_at)
 
 
 def list_posters(db: Session, actor: CurrentSession, status: str | None=None)->list[PosterSummary]:
@@ -267,3 +268,62 @@ def save_template(db: Session, actor: CurrentSession, template_type: str, payloa
         row=DocumentTemplate(company_id=actor.membership.company_id,template_type=template_type,name=payload.name,settings_json='{}',is_active=True,updated_by=actor.membership.id); db.add(row)
     row.name=payload.name; row.settings_json=json.dumps(payload.settings,separators=(',',':')); row.updated_by=actor.membership.id
     db.flush(); write_event(db,company_id=row.company_id,event='document_template.updated',entity='document_template',entity_id=row.id,actor=actor,changes={'template_type':template_type}); db.commit(); return get_template(db,actor,template_type)
+
+
+def update_inventory_item(db: Session, actor: CurrentSession, item_id: str, payload):
+    row = db.scalar(select(InventoryItem).where(InventoryItem.id == item_id, InventoryItem.company_id == actor.membership.company_id))
+    if not row:
+        raise OperationsNotFoundError('Inventory item not found')
+    try:
+        verify_version(row, payload.version)
+    except RecordConflictError as exc:
+        raise OperationsConflictError(str(exc)) from exc
+    duplicate = db.scalar(select(InventoryItem).where(InventoryItem.company_id == row.company_id, InventoryItem.sku == payload.sku, InventoryItem.id != row.id))
+    if duplicate:
+        raise OperationsConflictError('SKU already exists')
+    before = {key: getattr(row, key) for key in ('sku','name','category','unit','supplier_name','unit_cost','reorder_level','is_active')}
+    for key in before:
+        setattr(row, key, _d(getattr(payload,key)) if key in {'unit_cost','reorder_level'} else getattr(payload,key))
+    row.version += 1
+    changes = {key: {'old': before[key], 'new': getattr(row,key)} for key in before if before[key] != getattr(row,key)}
+    write_event(db, company_id=row.company_id, event='inventory.item_updated', entity='inventory_item', entity_id=row.id, actor=actor, changes=changes)
+    db.commit(); db.refresh(row)
+    summary = inventory_summary(db, actor)
+    return next(item for item in summary.items if item.id == row.id)
+
+
+def update_inventory_location(db: Session, actor: CurrentSession, location_id: str, payload):
+    row = db.scalar(select(InventoryLocation).where(InventoryLocation.id == location_id, InventoryLocation.company_id == actor.membership.company_id))
+    if not row:
+        raise OperationsNotFoundError('Inventory location not found')
+    try:
+        verify_version(row, payload.version)
+    except RecordConflictError as exc:
+        raise OperationsConflictError(str(exc)) from exc
+    duplicate = db.scalar(select(InventoryLocation).where(InventoryLocation.company_id == row.company_id, InventoryLocation.name == payload.name, InventoryLocation.id != row.id))
+    if duplicate:
+        raise OperationsConflictError('Location name already exists')
+    before = {key: getattr(row,key) for key in ('name','location_type','address','is_active')}
+    for key in before: setattr(row,key,getattr(payload,key))
+    row.version += 1
+    changes = {key: {'old': before[key], 'new': getattr(row,key)} for key in before if before[key] != getattr(row,key)}
+    write_event(db, company_id=row.company_id, event='inventory.location_updated', entity='inventory_location', entity_id=row.id, actor=actor, changes=changes)
+    db.commit(); db.refresh(row)
+    return _location_summary(row)
+
+
+def update_poster(db: Session, actor: CurrentSession, poster_id: str, payload):
+    row = db.scalar(select(Poster).where(Poster.id == poster_id, Poster.company_id == actor.membership.company_id))
+    if not row:
+        raise OperationsNotFoundError('Poster not found')
+    try:
+        verify_version(row, payload.version)
+    except RecordConflictError as exc:
+        raise OperationsConflictError(str(exc)) from exc
+    before = {key: getattr(row,key) for key in ('title','description','category')}
+    for key in before: setattr(row,key,getattr(payload,key))
+    row.version += 1
+    changes = {key: {'old': before[key], 'new': getattr(row,key)} for key in before if before[key] != getattr(row,key)}
+    write_event(db, company_id=row.company_id, event='poster.updated', entity='poster', entity_id=row.id, actor=actor, changes=changes)
+    db.commit(); db.refresh(row)
+    return _poster_summary(db,row)

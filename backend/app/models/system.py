@@ -101,6 +101,7 @@ class AuditEvent(Base):
     changes_json: Mapped[str] = mapped_column(Text, default="{}", nullable=False)
     request_id: Mapped[str] = mapped_column(String(80), default="", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
 
 
 class StoredFile(Base):
@@ -112,6 +113,7 @@ class StoredFile(Base):
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    version: Mapped[int] = mapped_column(default=1, nullable=False)
     company_id: Mapped[str] = mapped_column(ForeignKey("companies.id", ondelete="CASCADE"), index=True, nullable=False)
     owner_type: Mapped[str] = mapped_column(String(40), index=True, nullable=False)
     owner_id: Mapped[str] = mapped_column(String(80), index=True, nullable=False)

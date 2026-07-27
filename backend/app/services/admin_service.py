@@ -18,6 +18,10 @@ from app.services.agent_service import ensure_agent_profile
 from app.services.audit_service import write_event
 
 
+PROTECTED_ROLE_CODES = {"company_admin", "super_admin"}
+SUPER_ADMIN_ROLE_CODE = "super_admin"
+
+
 class AdminServiceError(Exception):
     status_code = 400
 
@@ -32,6 +36,14 @@ class AdminConflictError(AdminServiceError):
 
 class AdminForbiddenError(AdminServiceError):
     status_code = 403
+
+
+def _is_super_admin(actor: CurrentSession) -> bool:
+    return actor.user.is_super_admin
+
+
+def _role_permission_codes(role: Role) -> set[str]:
+    return {permission.code for permission in role.permissions}
 
 
 def _to_user_summary(membership: Membership) -> UserAdminSummary:
@@ -55,7 +67,7 @@ def _to_role_summary(role: Role, member_count: int | None = None) -> RoleSummary
         code=role.code,
         description=role.description,
         is_system=role.is_system,
-        permissions=sorted(permission.code for permission in role.permissions),
+        permissions=sorted(_role_permission_codes(role)),
         member_count=member_count if member_count is not None else len(role.memberships),
     )
 
@@ -64,10 +76,21 @@ def _load_company_role(db: Session, company_id: str, role_code: str) -> Role:
     role = db.scalar(
         select(Role)
         .where(Role.company_id == company_id, Role.code == role_code)
-        .options(selectinload(Role.permissions))
+        .options(selectinload(Role.permissions), selectinload(Role.memberships))
     )
     if not role:
         raise AdminNotFoundError(f"Unknown role: {role_code}")
+    return role
+
+
+def _load_role(db: Session, company_id: str, role_id: str) -> Role:
+    role = db.scalar(
+        select(Role)
+        .where(Role.id == role_id, Role.company_id == company_id)
+        .options(selectinload(Role.permissions), selectinload(Role.memberships))
+    )
+    if not role:
+        raise AdminNotFoundError("Role not found")
     return role
 
 
@@ -86,21 +109,75 @@ def _get_membership(db: Session, company_id: str, membership_id: str) -> Members
     membership = db.scalar(
         select(Membership)
         .where(Membership.id == membership_id, Membership.company_id == company_id)
-        .options(selectinload(Membership.user), selectinload(Membership.role))
+        .options(
+            selectinload(Membership.user),
+            selectinload(Membership.role).selectinload(Role.permissions),
+        )
     )
     if not membership:
         raise AdminNotFoundError("User membership not found")
     return membership
 
 
-def _assert_super_admin_change_allowed(actor: CurrentSession, role_code: str) -> None:
-    if role_code == "super_admin" and not actor.user.is_super_admin:
-        raise AdminForbiddenError("Only a super administrator can assign the super admin role")
+def _assert_permissions_grantable(actor: CurrentSession, permission_codes: set[str]) -> None:
+    if _is_super_admin(actor):
+        return
+    unavailable = sorted(permission_codes - set(actor.permissions))
+    if unavailable:
+        raise AdminForbiddenError(
+            f"You cannot grant permissions you do not have: {', '.join(unavailable)}"
+        )
+
+
+def _assert_role_manageable(actor: CurrentSession, role: Role) -> None:
+    if _is_super_admin(actor):
+        return
+    if role.code in PROTECTED_ROLE_CODES:
+        raise AdminForbiddenError("Only a super administrator can manage protected roles")
+    _assert_permissions_grantable(actor, _role_permission_codes(role))
+
+
+def _assert_role_assignable(actor: CurrentSession, role: Role) -> None:
+    if _is_super_admin(actor):
+        return
+    if role.code in PROTECTED_ROLE_CODES:
+        raise AdminForbiddenError("Only a super administrator can assign administrator roles")
+    _assert_permissions_grantable(actor, _role_permission_codes(role))
 
 
 def _assert_target_editable(actor: CurrentSession, target: Membership) -> None:
-    if target.user.is_super_admin and not actor.user.is_super_admin:
+    if _is_super_admin(actor) or target.user_id == actor.user.id:
+        return
+    if target.user.is_super_admin or target.role.code in PROTECTED_ROLE_CODES:
         raise AdminForbiddenError("Only a super administrator can edit this user")
+    _assert_permissions_grantable(actor, _role_permission_codes(target.role))
+
+
+def _active_super_admin_count(db: Session, company_id: str) -> int:
+    return int(db.scalar(
+        select(func.count(Membership.id))
+        .select_from(Membership)
+        .join(User, Membership.user_id == User.id)
+        .join(Role, Membership.role_id == Role.id)
+        .where(
+            Membership.company_id == company_id,
+            Membership.is_active.is_(True),
+            User.is_active.is_(True),
+            User.is_super_admin.is_(True),
+            Role.code == SUPER_ADMIN_ROLE_CODE,
+        )
+    ) or 0)
+
+
+def _assert_not_last_super_admin(db: Session, target: Membership) -> None:
+    is_active_super_admin = (
+        target.is_active
+        and target.user.is_active
+        and target.user.is_super_admin
+        and target.role.code == SUPER_ADMIN_ROLE_CODE
+    )
+    if is_active_super_admin and _active_super_admin_count(db, target.company_id) <= 1:
+        raise AdminConflictError("At least one active super administrator must remain")
 
 
 def list_users(db: Session, actor: CurrentSession, query: str | None = None) -> list[UserAdminSummary]:
@@ -108,7 +185,10 @@ def list_users(db: Session, actor: CurrentSession, query: str | None = None) -> 
         select(Membership)
         .join(Membership.user)
         .where(Membership.company_id == actor.membership.company_id)
-        .options(selectinload(Membership.user), selectinload(Membership.role))
+        .options(
+            selectinload(Membership.user),
+            selectinload(Membership.role).selectinload(Role.permissions),
+        )
         .order_by(User.full_name.asc())
     )
     if query and query.strip():
@@ -125,8 +205,8 @@ def list_users(db: Session, actor: CurrentSession, query: str | None = None) -> 
 
 def create_user(db: Session, actor: CurrentSession, payload: CreateUserRequest) -> UserAdminSummary:
     company_id = actor.membership.company_id
-    _assert_super_admin_change_allowed(actor, payload.role_code)
     role = _load_company_role(db, company_id, payload.role_code)
+    _assert_role_assignable(actor, role)
 
     email = str(payload.email).strip().lower()
     if db.scalar(select(User).where(User.username == payload.username)):
@@ -140,7 +220,7 @@ def create_user(db: Session, actor: CurrentSession, payload: CreateUserRequest) 
         full_name=payload.full_name,
         hashed_password=hash_password(payload.password),
         is_active=True,
-        is_super_admin=payload.role_code == "super_admin",
+        is_super_admin=role.code == SUPER_ADMIN_ROLE_CODE,
     )
     membership = Membership(
         company_id=company_id,
@@ -150,14 +230,18 @@ def create_user(db: Session, actor: CurrentSession, payload: CreateUserRequest) 
     )
     db.add(membership)
     db.flush()
-    if payload.role_code == "agent":
+    if role.code == "agent":
         ensure_agent_profile(db, membership)
     write_event(
-        db, company_id=company_id, event="user.created", entity="membership",
-        entity_id=membership.id, actor=actor, changes={"username": user.username, "role": role.code},
+        db,
+        company_id=company_id,
+        event="user.created",
+        entity="membership",
+        entity_id=membership.id,
+        actor=actor,
+        changes={"username": user.username, "role": role.code, "is_active": membership.is_active},
     )
     db.commit()
-    db.refresh(membership)
     return _to_user_summary(_get_membership(db, company_id, membership.id))
 
 
@@ -171,16 +255,30 @@ def update_user(
     membership = _get_membership(db, company_id, membership_id)
     _assert_target_editable(actor, membership)
 
-    if payload.is_active is False and membership.user_id == actor.user.id:
-        raise AdminForbiddenError("You cannot deactivate your own account")
+    before = {
+        "full_name": membership.user.full_name,
+        "username": membership.user.username,
+        "email": membership.user.email,
+        "role": membership.role.code,
+        "is_active": membership.is_active,
+    }
 
-    if payload.role_code is not None:
-        if membership.user_id == actor.user.id:
-            raise AdminForbiddenError("You cannot change your own role")
-        _assert_super_admin_change_allowed(actor, payload.role_code)
-        membership.role = _load_company_role(db, company_id, payload.role_code)
-        membership.user.is_super_admin = payload.role_code == "super_admin"
-        if payload.role_code == "agent":
+    changing_role = payload.role_code is not None and payload.role_code != membership.role.code
+    deactivating = payload.is_active is False and membership.is_active
+
+    if deactivating and membership.user_id == actor.user.id:
+        raise AdminForbiddenError("You cannot deactivate your own account")
+    if changing_role and membership.user_id == actor.user.id:
+        raise AdminForbiddenError("You cannot change your own role")
+    if (deactivating or changing_role) and membership.role.code == SUPER_ADMIN_ROLE_CODE:
+        _assert_not_last_super_admin(db, membership)
+
+    if changing_role:
+        next_role = _load_company_role(db, company_id, payload.role_code or "")
+        _assert_role_assignable(actor, next_role)
+        membership.role = next_role
+        membership.user.is_super_admin = next_role.code == SUPER_ADMIN_ROLE_CODE
+        if next_role.code == "agent":
             ensure_agent_profile(db, membership)
 
     if payload.email is not None:
@@ -207,9 +305,21 @@ def update_user(
     if payload.is_active is not None:
         membership.is_active = payload.is_active
 
+    after = {
+        "full_name": membership.user.full_name,
+        "username": membership.user.username,
+        "email": membership.user.email,
+        "role": membership.role.code,
+        "is_active": membership.is_active,
+    }
     write_event(
-        db, company_id=company_id, event="user.updated", entity="membership",
-        entity_id=membership.id, actor=actor, changes=payload.model_dump(exclude_none=True),
+        db,
+        company_id=company_id,
+        event="user.updated",
+        entity="membership",
+        entity_id=membership.id,
+        actor=actor,
+        changes={"before": before, "after": after},
     )
     db.commit()
     return _to_user_summary(_get_membership(db, company_id, membership.id))
@@ -225,14 +335,22 @@ def reset_user_password(
     _assert_target_editable(actor, membership)
     membership.user.hashed_password = hash_password(payload.new_password)
     write_event(
-        db, company_id=membership.company_id, event="user.password_reset", entity="membership",
-        entity_id=membership.id, actor=actor, changes={},
+        db,
+        company_id=membership.company_id,
+        event="user.password_reset",
+        entity="membership",
+        entity_id=membership.id,
+        actor=actor,
+        changes={},
     )
     db.commit()
 
 
-def list_permissions(db: Session) -> list[PermissionSummary]:
-    permissions = db.scalars(select(Permission).order_by(Permission.code.asc())).all()
+def list_permissions(db: Session, actor: CurrentSession) -> list[PermissionSummary]:
+    statement = select(Permission)
+    if not _is_super_admin(actor):
+        statement = statement.where(Permission.code.in_(actor.permissions))
+    permissions = db.scalars(statement.order_by(Permission.code.asc())).all()
     return [
         PermissionSummary(
             id=permission.id,
@@ -264,6 +382,8 @@ def create_role(db: Session, actor: CurrentSession, payload: CreateRoleRequest) 
     if duplicate:
         raise AdminConflictError("A role with this code already exists")
 
+    permission_codes = set(payload.permission_codes)
+    _assert_permissions_grantable(actor, permission_codes)
     role = Role(
         company_id=actor.membership.company_id,
         name=payload.name,
@@ -275,8 +395,13 @@ def create_role(db: Session, actor: CurrentSession, payload: CreateRoleRequest) 
     db.add(role)
     db.flush()
     write_event(
-        db, company_id=role.company_id, event="role.created", entity="role", entity_id=role.id,
-        actor=actor, changes={"code": role.code, "permissions": payload.permission_codes},
+        db,
+        company_id=role.company_id,
+        event="role.created",
+        entity="role",
+        entity_id=role.id,
+        actor=actor,
+        changes={"code": role.code, "permissions": sorted(permission_codes)},
     )
     db.commit()
     db.refresh(role)
@@ -289,46 +414,63 @@ def update_role(
     role_id: str,
     payload: UpdateRoleRequest,
 ) -> RoleSummary:
-    role = db.scalar(
-        select(Role)
-        .where(Role.id == role_id, Role.company_id == actor.membership.company_id)
-        .options(selectinload(Role.permissions), selectinload(Role.memberships))
-    )
-    if not role:
-        raise AdminNotFoundError("Role not found")
-    if role.code in {"company_admin", "super_admin"}:
-        raise AdminForbiddenError("Full-access administrator roles are protected")
+    role = _load_role(db, actor.membership.company_id, role_id)
+    _assert_role_manageable(actor, role)
+
+    if role.code == SUPER_ADMIN_ROLE_CODE and payload.permission_codes is not None:
+        requested = set(payload.permission_codes)
+        current = _role_permission_codes(role)
+        if requested != current:
+            raise AdminForbiddenError("Super Admin permissions are unrestricted and cannot be reduced")
+
+    before = {
+        "name": role.name,
+        "description": role.description,
+        "permissions": sorted(_role_permission_codes(role)),
+    }
 
     if payload.name is not None:
         role.name = payload.name
     if payload.description is not None:
         role.description = payload.description
-    if payload.permission_codes is not None:
+    if payload.permission_codes is not None and role.code != SUPER_ADMIN_ROLE_CODE:
+        permission_codes = set(payload.permission_codes)
+        _assert_permissions_grantable(actor, permission_codes)
         role.permissions = _load_permissions(db, payload.permission_codes)
 
+    after = {
+        "name": role.name,
+        "description": role.description,
+        "permissions": sorted(_role_permission_codes(role)),
+    }
     write_event(
-        db, company_id=role.company_id, event="role.updated", entity="role", entity_id=role.id,
-        actor=actor, changes=payload.model_dump(exclude_none=True),
+        db,
+        company_id=role.company_id,
+        event="role.updated",
+        entity="role",
+        entity_id=role.id,
+        actor=actor,
+        changes={"before": before, "after": after, "affected_users": len(role.memberships)},
     )
     db.commit()
     return _to_role_summary(role)
 
 
 def delete_role(db: Session, actor: CurrentSession, role_id: str) -> None:
-    role = db.scalar(
-        select(Role)
-        .where(Role.id == role_id, Role.company_id == actor.membership.company_id)
-        .options(selectinload(Role.memberships))
-    )
-    if not role:
-        raise AdminNotFoundError("Role not found")
+    role = _load_role(db, actor.membership.company_id, role_id)
+    _assert_role_manageable(actor, role)
     if role.is_system:
         raise AdminForbiddenError("System roles cannot be deleted")
     if role.memberships:
         raise AdminConflictError("Remove this role from all users before deleting it")
     write_event(
-        db, company_id=role.company_id, event="role.deleted", entity="role", entity_id=role.id,
-        actor=actor, changes={"code": role.code},
+        db,
+        company_id=role.company_id,
+        event="role.deleted",
+        entity="role",
+        entity_id=role.id,
+        actor=actor,
+        changes={"code": role.code},
     )
     db.delete(role)
     db.commit()

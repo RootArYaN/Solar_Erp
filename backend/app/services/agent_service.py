@@ -100,7 +100,7 @@ def _can_view_all(actor: CurrentSession) -> bool:
 
 
 def _is_admin(actor: CurrentSession) -> bool:
-    return actor.user.is_super_admin or actor.role in {"company_admin", "super_admin", "accounts_admin"}
+    return actor.user.is_super_admin
 
 
 def _assert_can_view(actor: CurrentSession, membership_id: str) -> None:
@@ -120,7 +120,7 @@ def _assert_can_manage_customer(actor: CurrentSession, membership_id: str) -> No
 
 
 def _has_unlimited_customer_edits(actor: CurrentSession) -> bool:
-    return _is_admin(actor)
+    return actor.user.is_super_admin or bool({"customers.edit", "agents.manage"}.intersection(actor.permissions))
 
 
 def _agent_edited_customer_ids(db: Session, company_id: str, customer_ids: list[str]) -> set[str]:

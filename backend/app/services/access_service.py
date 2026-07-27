@@ -15,7 +15,7 @@ class NotFoundError(AccessError):
 
 
 def is_admin(actor: CurrentSession) -> bool:
-    return actor.user.is_super_admin or actor.role in {"company_admin", "super_admin", "accounts_admin"}
+    return actor.user.is_super_admin
 
 
 def get_customer(db: Session, actor: CurrentSession, customer_id: str) -> AgentCustomer:

@@ -24,6 +24,7 @@ from app.models.finance import (
 from app.models.workflow import CustomerProject
 from app.schemas.finance import (
     AccountTransferRequest,
+    BillCustomerOption,
     BillList,
     BillSummary,
     CompanyLoanPaymentRequest,
@@ -40,6 +41,7 @@ from app.schemas.finance import (
     FinancialAccountSummary,
     ProfitabilitySummary,
     RecordBillPaymentRequest,
+    ReverseFinanceTransactionRequest,
     UpsertCustomerLoanRequest,
 )
 from app.services.access_service import get_customer, get_project
@@ -323,6 +325,31 @@ def create_transaction(db: Session, actor: CurrentSession, payload: CreateFinanc
     return _transaction_summaries(db, [row])[0]
 
 
+
+def reverse_transaction(db: Session, actor: CurrentSession, transaction_id: str, payload: ReverseFinanceTransactionRequest) -> FinanceTransactionSummary:
+    original = db.scalar(select(FinanceTransaction).where(FinanceTransaction.id == transaction_id, FinanceTransaction.company_id == actor.membership.company_id))
+    if not original:
+        raise FinanceNotFoundError('Finance transaction not found')
+    if original.status != 'posted':
+        raise FinanceConflictError('Only posted transactions can be reversed')
+    existing = db.scalar(select(FinanceTransaction).where(FinanceTransaction.reversed_transaction_id == original.id, FinanceTransaction.company_id == original.company_id))
+    if existing:
+        raise FinanceConflictError('This transaction has already been reversed')
+    reversal = FinanceTransaction(
+        company_id=original.company_id, transaction_number=_transaction_number('REV'), transaction_date=payload.transaction_date,
+        direction='debit' if original.direction == 'credit' else 'credit', category_id=original.category_id, amount=original.amount,
+        account_id=original.account_id, payment_method=original.payment_method, party_type=original.party_type, party_name=original.party_name,
+        customer_id=original.customer_id, project_id=original.project_id, agent_id=original.agent_id, supplier_id=original.supplier_id,
+        source_type='transaction_reversal', source_id=original.id, reference_number=original.transaction_number,
+        description=f'Reversal: {payload.reason}', status='posted', reversed_transaction_id=original.id, created_by=actor.membership.id,
+    )
+    db.add(reversal)
+    original.status = 'reversed'
+    db.flush()
+    write_event(db, company_id=original.company_id, event='finance.transaction_reversed', entity='finance_transaction', entity_id=original.id, actor=actor, project_id=original.project_id, customer_id=original.customer_id, changes={'reversal_id': reversal.id, 'reason': payload.reason, 'amount': str(original.amount)})
+    db.commit(); db.refresh(reversal)
+    return _transaction_summaries(db, [reversal])[0]
+
 def transfer_accounts(db: Session, actor: CurrentSession, payload: AccountTransferRequest) -> list[FinanceTransactionSummary]:
     source = _load_account(db, actor, payload.source_account_id)
     destination = _load_account(db, actor, payload.destination_account_id)
@@ -370,6 +397,18 @@ def list_bills(db: Session, actor: CurrentSession, *, bill_type: str | None = No
     total = db.scalar(select(func.count()).select_from(Bill).where(*filters)) or 0
     rows = list(db.scalars(select(Bill).where(*filters).order_by(Bill.bill_date.desc(), Bill.created_at.desc()).offset((page - 1) * page_size).limit(page_size)).all())
     return BillList(data=[_bill_summary(db, row) for row in rows], page=page, page_size=page_size, total=int(total))
+
+
+def list_bill_customers(db: Session, actor: CurrentSession) -> list[BillCustomerOption]:
+    rows = db.scalars(
+        select(AgentCustomer)
+        .where(
+            AgentCustomer.company_id == actor.membership.company_id,
+            AgentCustomer.archived_at.is_(None),
+        )
+        .order_by(AgentCustomer.customer_name)
+    ).all()
+    return [BillCustomerOption(id=row.id, customer_name=row.customer_name) for row in rows]
 
 
 def create_bill(db: Session, actor: CurrentSession, payload: CreateBillRequest) -> BillSummary:

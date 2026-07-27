@@ -1,7 +1,7 @@
 import type { CSSProperties, HTMLAttributes, ReactNode } from 'react'
 
 interface KpiGridProps extends HTMLAttributes<HTMLDivElement> {
-  columns?: 2 | 3 | 4 | 5 | 6 | 8
+  columns?: 1 | 2 | 3 | 4 | 5 | 6 | 8
   children: ReactNode
   className?: string
 }

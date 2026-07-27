@@ -427,6 +427,9 @@ button { color: inherit; }
 .permission-editor__heading > div { display: grid; gap: 3px; }
 .permission-editor__heading strong { font-size: 12px; }
 .permission-editor__heading span { color: var(--muted); font-size: 10px; }
+.permission-editor__notice { padding: 10px 12px; border: 1px solid rgba(197,133,18,.2); border-radius: 10px; color: #6f531d; background: #fff9ec; font-size: 11px; line-height: 1.5; }
+.permission-editor__notice--protected { border-color: rgba(42,91,122,.18); color: #315a72; background: #f2f8fb; }
+.field-hint { display: block; margin-top: 8px; color: var(--muted); font-size: 10px; }
 .permission-groups { display: grid; grid-template-columns: 1fr 1fr; max-height: 330px; overflow-y: auto; }
 .permission-group { padding: 15px 16px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
 .permission-group:nth-child(even) { border-right: 0; }

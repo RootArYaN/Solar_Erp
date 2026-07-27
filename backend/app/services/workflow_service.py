@@ -68,7 +68,7 @@ def _quotation_lines(raw_value: str) -> list[QuotationLineSummary]:
 
 
 def _is_admin(actor: CurrentSession) -> bool:
-    return actor.user.is_super_admin or actor.role in {"company_admin", "super_admin", "accounts_admin"}
+    return actor.user.is_super_admin
 
 
 def _load_customer(db: Session, actor: CurrentSession, customer_id: str) -> AgentCustomer:
@@ -454,7 +454,7 @@ _TIMELINE_FINAL_STEPS = [
 
 
 def _timeline_can_manage(actor: CurrentSession) -> bool:
-    return _is_admin(actor)
+    return actor.user.is_super_admin or bool({"projects.edit", "projects.manage"}.intersection(actor.permissions))
 
 
 def _timeline_definition(payment_mode: str) -> list[tuple[str, str, bool]]:
@@ -591,6 +591,7 @@ def _timeline_list_item(project: CustomerProject, customer: AgentCustomer, timel
     current = next((step for step in steps if step["status"] == "current"), steps[-1] if steps else {"key": "", "name": ""})
     return ProjectTimelineListItem(
         project_id=project.id,
+        customer_id=customer.id,
         project_number=project.project_number,
         project_name=project.name,
         customer_name=customer.customer_name,

@@ -8,6 +8,7 @@ from app.core.config import settings
 from app.db.session import get_db
 from app.schemas.finance import (
     AccountTransferRequest,
+    BillCustomerOption,
     BillList,
     BillSummary,
     CompanyLoanPaymentRequest,
@@ -24,6 +25,7 @@ from app.schemas.finance import (
     FinancialAccountSummary,
     ProfitabilitySummary,
     RecordBillPaymentRequest,
+    ReverseFinanceTransactionRequest,
     UpsertCustomerLoanRequest,
 )
 from app.services import finance_service
@@ -82,6 +84,14 @@ def post_transaction(payload: CreateFinanceTransactionRequest, db: Session = Dep
     except FinanceServiceError as exc: _raise(exc)
 
 
+
+
+@router.post('/transactions/{transaction_id}/reverse', response_model=FinanceTransactionSummary, status_code=201)
+def reverse_transaction(transaction_id: str, payload: ReverseFinanceTransactionRequest, db: Session = Depends(get_db), session: CurrentSession = Depends(require_any_permissions('finance.manage'))):
+    try: return finance_service.reverse_transaction(db, session, transaction_id, payload)
+    except FinanceServiceError as exc: _raise(exc)
+
+
 @router.post('/transfers', response_model=list[FinanceTransactionSummary], status_code=201)
 def post_transfer(payload: AccountTransferRequest, db: Session = Depends(get_db), session: CurrentSession = Depends(require_any_permissions('finance.manage'))):
     try: return finance_service.transfer_accounts(db, session, payload)
@@ -113,6 +123,11 @@ def get_bills(
     session: CurrentSession = Depends(require_any_permissions('finance.view', 'finance.manage')),
 ):
     return finance_service.list_bills(db, session, bill_type=bill_type, payment_status=payment_status, customer_id=customer_id, project_id=project_id, page=page, page_size=page_size)
+
+
+@router.get('/bill-customers', response_model=list[BillCustomerOption])
+def get_bill_customers(db: Session = Depends(get_db), session: CurrentSession = Depends(require_any_permissions('finance.view', 'finance.manage'))):
+    return finance_service.list_bill_customers(db, session)
 
 
 @router.post('/bills', response_model=BillSummary, status_code=201)

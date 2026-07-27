@@ -83,6 +83,7 @@ export type Bill = {
   created_at: string
 }
 export type BillList = { data: Bill[]; page: number; page_size: number; total: number }
+export type BillCustomerOption = { id: string; customer_name: string }
 
 export type CompanyLoan = {
   id: string
@@ -129,9 +130,10 @@ export type Profitability = {
   projects: Array<{ project_id: string; project_number: string; project_name: string; sales_value: number; money_received: number; cost: number; gross_profit: number }>
 }
 
-export type InventoryLocation = { id: string; name: string; location_type: string; address: string; is_active: boolean }
+export type InventoryLocation = { id: string; version: number; name: string; location_type: string; address: string; is_active: boolean }
 export type InventoryItem = {
   id: string
+  version: number
   sku: string
   name: string
   category: string
@@ -186,6 +188,6 @@ export type PricingItem = {
 }
 export type PricingBook = { id: string; name: string; version: number; is_default: boolean; is_active: boolean; updated_at: string; items: PricingItem[] }
 
-export type Poster = { id: string; title: string; description: string; file_id: string; file_name: string; mime_type: string; category: string; status: 'draft' | 'active' | 'archived'; created_at: string; updated_at: string }
+export type Poster = { id: string; version: number; title: string; description: string; file_id: string; file_name: string; mime_type: string; category: string; status: 'draft' | 'active' | 'archived'; created_at: string; updated_at: string }
 
 export type DocumentTemplate = { id: string; template_type: string; name: string; settings: Record<string, unknown>; is_active: boolean; updated_at: string }

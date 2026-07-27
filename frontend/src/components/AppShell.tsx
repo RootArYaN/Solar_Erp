@@ -1,14 +1,14 @@
 import { Archive, BadgeIndianRupee, Boxes, Building2, ClipboardCheck, ContactRound, FileUp, ImageUp, LayoutDashboard, ListChecks, LogOut, Menu, PanelLeftClose, PanelLeftOpen, ShieldCheck, Users, UsersRound, WalletCards, X } from 'lucide-react'
 import { useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
-import { hasEveryPermission, hasPermission, PERMISSIONS } from '../lib/permissions'
+import { hasAnyPermission, hasPermission, PERMISSIONS } from '../lib/permissions'
 import type { Session } from '../types'
 import { BrandMark } from './BrandMark'
 
 export function AppShell({ session, onLogout }: { session: Session; onLogout: () => void | Promise<void> }) {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
-  const canViewAdministration = hasEveryPermission(session, [PERMISSIONS.users.view, PERMISSIONS.roles.view])
+  const canViewAdministration = hasAnyPermission(session, [PERMISSIONS.users.view, PERMISSIONS.roles.view])
 
   const links = [
     { to: '/app', end: true, label: 'Overview', title: 'Overview', icon: LayoutDashboard, permission: PERMISSIONS.dashboard.view },

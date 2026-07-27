@@ -140,6 +140,7 @@ class ProjectTimelineStep(BaseModel):
 
 class ProjectTimelineListItem(BaseModel):
     project_id: str
+    customer_id: str
     project_number: str
     project_name: str
     customer_name: str

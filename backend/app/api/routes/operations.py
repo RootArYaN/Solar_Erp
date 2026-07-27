@@ -12,6 +12,9 @@ from app.schemas.operations import (
     InventoryItemSummary,
     InventoryLocationSummary,
     InventoryMovementSummary,
+    UpdateInventoryItemRequest,
+    UpdateInventoryLocationRequest,
+    UpdatePosterRequest,
     InventorySummary,
     PosterStatusRequest,
     PosterSummary,
@@ -46,6 +49,20 @@ def post_item(payload: CreateInventoryItemRequest, db: Session = Depends(get_db)
     except OperationsServiceError as exc: _raise(exc)
 
 
+
+
+@router.patch('/inventory/items/{item_id}', response_model=InventoryItemSummary)
+def patch_item(item_id: str, payload: UpdateInventoryItemRequest, db: Session = Depends(get_db), session: CurrentSession = Depends(require_any_permissions('inventory.edit', 'inventory.manage'))):
+    try: return operations_service.update_inventory_item(db, session, item_id, payload)
+    except OperationsServiceError as exc: _raise(exc)
+
+
+@router.patch('/inventory/locations/{location_id}', response_model=InventoryLocationSummary)
+def patch_location(location_id: str, payload: UpdateInventoryLocationRequest, db: Session = Depends(get_db), session: CurrentSession = Depends(require_any_permissions('inventory.edit', 'inventory.manage'))):
+    try: return operations_service.update_inventory_location(db, session, location_id, payload)
+    except OperationsServiceError as exc: _raise(exc)
+
+
 @router.post('/inventory/movements', response_model=InventoryMovementSummary, status_code=201)
 def post_movement(payload: CreateInventoryMovementRequest, db: Session = Depends(get_db), session: CurrentSession = Depends(require_any_permissions('inventory.edit', 'inventory.manage'))):
     try: return operations_service.post_movement(db, session, payload)
@@ -71,6 +88,14 @@ def get_posters(status: str | None = Query(default=None, pattern=r'^(draft|activ
 @router.post('/posters', response_model=PosterSummary, status_code=201)
 def post_poster(payload: CreatePosterRequest, db: Session = Depends(get_db), session: CurrentSession = Depends(require_any_permissions('posters.create'))):
     try: return operations_service.create_poster(db, session, payload)
+    except OperationsServiceError as exc: _raise(exc)
+
+
+
+
+@router.patch('/posters/{poster_id}', response_model=PosterSummary)
+def patch_poster(poster_id: str, payload: UpdatePosterRequest, db: Session = Depends(get_db), session: CurrentSession = Depends(require_any_permissions('posters.edit'))):
+    try: return operations_service.update_poster(db, session, poster_id, payload)
     except OperationsServiceError as exc: _raise(exc)
 
 

@@ -10,7 +10,7 @@ from app.db.base import Base
 from app.db.session import engine
 import app.models  # noqa: F401 - registers model metadata
 
-MIGRATION_ID = "002_b2c_finance_operations"
+MIGRATION_ID = "003_editable_record_versions"
 
 MIGRATED_PERMISSIONS = {
     "archive.view": ("View data archive", "View archive packages and job history."),
@@ -32,6 +32,15 @@ ROLE_MIGRATED_PERMISSIONS = {
 }
 
 COLUMN_DEFINITIONS = {
+    "audit_events": {"updated_at": "TIMESTAMP"},
+    "company_loans": {"version": "INTEGER NOT NULL DEFAULT 1"},
+    "customer_loans": {"version": "INTEGER NOT NULL DEFAULT 1"},
+    "bills": {"version": "INTEGER NOT NULL DEFAULT 1"},
+    "financial_accounts": {"version": "INTEGER NOT NULL DEFAULT 1"},
+    "stored_files": {"version": "INTEGER NOT NULL DEFAULT 1", "updated_at": "TIMESTAMP"},
+    "posters": {"version": "INTEGER NOT NULL DEFAULT 1"},
+    "inventory_locations": {"version": "INTEGER NOT NULL DEFAULT 1"},
+    "inventory_items": {"version": "INTEGER NOT NULL DEFAULT 1"},
     "customer_projects": {
         "archived_at": "TIMESTAMP",
         "archived_by": "VARCHAR(36)",

@@ -26,6 +26,7 @@ export const PERMISSIONS = {
     create: 'projects.create',
     edit: 'projects.edit',
     archive: 'projects.archive',
+    manage: 'projects.manage',
   },
   materialRequests: {
     view: 'material_requests.view',
@@ -40,6 +41,7 @@ export const PERMISSIONS = {
     edit: 'inventory.edit',
     archive: 'inventory.archive',
     approve: 'inventory.approve',
+    manage: 'inventory.manage',
   },
   pricing: {
     view: 'pricing.view',
@@ -93,7 +95,7 @@ export type ModuleAccess = {
 }
 
 function isPrivileged(session: Session): boolean {
-  return session.user.is_super_admin || session.role === 'super_admin'
+  return session.user.is_super_admin
 }
 
 export function hasPermission(session: Session, permission: string): boolean {
@@ -102,6 +104,10 @@ export function hasPermission(session: Session, permission: string): boolean {
 
 export function hasEveryPermission(session: Session, permissions: string[]): boolean {
   return permissions.every((permission) => hasPermission(session, permission))
+}
+
+export function hasAnyPermission(session: Session, permissions: string[]): boolean {
+  return permissions.some((permission) => hasPermission(session, permission))
 }
 
 export function getModuleAccess(session: Session, module: ModulePermissionKey): ModuleAccess {

@@ -74,9 +74,9 @@ def post_reset_password(
 @router.get("/permissions", response_model=list[PermissionSummary])
 def get_permissions(
     db: Session = Depends(get_db),
-    _: CurrentSession = Depends(require_permissions("roles.view")),
+    session: CurrentSession = Depends(require_permissions("roles.view")),
 ) -> list[PermissionSummary]:
-    return admin_service.list_permissions(db)
+    return admin_service.list_permissions(db, session)
 
 
 @router.get("/roles", response_model=list[RoleSummary])

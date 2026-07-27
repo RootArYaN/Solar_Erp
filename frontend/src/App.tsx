@@ -1,11 +1,11 @@
-import { lazy, Suspense, useEffect, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import { Navigate, Route, Routes, useNavigate } from 'react-router-dom'
 import { AppShell } from './components/AppShell'
 import { LoginPage } from './components/LoginPage'
 import { ProtectedRoute } from './components/routing/ProtectedRoute'
 import { useToast } from './components/ui/ToastProvider'
 import { ApiError, getCurrentSession, logout, refreshCurrentSession } from './lib/api'
-import { AUTH_SESSION_EVENT, loadSession, type SessionEndReason } from './lib/auth-storage'
+import { AUTH_SESSION_EVENT, loadSession, replaceSession, type SessionEndReason } from './lib/auth-storage'
 import { PERMISSIONS } from './lib/permissions'
 import type { Session } from './types'
 
@@ -37,6 +37,16 @@ export default function App() {
   const navigate = useNavigate()
   const { toast } = useToast()
 
+  const syncCurrentSession = useCallback(async (): Promise<Session | null> => {
+    const current = loadSession()
+    if (!current) return null
+    const profile = await getCurrentSession(current.access_token)
+    const latest = loadSession() ?? current
+    const nextSession = { ...latest, ...profile } as Session
+    replaceSession(nextSession)
+    return nextSession
+  }, [])
+
   useEffect(() => {
     function onSessionChanged(event: Event) {
       const detail = (event as CustomEvent<{ session: Session | null; reason?: SessionEndReason }>).detail
@@ -50,12 +60,10 @@ export default function App() {
   useEffect(() => {
     let active = true
     const stored = loadSession()
-    const task = stored
-      ? getCurrentSession(stored.access_token).then((profile) => ({ ...stored, ...profile }))
-      : refreshCurrentSession()
+    const task = stored ? syncCurrentSession() : refreshCurrentSession()
 
     void task
-      .then((next) => { if (active) setSession(next as Session) })
+      .then((next) => { if (active && next) setSession(next) })
       .catch((reason) => {
         if (!active) return
         if (stored && !(reason instanceof ApiError && reason.status === 401)) {
@@ -65,7 +73,19 @@ export default function App() {
       })
       .finally(() => { if (active) setInitializing(false) })
     return () => { active = false }
-  }, [toast])
+  }, [syncCurrentSession, toast])
+
+  useEffect(() => {
+    if (!session) return
+    function refreshWhenVisible() {
+      if (document.visibilityState !== 'visible') return
+      void syncCurrentSession().catch(() => {
+        // Network failures are handled by the next authenticated request.
+      })
+    }
+    document.addEventListener('visibilitychange', refreshWhenVisible)
+    return () => document.removeEventListener('visibilitychange', refreshWhenVisible)
+  }, [session, syncCurrentSession])
 
   function handleAuthenticated(nextSession: Session) {
     setAuthNotice('')
@@ -89,23 +109,23 @@ export default function App() {
   return (
     <Suspense fallback={<main className="app-boot-screen"><div className="app-boot-spinner" /><strong>Loading page…</strong></main>}>
       <Routes>
-      <Route path="/login" element={session ? <Navigate to="/app" replace /> : <LoginPage notice={authNotice} onAuthenticated={handleAuthenticated} />} />
-      <Route path="/app" element={session ? <AppShell session={session} onLogout={handleLogout} /> : <Navigate to="/login" replace />}>
-        <Route index element={session ? <ProtectedRoute session={session} permissions={[PERMISSIONS.dashboard.view]}><Dashboard session={session} /></ProtectedRoute> : null} />
-        <Route path="customers" element={session && <ProtectedRoute session={session} permissions={[PERMISSIONS.customers.view]}><CustomerWorkspacePage session={session} /></ProtectedRoute>} />
-        <Route path="administration" element={session && <ProtectedRoute session={session} permissions={[PERMISSIONS.users.view, PERMISSIONS.roles.view]}><AdminPage session={session} /></ProtectedRoute>} />
-        <Route path="agents" element={session && <ProtectedRoute session={session} permissions={[PERMISSIONS.agents.view]}><AgentOverviewPage session={session} /></ProtectedRoute>} />
-        <Route path="projects" element={session && <ProtectedRoute session={session} permissions={[PERMISSIONS.projects.view]}><ProjectTimelinePage session={session} /></ProtectedRoute>} />
-        <Route path="approvals" element={session && <ProtectedRoute session={session} permissions={[PERMISSIONS.quotations.approve]}><ApprovalCenterPage session={session} /></ProtectedRoute>} />
-        <Route path="customer-documents" element={session && <ProtectedRoute session={session} permissions={[PERMISSIONS.documents.view]}><CustomerDataUploadPage session={session} /></ProtectedRoute>} />
-        <Route path="posters" element={session && <ProtectedRoute session={session} permissions={[PERMISSIONS.posters.view]}><PosterUploadPage session={session} /></ProtectedRoute>} />
-        <Route path="solar-pricing" element={session && <ProtectedRoute session={session} permissions={[PERMISSIONS.pricing.view]}><SolarPricingPage session={session} /></ProtectedRoute>} />
-        <Route path="finance" element={session && <ProtectedRoute session={session} permissions={[PERMISSIONS.finance.view]}><FinancePage session={session} /></ProtectedRoute>} />
-        <Route path="inventory" element={session && <ProtectedRoute session={session} permissions={[PERMISSIONS.inventory.view]}><InventoryPage session={session} /></ProtectedRoute>} />
-        <Route path="security/devices" element={session && <ProtectedRoute session={session} permissions={[PERMISSIONS.security.view]}><ActiveDevicesPage session={session} /></ProtectedRoute>} />
-        <Route path="archives" element={session && <ProtectedRoute session={session} permissions={[PERMISSIONS.archive.view]}><DataArchivePage session={session} /></ProtectedRoute>} />
-      </Route>
-      <Route path="*" element={<Navigate to={session ? '/app' : '/login'} replace />} />
+        <Route path="/login" element={session ? <Navigate to="/app" replace /> : <LoginPage notice={authNotice} onAuthenticated={handleAuthenticated} />} />
+        <Route path="/app" element={session ? <AppShell session={session} onLogout={handleLogout} /> : <Navigate to="/login" replace />}>
+          <Route index element={session ? <ProtectedRoute session={session} permissions={[PERMISSIONS.dashboard.view]}><Dashboard session={session} /></ProtectedRoute> : null} />
+          <Route path="customers" element={session && <ProtectedRoute session={session} permissions={[PERMISSIONS.customers.view]}><CustomerWorkspacePage session={session} /></ProtectedRoute>} />
+          <Route path="administration" element={session && <ProtectedRoute session={session} permissions={[PERMISSIONS.users.view, PERMISSIONS.roles.view]} mode="any"><AdminPage session={session} onSessionRefresh={syncCurrentSession} /></ProtectedRoute>} />
+          <Route path="agents" element={session && <ProtectedRoute session={session} permissions={[PERMISSIONS.agents.view]}><AgentOverviewPage session={session} /></ProtectedRoute>} />
+          <Route path="projects" element={session && <ProtectedRoute session={session} permissions={[PERMISSIONS.projects.view]}><ProjectTimelinePage session={session} /></ProtectedRoute>} />
+          <Route path="approvals" element={session && <ProtectedRoute session={session} permissions={[PERMISSIONS.quotations.approve]}><ApprovalCenterPage session={session} /></ProtectedRoute>} />
+          <Route path="customer-documents" element={session && <ProtectedRoute session={session} permissions={[PERMISSIONS.documents.view]}><CustomerDataUploadPage session={session} /></ProtectedRoute>} />
+          <Route path="posters" element={session && <ProtectedRoute session={session} permissions={[PERMISSIONS.posters.view]}><PosterUploadPage session={session} /></ProtectedRoute>} />
+          <Route path="solar-pricing" element={session && <ProtectedRoute session={session} permissions={[PERMISSIONS.pricing.view]}><SolarPricingPage session={session} /></ProtectedRoute>} />
+          <Route path="finance" element={session && <ProtectedRoute session={session} permissions={[PERMISSIONS.finance.view]}><FinancePage session={session} /></ProtectedRoute>} />
+          <Route path="inventory" element={session && <ProtectedRoute session={session} permissions={[PERMISSIONS.inventory.view]}><InventoryPage session={session} /></ProtectedRoute>} />
+          <Route path="security/devices" element={session && <ProtectedRoute session={session} permissions={[PERMISSIONS.security.view]}><ActiveDevicesPage session={session} /></ProtectedRoute>} />
+          <Route path="archives" element={session && <ProtectedRoute session={session} permissions={[PERMISSIONS.archive.view]}><DataArchivePage session={session} /></ProtectedRoute>} />
+        </Route>
+        <Route path="*" element={<Navigate to={session ? '/app' : '/login'} replace />} />
       </Routes>
     </Suspense>
   )

@@ -134,6 +134,7 @@ export function ProjectTimelinePage({ session }: { session: Session }) {
     setTimeline(next)
     setProjects((items) => items.map((item) => item.project_id === next.project_id ? {
       project_id: next.project_id,
+      customer_id: next.customer_id,
       project_number: next.project_number,
       project_name: next.project_name,
       customer_name: next.customer_name,

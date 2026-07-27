@@ -54,7 +54,7 @@ class CustomerFlowConflictError(CustomerFlowError):
 
 
 def _is_admin(actor: CurrentSession) -> bool:
-    return actor.user.is_super_admin or actor.role in {'company_admin', 'super_admin', 'accounts_admin'}
+    return actor.user.is_super_admin
 
 
 def _record_number(prefix: str, created_at: datetime, entity_id: str) -> str:

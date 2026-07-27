@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 class InventoryLocationSummary(BaseModel):
     id: str
+    version: int = 1
     name: str
     location_type: str
     address: str
@@ -14,6 +15,7 @@ class InventoryLocationSummary(BaseModel):
 
 class InventoryItemSummary(BaseModel):
     id: str
+    version: int = 1
     sku: str
     name: str
     category: str
@@ -85,6 +87,40 @@ class CreateInventoryLocationRequest(BaseModel):
     address: str = Field(default='', max_length=320)
 
 
+
+
+class UpdateInventoryItemRequest(BaseModel):
+    version: int = Field(ge=1)
+    sku: str = Field(min_length=2, max_length=60)
+    name: str = Field(min_length=2, max_length=180)
+    category: str = Field(default='General', max_length=80)
+    unit: str = Field(default='Nos', max_length=24)
+    supplier_name: str = Field(default='', max_length=160)
+    unit_cost: float = Field(default=0, ge=0)
+    reorder_level: float = Field(default=0, ge=0)
+    is_active: bool = True
+
+    @field_validator('sku', 'name', 'category', 'unit', 'supplier_name')
+    @classmethod
+    def clean(cls, value: str) -> str:
+        return ' '.join(value.split())
+
+
+class UpdateInventoryLocationRequest(BaseModel):
+    version: int = Field(ge=1)
+    name: str = Field(min_length=2, max_length=120)
+    location_type: str = Field(default='warehouse', max_length=32)
+    address: str = Field(default='', max_length=320)
+    is_active: bool = True
+
+
+class UpdatePosterRequest(BaseModel):
+    version: int = Field(ge=1)
+    title: str = Field(min_length=2, max_length=180)
+    description: str = Field(default='', max_length=400)
+    category: str = Field(default='General', max_length=80)
+
+
 class CreateInventoryMovementRequest(BaseModel):
     item_id: str
     movement_type: str = Field(pattern=r'^(inward|outward|transfer|adjustment|project_dispatch|project_return|supplier_return)$')
@@ -147,6 +183,7 @@ class SavePricingBookRequest(BaseModel):
 
 class PosterSummary(BaseModel):
     id: str
+    version: int = 1
     title: str
     description: str
     file_id: str

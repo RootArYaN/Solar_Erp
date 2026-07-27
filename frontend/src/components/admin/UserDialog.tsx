@@ -15,25 +15,26 @@ type UserFormValue = {
 export function UserDialog({
   user,
   roles,
-  allowSuperAdmin,
+  canChangeRole,
+  canChangeStatus,
   busy,
   onClose,
   onSubmit,
 }: {
   user?: ManagedUser
   roles: Role[]
-  allowSuperAdmin: boolean
+  canChangeRole: boolean
+  canChangeStatus: boolean
   busy: boolean
   onClose: () => void
   onSubmit: (value: UserFormValue) => Promise<void>
 }) {
-  const visibleRoles = roles.filter((role) => role.code !== 'super_admin' || allowSuperAdmin || user?.is_super_admin)
   const [value, setValue] = useState<UserFormValue>({
     full_name: user?.full_name ?? '',
     username: user?.username ?? '',
     email: user?.email ?? '',
     password: '',
-    role_code: user?.role ?? visibleRoles[0]?.code ?? 'customer',
+    role_code: user?.role ?? roles[0]?.code ?? '',
     is_active: user?.is_active ?? true,
   })
 
@@ -68,18 +69,19 @@ export function UserDialog({
         <fieldset className="role-selector">
           <legend>Assigned role</legend>
           <div className="role-selector__grid">
-            {visibleRoles.map((role) => (
+            {roles.map((role) => (
               <label className={`role-option ${value.role_code === role.code ? 'role-option--selected' : ''}`} key={role.id}>
-                <input type="radio" name="role" checked={value.role_code === role.code} onChange={() => setValue({ ...value, role_code: role.code })} />
-                <span><strong>{role.name}</strong></span>
+                <input disabled={!canChangeRole} type="radio" name="role" checked={value.role_code === role.code} onChange={() => setValue({ ...value, role_code: role.code })} />
+                <span><strong>{role.name}</strong>{role.description && <small>{role.description}</small>}</span>
               </label>
             ))}
           </div>
+          {!canChangeRole && user && <small className="field-hint">Your own role cannot be changed from this session.</small>}
         </fieldset>
 
         <label className="switch-row">
-          <span><strong>Active account</strong></span>
-          <input type="checkbox" checked={value.is_active} onChange={(event) => setValue({ ...value, is_active: event.target.checked })} />
+          <span><strong>Active account</strong>{!canChangeStatus && user && <small>Your own account cannot be deactivated.</small>}</span>
+          <input disabled={!canChangeStatus} type="checkbox" checked={value.is_active} onChange={(event) => setValue({ ...value, is_active: event.target.checked })} />
         </label>
 
         <footer className="modal-actions">

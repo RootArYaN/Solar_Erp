@@ -15,6 +15,7 @@ class InventoryItem(TimestampMixin, Base):
     __table_args__ = (UniqueConstraint("company_id", "sku", name="uq_inventory_item_company_sku"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    version: Mapped[int] = mapped_column(default=1, nullable=False)
     company_id: Mapped[str] = mapped_column(ForeignKey("companies.id", ondelete="CASCADE"), index=True, nullable=False)
     sku: Mapped[str] = mapped_column(String(60), nullable=False)
     name: Mapped[str] = mapped_column(String(180), nullable=False)
@@ -31,6 +32,7 @@ class InventoryLocation(TimestampMixin, Base):
     __table_args__ = (UniqueConstraint("company_id", "name", name="uq_inventory_location_company_name"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    version: Mapped[int] = mapped_column(default=1, nullable=False)
     company_id: Mapped[str] = mapped_column(ForeignKey("companies.id", ondelete="CASCADE"), index=True, nullable=False)
     name: Mapped[str] = mapped_column(String(120), nullable=False)
     location_type: Mapped[str] = mapped_column(String(32), default="warehouse", nullable=False)
@@ -109,6 +111,7 @@ class Poster(TimestampMixin, Base):
     __tablename__ = "posters"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    version: Mapped[int] = mapped_column(default=1, nullable=False)
     company_id: Mapped[str] = mapped_column(ForeignKey("companies.id", ondelete="CASCADE"), index=True, nullable=False)
     title: Mapped[str] = mapped_column(String(180), nullable=False)
     description: Mapped[str] = mapped_column(String(400), default="", nullable=False)

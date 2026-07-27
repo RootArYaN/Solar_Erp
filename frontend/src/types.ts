@@ -291,6 +291,7 @@ export type ProjectTimelineStep = {
 
 export type ProjectTimelineListItem = {
   project_id: string
+  customer_id: string
   project_number: string
   project_name: string
   customer_name: string

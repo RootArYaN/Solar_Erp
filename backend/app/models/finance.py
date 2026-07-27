@@ -15,6 +15,7 @@ class FinancialAccount(TimestampMixin, Base):
     __table_args__ = (UniqueConstraint("company_id", "name", name="uq_financial_account_company_name"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    version: Mapped[int] = mapped_column(default=1, nullable=False)
     company_id: Mapped[str] = mapped_column(ForeignKey("companies.id", ondelete="CASCADE"), index=True, nullable=False)
     name: Mapped[str] = mapped_column(String(120), nullable=False)
     account_type: Mapped[str] = mapped_column(String(24), default="bank", index=True, nullable=False)
@@ -78,6 +79,7 @@ class Bill(TimestampMixin, Base):
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    version: Mapped[int] = mapped_column(default=1, nullable=False)
     company_id: Mapped[str] = mapped_column(ForeignKey("companies.id", ondelete="CASCADE"), index=True, nullable=False)
     bill_type: Mapped[str] = mapped_column(String(16), index=True, nullable=False)
     bill_number: Mapped[str] = mapped_column(String(48), nullable=False)
@@ -114,6 +116,7 @@ class CustomerLoan(TimestampMixin, Base):
     __table_args__ = (UniqueConstraint("project_id", name="uq_customer_loan_project"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    version: Mapped[int] = mapped_column(default=1, nullable=False)
     company_id: Mapped[str] = mapped_column(ForeignKey("companies.id", ondelete="CASCADE"), index=True, nullable=False)
     customer_id: Mapped[str] = mapped_column(ForeignKey("agent_customers.id", ondelete="CASCADE"), index=True, nullable=False)
     project_id: Mapped[str] = mapped_column(ForeignKey("customer_projects.id", ondelete="CASCADE"), index=True, nullable=False)
@@ -139,6 +142,7 @@ class CompanyLoan(TimestampMixin, Base):
     __tablename__ = "company_loans"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    version: Mapped[int] = mapped_column(default=1, nullable=False)
     company_id: Mapped[str] = mapped_column(ForeignKey("companies.id", ondelete="CASCADE"), index=True, nullable=False)
     lender_name: Mapped[str] = mapped_column(String(160), nullable=False)
     loan_account_number: Mapped[str] = mapped_column(String(80), default="", nullable=False)

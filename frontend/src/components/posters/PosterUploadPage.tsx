@@ -46,7 +46,7 @@ export function PosterUploadPage({ session }: { session: Session }) {
   if (!posters) return <WorkspacePage className="erp-page"><ErrorState message={error} onRetry={() => void load()} /></WorkspacePage>
 
   return <WorkspacePage variant="fixed-tabs" className="erp-page">
-    <WorkspaceHeader className="erp-page-head"><div><span>Marketing library</span><h1>Posters</h1><p>Persistent campaign files available to authorized agents and admins.</p></div><div className="erp-head-actions"><button className="secondary-button" onClick={() => void load()}><RefreshCw size={15} /> Refresh</button>{access.canCreate && <button className="primary-button" onClick={() => setUploadOpen(true)}><ImageUp size={15} /> Upload poster</button>}</div></WorkspaceHeader>
+    <WorkspaceHeader className="erp-page-head"><div><span>Marketing library</span><h1>Posters</h1></div><div className="erp-head-actions"><button className="secondary-button" onClick={() => void load()}><RefreshCw size={15} /> Refresh</button>{access.canCreate && <button className="primary-button" onClick={() => setUploadOpen(true)}><ImageUp size={15} /> Upload poster</button>}</div></WorkspaceHeader>
     {access.readOnly && <ReadOnlyNotice />}
     <TabStrip className="erp-tabs" label="Poster status">{(['active', 'archived', 'draft'] as const).map((value) => <button className={status === value ? 'is-active' : ''} key={value} onClick={() => setStatus(value)}>{value[0].toUpperCase() + value.slice(1)}</button>)}</TabStrip>
     <ScrollSurface className="poster-scroll-body">

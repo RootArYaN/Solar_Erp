@@ -98,6 +98,18 @@ class CreateFinanceTransactionRequest(BaseModel):
         return ' '.join(value.split())
 
 
+
+
+class ReverseFinanceTransactionRequest(BaseModel):
+    transaction_date: date
+    reason: str = Field(min_length=3, max_length=320)
+
+    @field_validator('reason')
+    @classmethod
+    def clean_reason(cls, value: str) -> str:
+        return ' '.join(value.split())
+
+
 class AccountTransferRequest(BaseModel):
     transaction_date: date
     source_account_id: str
@@ -141,6 +153,11 @@ class BillList(BaseModel):
     page: int
     page_size: int
     total: int
+
+
+class BillCustomerOption(BaseModel):
+    id: str
+    customer_name: str
 
 
 class CreateBillRequest(BaseModel):

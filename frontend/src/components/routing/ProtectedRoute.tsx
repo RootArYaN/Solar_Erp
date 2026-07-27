@@ -1,7 +1,23 @@
 import { Navigate } from 'react-router-dom'
 import type { Session } from '../../types'
-import { hasEveryPermission } from '../../lib/permissions'
+import { hasAnyPermission, hasEveryPermission } from '../../lib/permissions'
 
-export function ProtectedRoute({ session, permissions, children }: { session: Session; permissions: string[]; children: React.ReactNode }) {
-  return hasEveryPermission(session, permissions) ? <>{children}</> : <Navigate to="/app?access=denied" replace />
+type PermissionMode = 'all' | 'any'
+
+export function ProtectedRoute({
+  session,
+  permissions,
+  mode = 'all',
+  children,
+}: {
+  session: Session
+  permissions: string[]
+  mode?: PermissionMode
+  children: React.ReactNode
+}) {
+  const allowed = mode === 'any'
+    ? hasAnyPermission(session, permissions)
+    : hasEveryPermission(session, permissions)
+
+  return allowed ? <>{children}</> : <Navigate to="/app?access=denied" replace />
 }
