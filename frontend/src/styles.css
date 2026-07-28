@@ -18,7 +18,7 @@
   scrollbar-width: thin;
   scrollbar-color: rgba(65, 76, 88, .28) transparent;
 }
-*::-webkit-scrollbar { width: 5px; height: 5px; }
+*::-webkit-scrollbar { width: 4px; height: 4px; }
 *::-webkit-scrollbar-track { background: transparent; }
 *::-webkit-scrollbar-thumb {
   border-radius: 999px;

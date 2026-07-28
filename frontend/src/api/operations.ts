@@ -1,4 +1,4 @@
-import type { DocumentTemplate, InventoryItem, InventoryLocation, InventoryMovement, InventorySummary, Poster, PricingBook } from '../erp-types'
+import type { DocumentTemplate, GeneratedDocumentPack, InventoryItem, InventoryLocation, InventoryMovement, InventorySummary, Poster, PricingBook } from '../erp-types'
 import { createClientId } from '../lib/client-id'
 import { apiRequest } from './client'
 
@@ -16,3 +16,7 @@ export const updatePoster = (id: string, body: Record<string, unknown>): Promise
 export const setPosterStatus = (id: string, status: Poster['status']): Promise<Poster> => apiRequest(`/posters/${id}/status`, { method: 'PATCH', body: { status } })
 export const getDocumentTemplate = (type = 'customer_pack'): Promise<DocumentTemplate> => apiRequest(`/document-templates/${type}`)
 export const saveDocumentTemplate = (type: string, body: Record<string, unknown>): Promise<DocumentTemplate> => apiRequest(`/document-templates/${type}`, { method: 'PUT', body })
+
+export const getGeneratedDocumentPacks = (customerId: string): Promise<GeneratedDocumentPack[]> => apiRequest(`/document-packs/customer/${customerId}`)
+export const saveGeneratedDocumentPack = (customerId: string, body: { input_snapshot: Record<string, unknown>; status: 'draft' | 'generated' }): Promise<GeneratedDocumentPack> => apiRequest(`/document-packs/customer/${customerId}`, { method: 'PUT', body })
+export const finalizeGeneratedDocumentPack = (packId: string): Promise<GeneratedDocumentPack> => apiRequest(`/document-packs/${packId}/finalize`, { method: 'POST' })

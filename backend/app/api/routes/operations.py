@@ -9,6 +9,7 @@ from app.schemas.operations import (
     CreateInventoryMovementRequest,
     CreatePosterRequest,
     DocumentTemplateSummary,
+    GeneratedDocumentPackSummary,
     InventoryItemSummary,
     InventoryLocationSummary,
     InventoryMovementSummary,
@@ -20,6 +21,7 @@ from app.schemas.operations import (
     PosterSummary,
     PricingBookSummary,
     SaveDocumentTemplateRequest,
+    SaveGeneratedDocumentPackRequest,
     SavePricingBookRequest,
 )
 from app.services import operations_service
@@ -113,4 +115,22 @@ def get_template(template_type: str, db: Session = Depends(get_db), session: Cur
 @router.put('/document-templates/{template_type}', response_model=DocumentTemplateSummary)
 def put_template(template_type: str, payload: SaveDocumentTemplateRequest, db: Session = Depends(get_db), session: CurrentSession = Depends(require_any_permissions('documents.manage'))):
     try: return operations_service.save_template(db, session, template_type, payload)
+    except OperationsServiceError as exc: _raise(exc)
+
+
+@router.get('/document-packs/customer/{customer_id}', response_model=list[GeneratedDocumentPackSummary])
+def get_document_packs(customer_id: str, db: Session = Depends(get_db), session: CurrentSession = Depends(require_any_permissions('documents.view', 'documents.manage'))):
+    try: return operations_service.list_document_packs(db, session, customer_id)
+    except OperationsServiceError as exc: _raise(exc)
+
+
+@router.put('/document-packs/customer/{customer_id}', response_model=GeneratedDocumentPackSummary)
+def put_document_pack(customer_id: str, payload: SaveGeneratedDocumentPackRequest, db: Session = Depends(get_db), session: CurrentSession = Depends(require_any_permissions('documents.create', 'documents.edit', 'documents.manage'))):
+    try: return operations_service.save_document_pack(db, session, customer_id, payload)
+    except OperationsServiceError as exc: _raise(exc)
+
+
+@router.post('/document-packs/{pack_id}/finalize', response_model=GeneratedDocumentPackSummary)
+def post_finalize_document_pack(pack_id: str, db: Session = Depends(get_db), session: CurrentSession = Depends(require_any_permissions('documents.approve', 'documents.manage'))):
+    try: return operations_service.finalize_document_pack(db, session, pack_id)
     except OperationsServiceError as exc: _raise(exc)

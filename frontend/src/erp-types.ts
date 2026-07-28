@@ -191,3 +191,18 @@ export type PricingBook = { id: string; name: string; version: number; is_defaul
 export type Poster = { id: string; version: number; title: string; description: string; file_id: string; file_name: string; mime_type: string; category: string; status: 'draft' | 'active' | 'archived'; created_at: string; updated_at: string }
 
 export type DocumentTemplate = { id: string; template_type: string; name: string; settings: Record<string, unknown>; is_active: boolean; updated_at: string }
+
+export type GeneratedDocumentPack = {
+  id: string
+  customer_id: string
+  project_id: string
+  quotation_id: string
+  version: number
+  status: 'draft' | 'generated' | 'final'
+  input_snapshot: Record<string, unknown>
+  template_snapshot: Record<string, unknown>
+  generated_at: string | null
+  finalized_at: string | null
+  created_at: string
+  updated_at: string
+}

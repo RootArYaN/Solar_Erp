@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from decimal import Decimal
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Index, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Index, Integer, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -120,6 +120,28 @@ class Poster(TimestampMixin, Base):
     category: Mapped[str] = mapped_column(String(80), default="General", index=True, nullable=False)
     status: Mapped[str] = mapped_column(String(24), default="active", index=True, nullable=False)
     created_by: Mapped[str] = mapped_column(ForeignKey("memberships.id", ondelete="RESTRICT"), nullable=False)
+
+
+class GeneratedDocumentPack(TimestampMixin, Base):
+    __tablename__ = "generated_document_packs"
+    __table_args__ = (
+        UniqueConstraint("company_id", "customer_id", "version", name="uq_document_pack_company_customer_version"),
+        Index("ix_document_pack_company_customer_status", "company_id", "customer_id", "status"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    company_id: Mapped[str] = mapped_column(ForeignKey("companies.id", ondelete="CASCADE"), index=True, nullable=False)
+    customer_id: Mapped[str] = mapped_column(ForeignKey("agent_customers.id", ondelete="CASCADE"), index=True, nullable=False)
+    project_id: Mapped[str] = mapped_column(ForeignKey("customer_projects.id", ondelete="CASCADE"), index=True, nullable=False)
+    quotation_id: Mapped[str] = mapped_column(ForeignKey("customer_quotations.id", ondelete="RESTRICT"), index=True, nullable=False)
+    version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    status: Mapped[str] = mapped_column(String(24), default="draft", index=True, nullable=False)
+    input_snapshot_json: Mapped[str] = mapped_column(Text, default="{}", nullable=False)
+    template_snapshot_json: Mapped[str] = mapped_column(Text, default="{}", nullable=False)
+    generated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    finalized_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_by: Mapped[str] = mapped_column(ForeignKey("memberships.id", ondelete="RESTRICT"), nullable=False)
+    updated_by: Mapped[str] = mapped_column(ForeignKey("memberships.id", ondelete="RESTRICT"), nullable=False)
 
 
 class DocumentTemplate(TimestampMixin, Base):

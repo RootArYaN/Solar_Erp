@@ -218,3 +218,23 @@ class DocumentTemplateSummary(BaseModel):
 class SaveDocumentTemplateRequest(BaseModel):
     name: str = Field(default='Company Document Template', min_length=2, max_length=120)
     settings: dict[str, object] = Field(default_factory=dict)
+
+
+class GeneratedDocumentPackSummary(BaseModel):
+    id: str
+    customer_id: str
+    project_id: str
+    quotation_id: str
+    version: int
+    status: str
+    input_snapshot: dict[str, object]
+    template_snapshot: dict[str, object]
+    generated_at: datetime | None
+    finalized_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class SaveGeneratedDocumentPackRequest(BaseModel):
+    input_snapshot: dict[str, object] = Field(default_factory=dict)
+    status: str = Field(default='draft', pattern=r'^(draft|generated)$')

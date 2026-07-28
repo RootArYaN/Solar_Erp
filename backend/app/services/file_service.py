@@ -218,7 +218,15 @@ def list_files(
 
     filters = [StoredFile.company_id == actor.membership.company_id]
     if owner_type:
-        filters.append(StoredFile.owner_type == owner_type)
+        # Customer checklist uploads encode their document slot after a colon.
+        # Keep the base owner type query backwards compatible with legacy rows.
+        if owner_type == "customer_document":
+            filters.append(or_(
+                StoredFile.owner_type == owner_type,
+                StoredFile.owner_type.like("customer_document:%"),
+            ))
+        else:
+            filters.append(StoredFile.owner_type == owner_type)
     if owner_id:
         filters.append(StoredFile.owner_id == owner_id)
     if project_id:
@@ -272,11 +280,16 @@ def get_file(db: Session, actor: CurrentSession, file_id: str) -> StoredFile:
 def set_file_status(db: Session, actor: CurrentSession, file_id: str, status: str) -> StoredFileSummary:
     row = get_file(db, actor, file_id)
     row.status = status
-    row.archived_at = datetime.now(UTC) if status == "archived" else None
+    row.archived_at = datetime.now(UTC) if status in {"archived", "deleted"} else None
+    event = {
+        "archived": "document.archived",
+        "deleted": "document.deleted",
+        "active": "document.restored",
+    }[status]
     write_event(
         db,
         company_id=row.company_id,
-        event="document.archived" if status == "archived" else "document.restored",
+        event=event,
         entity="stored_file",
         entity_id=row.id,
         actor=actor,

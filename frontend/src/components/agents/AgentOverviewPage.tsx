@@ -6,6 +6,7 @@ import {
   CircleDollarSign,
   Download,
   Edit3,
+  FileText,
   Mail,
   MapPin,
   Phone,
@@ -16,6 +17,7 @@ import {
 } from 'lucide-react'
 import { motion } from 'motion/react'
 import { useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   createAgentCustomer,
   createAgentTransaction,
@@ -63,6 +65,7 @@ function transactionLabel(value: string) {
 }
 
 export function AgentOverviewPage({ session }: { session: Session }) {
+  const navigate = useNavigate()
   const [agents, setAgents] = useState<AgentListItem[]>([])
   const [selectedMembershipId, setSelectedMembershipId] = useState('')
   const [overview, setOverview] = useState<AgentOverview | null>(null)
@@ -82,6 +85,7 @@ export function AgentOverviewPage({ session }: { session: Session }) {
   const canPostTransactions = session.permissions.includes('agents.transactions.submit') || session.permissions.includes('agents.manage') || session.permissions.includes('finance.manage')
   const canRegisterCustomers = session.permissions.includes('customers.create') || session.permissions.includes('agents.manage')
   const canRequestQuotations = session.permissions.includes('quotations.create') || session.permissions.includes('quotations.approve')
+  const canOpenDocuments = session.user.is_super_admin || session.permissions.includes('documents.view') || session.permissions.includes('documents.manage')
   const canEditSelectedProfile = Boolean(
     overview && (
       overview.profile.membership_id === session.membership_id
@@ -467,6 +471,7 @@ export function AgentOverviewPage({ session }: { session: Session }) {
                           <td data-label="Outstanding" className="numeric-cell"><strong>{currency.format(customer.outstanding_balance)}</strong></td>
                           <td data-label="Action"><div className="agent-customer-actions">
                             {customer.approved_quotation && <button className="table-action-button table-action-button--download" type="button" onClick={() => downloadApprovedQuotation(customer)}><Download size={12} /> Download quote</button>}
+                            {canOpenDocuments && customer.approved_quotation && customer.project_id && <button className="table-action-button table-action-button--neutral" type="button" onClick={() => navigate(`/app/customer-documents?customer=${encodeURIComponent(customer.id)}`)}><FileText size={12} /> Documents</button>}
                             {customer.can_edit && <button className="table-action-button table-action-button--neutral" type="button" onClick={() => setEditingCustomer(customer)}><Edit3 size={12} /> Edit</button>}
                             {canRequestQuotations && !['pending', 'quotation_ready', 'pending_approval', 'approved'].includes(customer.quotation_status || customer.quotation_request_status || '')
                               ? <button className="table-action-button" type="button" onClick={() => setQuotationCustomer(customer)}>Request quotation</button>

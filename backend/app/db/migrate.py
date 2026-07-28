@@ -10,9 +10,15 @@ from app.db.base import Base
 from app.db.session import engine
 import app.models  # noqa: F401 - registers model metadata
 
-MIGRATION_ID = "003_editable_record_versions"
+MIGRATION_ID = "004_generated_document_packs"
 
 MIGRATED_PERMISSIONS = {
+    "documents.view": ("Show Customer data tab", "View customer and project documents."),
+    "documents.create": ("Create documents", "Create generated document packs and upload files."),
+    "documents.edit": ("Edit documents", "Change generated document drafts and metadata."),
+    "documents.archive": ("Archive documents", "Archive and restore documents."),
+    "documents.approve": ("Approve documents", "Finalize generated document versions."),
+    "documents.manage": ("Manage documents", "Manage shared company document templates and all document operations."),
     "archive.view": ("View data archive", "View archive packages and job history."),
     "archive.create": ("Create archives", "Create project, customer and transaction archives."),
     "archive.download": ("Download archives", "Download verified archive ZIP packages."),
@@ -26,7 +32,8 @@ MIGRATED_PERMISSIONS = {
 }
 
 ROLE_MIGRATED_PERMISSIONS = {
-    "accounts_admin": {"archive.view", "archive.download", "events.view", "finance.view", "finance.manage"},
+    "agent": {"documents.view", "documents.create", "documents.edit"},
+    "accounts_admin": {"documents.view", "documents.approve", "documents.manage", "archive.view", "archive.download", "events.view", "finance.view", "finance.manage"},
     "company_admin": set(MIGRATED_PERMISSIONS),
     "super_admin": set(MIGRATED_PERMISSIONS),
 }
@@ -146,6 +153,18 @@ def _migrate_permissions(connection, inspector) -> None:
                     "INSERT INTO role_permissions (role_id, permission_id) "
                     "VALUES (:role_id, :permission_id)"
                 ), {"role_id": role_id, "permission_id": permission_id})
+
+    # Agents may generate and edit their assigned customer packs, but shared
+    # templates and final approval remain administrator responsibilities.
+    manage_id = permission_ids.get("documents.manage")
+    if manage_id:
+        agent_role_ids = connection.execute(
+            text("SELECT id FROM roles WHERE code = 'agent'")
+        ).scalars().all()
+        for role_id in agent_role_ids:
+            connection.execute(text(
+                "DELETE FROM role_permissions WHERE role_id = :role_id AND permission_id = :permission_id"
+            ), {"role_id": role_id, "permission_id": manage_id})
 
 def run_migrations() -> None:
     Base.metadata.create_all(bind=engine)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 from uuid import uuid4
 from decimal import Decimal
 
@@ -13,6 +14,7 @@ from app.core.concurrency import RecordConflictError, verify_version
 from app.models.agent import AgentCustomer
 from app.models.operations import (
     DocumentTemplate,
+    GeneratedDocumentPack,
     InventoryBalance,
     InventoryItem,
     InventoryLocation,
@@ -22,13 +24,14 @@ from app.models.operations import (
     PricingItem,
 )
 from app.models.system import StoredFile
-from app.models.workflow import CustomerProject
+from app.models.workflow import CustomerProject, CustomerQuotation
 from app.schemas.operations import (
     CreateInventoryItemRequest,
     CreateInventoryLocationRequest,
     CreateInventoryMovementRequest,
     CreatePosterRequest,
     DocumentTemplateSummary,
+    GeneratedDocumentPackSummary,
     InventoryItemSummary,
     InventoryLocationSummary,
     InventoryMovementSummary,
@@ -37,9 +40,10 @@ from app.schemas.operations import (
     PricingBookSummary,
     PricingItemInput,
     SaveDocumentTemplateRequest,
+    SaveGeneratedDocumentPackRequest,
     SavePricingBookRequest,
 )
-from app.services.access_service import get_customer, get_project
+from app.services.access_service import AccessError, get_customer, get_project
 from app.services.audit_service import write_event
 
 
@@ -252,14 +256,47 @@ def set_poster_status(db: Session, actor: CurrentSession, poster_id: str, status
     row.status=status; write_event(db,company_id=row.company_id,event='poster.status_changed',entity='poster',entity_id=row.id,actor=actor,changes={'status':status}); db.commit(); return _poster_summary(db,row)
 
 
+def _default_document_template_settings(actor: CurrentSession, template_type: str) -> dict[str, str]:
+    company_name = actor.membership.company.name
+    base = {
+        'company_name': company_name, 'brand_name': company_name, 'address': '', 'gstin': '',
+        'phone': '', 'email': '', 'bank_details': '', 'quotation_notes': '',
+        'agreement_wording': '', 'footer': '', 'terms': '',
+    }
+    if template_type != 'customer_pack' or 'shree' not in company_name.lower():
+        return base
+    return {
+        **base,
+        'company_name': 'Shree Enterprise',
+        'brand_name': 'Shree Enterprise',
+        'address': 'KOLI PATI, AJAB, KESHOD, JUNAGADH, GUJARAT - 362229',
+        'gstin': '24BUFPK8840N1Z5',
+        'phone': '+91 9574572672',
+        'bank_details': 'Account Holder: Shree Enterprise\nAccount No.: 44699708736\nBank: SBI BANK, SBI AJAB BRANCH\nIFSC: SBIN0060163',
+        'quotation_notes': 'For quotation assistance contact +91 9574572672 | JAY KESHVALA. Thank you for your business.',
+        'agreement_wording': 'Design, supply, installation, commissioning and five-year comprehensive maintenance of the rooftop solar project/system under PM Surya Ghar: Muft Bijli Yojana, in accordance with the approved quotation and applicable MNRE/DISCOM requirements.',
+        'terms': 'The supplied system shall follow applicable MNRE, DISCOM, BIS/IS/IEC and safety requirements. Standard plant warranty, documentation, grid-connectivity assistance and five-year comprehensive operation and maintenance apply as stated in the consumer-vendor agreement.',
+        'footer': 'Shree Enterprise | Authorized Solar EPC Vendor',
+    }
+
+
 def get_template(db: Session, actor: CurrentSession, template_type: str)->DocumentTemplateSummary:
     row=db.scalar(select(DocumentTemplate).where(DocumentTemplate.company_id==actor.membership.company_id,DocumentTemplate.template_type==template_type))
+    defaults = _default_document_template_settings(actor, template_type)
     if not row:
-        settings={'company_name':actor.membership.company.name,'brand_name':actor.membership.company.name,'address':'','gstin':'','phone':'','email':'','bank_details':'','quotation_notes':'','agreement_wording':'','footer':'','terms':''}
-        row=DocumentTemplate(company_id=actor.membership.company_id,template_type=template_type,name='Company Document Template',settings_json=json.dumps(settings),is_active=True,updated_by=actor.membership.id); db.add(row); db.commit(); db.refresh(row)
+        row=DocumentTemplate(company_id=actor.membership.company_id,template_type=template_type,name='Company Document Template',settings_json=json.dumps(defaults),is_active=True,updated_by=actor.membership.id); db.add(row); db.commit(); db.refresh(row)
     try: settings=json.loads(row.settings_json or '{}')
     except json.JSONDecodeError: settings={}
-    return DocumentTemplateSummary(id=row.id,template_type=row.template_type,name=row.name,settings=settings if isinstance(settings,dict) else {},is_active=row.is_active,updated_at=row.updated_at)
+    if not isinstance(settings, dict):
+        settings = {}
+    # Backfill the legacy blank customer-pack template once so the integrated
+    # generator starts with the same company details as the supplied tool.
+    if template_type == 'customer_pack' and not any(str(settings.get(key, '')).strip() for key in ('address', 'gstin', 'phone', 'bank_details')):
+        settings = {**defaults, **{key: value for key, value in settings.items() if str(value).strip()}}
+        row.settings_json = json.dumps(settings, separators=(',', ':'))
+        row.updated_by = actor.membership.id
+        db.commit(); db.refresh(row)
+    return DocumentTemplateSummary(id=row.id,template_type=row.template_type,name=row.name,settings=settings,is_active=row.is_active,updated_at=row.updated_at)
 
 
 def save_template(db: Session, actor: CurrentSession, template_type: str, payload: SaveDocumentTemplateRequest)->DocumentTemplateSummary:
@@ -269,6 +306,129 @@ def save_template(db: Session, actor: CurrentSession, template_type: str, payloa
     row.name=payload.name; row.settings_json=json.dumps(payload.settings,separators=(',',':')); row.updated_by=actor.membership.id
     db.flush(); write_event(db,company_id=row.company_id,event='document_template.updated',entity='document_template',entity_id=row.id,actor=actor,changes={'template_type':template_type}); db.commit(); return get_template(db,actor,template_type)
 
+
+
+def _json_dict(value: str) -> dict[str, object]:
+    try:
+        parsed = json.loads(value or '{}')
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _document_context(db: Session, actor: CurrentSession, customer_id: str) -> tuple[AgentCustomer, CustomerProject, CustomerQuotation]:
+    try:
+        customer = get_customer(db, actor, customer_id)
+    except AccessError as exc:
+        error = OperationsNotFoundError(str(exc)) if exc.status_code == 404 else OperationsServiceError(str(exc))
+        error.status_code = exc.status_code
+        raise error from exc
+    project = db.scalar(
+        select(CustomerProject)
+        .where(
+            CustomerProject.company_id == actor.membership.company_id,
+            CustomerProject.customer_id == customer.id,
+            CustomerProject.archived_at.is_(None),
+        )
+        .order_by(CustomerProject.created_at.desc())
+    )
+    if not project:
+        raise OperationsConflictError('Approve the quotation before generating customer documents')
+    quotation = db.scalar(select(CustomerQuotation).where(
+        CustomerQuotation.id == project.quotation_id,
+        CustomerQuotation.company_id == actor.membership.company_id,
+    ))
+    if not quotation or quotation.status != 'approved':
+        raise OperationsConflictError('Only an approved quotation can generate a customer document pack')
+    return customer, project, quotation
+
+
+def _document_pack_summary(row: GeneratedDocumentPack) -> GeneratedDocumentPackSummary:
+    return GeneratedDocumentPackSummary(
+        id=row.id, customer_id=row.customer_id, project_id=row.project_id, quotation_id=row.quotation_id,
+        version=row.version, status=row.status, input_snapshot=_json_dict(row.input_snapshot_json),
+        template_snapshot=_json_dict(row.template_snapshot_json), generated_at=row.generated_at,
+        finalized_at=row.finalized_at, created_at=row.created_at, updated_at=row.updated_at,
+    )
+
+
+def list_document_packs(db: Session, actor: CurrentSession, customer_id: str) -> list[GeneratedDocumentPackSummary]:
+    _document_context(db, actor, customer_id)
+    rows = list(db.scalars(
+        select(GeneratedDocumentPack)
+        .where(
+            GeneratedDocumentPack.company_id == actor.membership.company_id,
+            GeneratedDocumentPack.customer_id == customer_id,
+        )
+        .order_by(GeneratedDocumentPack.version.desc())
+    ).all())
+    return [_document_pack_summary(row) for row in rows]
+
+
+def save_document_pack(
+    db: Session, actor: CurrentSession, customer_id: str, payload: SaveGeneratedDocumentPackRequest
+) -> GeneratedDocumentPackSummary:
+    customer, project, quotation = _document_context(db, actor, customer_id)
+    template = get_template(db, actor, 'customer_pack')
+    latest = db.scalar(
+        select(GeneratedDocumentPack)
+        .where(
+            GeneratedDocumentPack.company_id == actor.membership.company_id,
+            GeneratedDocumentPack.customer_id == customer.id,
+        )
+        .order_by(GeneratedDocumentPack.version.desc())
+    )
+    create_new = latest is None or latest.status in {'generated', 'final'}
+    if create_new:
+        row = GeneratedDocumentPack(
+            company_id=actor.membership.company_id, customer_id=customer.id, project_id=project.id,
+            quotation_id=quotation.id, version=(latest.version + 1 if latest else 1), status='draft',
+            created_by=actor.membership.id, updated_by=actor.membership.id,
+        )
+        db.add(row)
+    else:
+        row = latest
+        row.project_id = project.id
+        row.quotation_id = quotation.id
+        row.updated_by = actor.membership.id
+    row.input_snapshot_json = json.dumps(payload.input_snapshot, separators=(',', ':'), default=str)
+    row.template_snapshot_json = json.dumps(template.settings, separators=(',', ':'), default=str)
+    row.status = payload.status
+    row.generated_at = datetime.now(UTC) if payload.status == 'generated' else row.generated_at
+    row.finalized_at = None
+    db.flush()
+    write_event(
+        db, company_id=row.company_id,
+        event='document_pack.generated' if payload.status == 'generated' else 'document_pack.draft_saved',
+        entity='generated_document_pack', entity_id=row.id, actor=actor, project_id=project.id, customer_id=customer.id,
+        changes={'version': row.version, 'status': row.status},
+    )
+    db.commit()
+    db.refresh(row)
+    return _document_pack_summary(row)
+
+
+def finalize_document_pack(db: Session, actor: CurrentSession, pack_id: str) -> GeneratedDocumentPackSummary:
+    row = db.scalar(select(GeneratedDocumentPack).where(
+        GeneratedDocumentPack.id == pack_id,
+        GeneratedDocumentPack.company_id == actor.membership.company_id,
+    ))
+    if not row:
+        raise OperationsNotFoundError('Document pack not found')
+    _document_context(db, actor, row.customer_id)
+    if row.status != 'generated':
+        raise OperationsConflictError('Generate the document pack before finalizing it')
+    row.status = 'final'
+    row.finalized_at = datetime.now(UTC)
+    row.updated_by = actor.membership.id
+    write_event(
+        db, company_id=row.company_id, event='document_pack.finalized', entity='generated_document_pack',
+        entity_id=row.id, actor=actor, project_id=row.project_id, customer_id=row.customer_id,
+        changes={'version': row.version, 'status': row.status},
+    )
+    db.commit()
+    db.refresh(row)
+    return _document_pack_summary(row)
 
 def update_inventory_item(db: Session, actor: CurrentSession, item_id: str, payload):
     row = db.scalar(select(InventoryItem).where(InventoryItem.id == item_id, InventoryItem.company_id == actor.membership.company_id))

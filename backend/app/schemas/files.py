@@ -34,4 +34,4 @@ class DocumentCustomerOption(BaseModel):
 
 
 class FileStatusRequest(BaseModel):
-    status: str = Field(pattern=r"^(active|archived)$")
+    status: str = Field(pattern=r"^(active|archived|deleted)$")
