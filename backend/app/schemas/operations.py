@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 
@@ -41,14 +41,23 @@ class InventoryMovementSummary(BaseModel):
     quantity: float
     source_location_id: str | None
     source_location_name: str
+    source_location_manual: str = ''
     destination_location_id: str | None
     destination_location_name: str
+    destination_location_manual: str = ''
     project_id: str | None
     project_number: str
     customer_id: str | None
     customer_name: str
     reference_number: str
+    movement_group_id: str | None = None
+    challan_date: date | None = None
     partner_name: str
+    transporter_name: str = ''
+    vehicle_number: str = ''
+    driver_name: str = ''
+    driver_phone: str = ''
+    eway_bill_number: str = ''
     note: str
     status: str
     created_at: datetime
@@ -127,12 +136,19 @@ class CreateInventoryMovementRequest(BaseModel):
     quantity: float = Field(gt=0)
     source_location_id: str | None = None
     destination_location_id: str | None = None
+    source_location_manual: str = Field(default='', max_length=180)
+    destination_location_manual: str = Field(default='', max_length=180)
     project_id: str | None = None
     customer_id: str | None = None
     challan_id: str | None = None
     reference_number: str = Field(default='', max_length=80)
+    challan_date: date | None = None
     supplier_name: str = Field(default='', max_length=160)
     transporter_name: str = Field(default='', max_length=160)
+    vehicle_number: str = Field(default='', max_length=32)
+    driver_name: str = Field(default='', max_length=120)
+    driver_phone: str = Field(default='', max_length=32)
+    eway_bill_number: str = Field(default='', max_length=80)
     note: str = Field(default='', max_length=400)
 
     @model_validator(mode='after')
@@ -148,6 +164,42 @@ class CreateInventoryMovementRequest(BaseModel):
                 raise ValueError('Source and destination locations must be different')
         if self.movement_type == 'adjustment' and not (self.source_location_id or self.destination_location_id):
             raise ValueError('A location is required for adjustment')
+        return self
+
+
+class InventoryMovementLineInput(BaseModel):
+    item_id: str
+    quantity: float = Field(gt=0)
+    source_location_id: str | None = None
+    destination_location_id: str | None = None
+    source_location_manual: str = Field(default='', max_length=180)
+    destination_location_manual: str = Field(default='', max_length=180)
+
+
+class CreateInventoryMovementBatchRequest(BaseModel):
+    movement_type: str = Field(pattern=r'^(inward|outward)$')
+    lines: list[InventoryMovementLineInput] = Field(min_length=1, max_length=100)
+    reference_number: str = Field(default='', max_length=80)
+    challan_date: date | None = None
+    supplier_name: str = Field(default='', max_length=160)
+    transporter_name: str = Field(default='', max_length=160)
+    vehicle_number: str = Field(default='', max_length=32)
+    driver_name: str = Field(default='', max_length=120)
+    driver_phone: str = Field(default='', max_length=32)
+    eway_bill_number: str = Field(default='', max_length=80)
+    note: str = Field(default='', max_length=400)
+
+    @model_validator(mode='after')
+    def validate_lines(self):
+        for index, line in enumerate(self.lines, start=1):
+            if self.movement_type == 'inward' and not line.destination_location_id:
+                raise ValueError(f'Line {index}: a saved inward destination is required')
+            if self.movement_type == 'outward' and not line.source_location_id:
+                raise ValueError(f'Line {index}: a saved outward source is required')
+            if line.source_location_id and line.source_location_manual:
+                raise ValueError(f'Line {index}: choose a saved or manual source, not both')
+            if line.destination_location_id and line.destination_location_manual:
+                raise ValueError(f'Line {index}: choose a saved or manual destination, not both')
         return self
 
 

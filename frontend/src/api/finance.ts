@@ -10,6 +10,7 @@ export const getFinanceTransactions = (query = ''): Promise<FinanceTransactionLi
 export const createFinanceTransaction = (body: Record<string, unknown>): Promise<FinanceTransaction> => apiRequest('/finance/transactions', { method: 'POST', body, idempotencyKey: createClientId() })
 export const updateFinanceTransaction = (id: string, body: Record<string, unknown>): Promise<FinanceTransaction> => apiRequest(`/finance/transactions/${id}`, { method: 'PATCH', body })
 export const reverseFinanceTransaction = (id: string, body: Record<string, unknown>): Promise<FinanceTransaction> => apiRequest(`/finance/transactions/${id}/reverse`, { method: 'POST', body, idempotencyKey: createClientId() })
+export const deleteFinanceTransaction = (id: string): Promise<void> => apiRequest(`/finance/transactions/${id}`, { method: 'DELETE' })
 export const transferFinancialAccounts = (body: Record<string, unknown>): Promise<FinanceTransaction[]> => apiRequest('/finance/transfers', { method: 'POST', body, idempotencyKey: createClientId() })
 export const getExpenses = (query = ''): Promise<FinanceTransactionList> => apiRequest(`/finance/expenses${query ? `?${query}` : ''}`)
 export const getBills = (query = ''): Promise<BillList> => apiRequest(`/finance/bills${query ? `?${query}` : ''}`)

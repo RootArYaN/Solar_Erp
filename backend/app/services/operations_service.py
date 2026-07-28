@@ -30,6 +30,7 @@ from app.models.operations import (
 from app.models.system import StoredFile
 from app.models.workflow import CustomerProject, CustomerQuotation
 from app.schemas.operations import (
+    CreateInventoryMovementBatchRequest,
     CreateInventoryItemRequest,
     CreateInventoryLocationRequest,
     CreateInventoryMovementRequest,
@@ -280,45 +281,186 @@ def _balance(db: Session, company_id: str, item_id: str, location_id: str, creat
 
 
 def _movement_summaries(db: Session, rows: list[InventoryMovement]) -> list[InventoryMovementSummary]:
-    item_ids = {row.item_id for row in rows}; location_ids = {i for row in rows for i in (row.source_location_id, row.destination_location_id) if i}; project_ids = {row.project_id for row in rows if row.project_id}; customer_ids = {row.customer_id for row in rows if row.customer_id}
+    item_ids = {row.item_id for row in rows}
+    location_ids = {location_id for row in rows for location_id in (row.source_location_id, row.destination_location_id) if location_id}
+    project_ids = {row.project_id for row in rows if row.project_id}
+    customer_ids = {row.customer_id for row in rows if row.customer_id}
     items = {row.id: row for row in db.scalars(select(InventoryItem).where(InventoryItem.id.in_(item_ids))).all()} if item_ids else {}
     locations = {row.id: row for row in db.scalars(select(InventoryLocation).where(InventoryLocation.id.in_(location_ids))).all()} if location_ids else {}
     projects = {row.id: row for row in db.scalars(select(CustomerProject).where(CustomerProject.id.in_(project_ids))).all()} if project_ids else {}
     customers = {row.id: row for row in db.scalars(select(AgentCustomer).where(AgentCustomer.id.in_(customer_ids))).all()} if customer_ids else {}
-    result=[]
+    result = []
     for row in rows:
-        result.append(InventoryMovementSummary(id=row.id,item_id=row.item_id,item_name=items[row.item_id].name if row.item_id in items else '',movement_type=row.movement_type,quantity=_f(row.quantity),source_location_id=row.source_location_id,source_location_name=locations[row.source_location_id].name if row.source_location_id in locations else '',destination_location_id=row.destination_location_id,destination_location_name=locations[row.destination_location_id].name if row.destination_location_id in locations else '',project_id=row.project_id,project_number=projects[row.project_id].project_number if row.project_id in projects else '',customer_id=row.customer_id,customer_name=customers[row.customer_id].customer_name if row.customer_id in customers else '',reference_number=row.reference_number,partner_name=row.supplier_name or row.transporter_name,note=row.note,status=row.status,created_at=row.created_at))
+        result.append(InventoryMovementSummary(
+            id=row.id,
+            item_id=row.item_id,
+            item_name=items[row.item_id].name if row.item_id in items else '',
+            movement_type=row.movement_type,
+            quantity=_f(row.quantity),
+            source_location_id=row.source_location_id,
+            source_location_name=locations[row.source_location_id].name if row.source_location_id in locations else '',
+            source_location_manual=row.source_location_manual,
+            destination_location_id=row.destination_location_id,
+            destination_location_name=locations[row.destination_location_id].name if row.destination_location_id in locations else '',
+            destination_location_manual=row.destination_location_manual,
+            project_id=row.project_id,
+            project_number=projects[row.project_id].project_number if row.project_id in projects else '',
+            customer_id=row.customer_id,
+            customer_name=customers[row.customer_id].customer_name if row.customer_id in customers else '',
+            reference_number=row.reference_number,
+            movement_group_id=row.movement_group_id,
+            challan_date=row.challan_date,
+            partner_name=row.supplier_name or row.transporter_name,
+            transporter_name=row.transporter_name,
+            vehicle_number=row.vehicle_number,
+            driver_name=row.driver_name,
+            driver_phone=row.driver_phone,
+            eway_bill_number=row.eway_bill_number,
+            note=row.note,
+            status=row.status,
+            created_at=row.created_at,
+        ))
     return result
 
 
-def post_movement(db: Session, actor: CurrentSession, payload: CreateInventoryMovementRequest) -> InventoryMovementSummary:
-    company_id=actor.membership.company_id
-    item=db.scalar(select(InventoryItem).where(InventoryItem.id==payload.item_id,InventoryItem.company_id==company_id,InventoryItem.is_active.is_(True)))
-    if not item: raise OperationsNotFoundError('Inventory item not found')
-    for location_id in [payload.source_location_id,payload.destination_location_id]:
-        if location_id and not db.scalar(select(InventoryLocation.id).where(InventoryLocation.id==location_id,InventoryLocation.company_id==company_id,InventoryLocation.is_active.is_(True))): raise OperationsNotFoundError('Inventory location not found')
+def _post_movement_row(
+    db: Session,
+    actor: CurrentSession,
+    payload: CreateInventoryMovementRequest,
+    *,
+    movement_group_id: str | None = None,
+) -> InventoryMovement:
+    company_id = actor.membership.company_id
+    item = db.scalar(select(InventoryItem).where(
+        InventoryItem.id == payload.item_id,
+        InventoryItem.company_id == company_id,
+        InventoryItem.is_active.is_(True),
+    ))
+    if not item:
+        raise OperationsNotFoundError('Inventory item not found')
+    for location_id in [payload.source_location_id, payload.destination_location_id]:
+        if location_id and not db.scalar(select(InventoryLocation.id).where(
+            InventoryLocation.id == location_id,
+            InventoryLocation.company_id == company_id,
+            InventoryLocation.is_active.is_(True),
+        )):
+            raise OperationsNotFoundError('Inventory location not found')
+    customer_id = payload.customer_id
     if payload.project_id:
-        project=get_project(db,actor,payload.project_id)
-        if payload.customer_id and project.customer_id!=payload.customer_id: raise OperationsConflictError('The project does not belong to the selected customer')
-        payload.customer_id=project.customer_id
-    elif payload.customer_id: get_customer(db,actor,payload.customer_id)
-    qty=_d(payload.quantity)
-    source=_balance(db,company_id,item.id,payload.source_location_id,False) if payload.source_location_id else None
-    destination=_balance(db,company_id,item.id,payload.destination_location_id,True) if payload.destination_location_id else None
-    if payload.movement_type in {'outward','project_dispatch','supplier_return','transfer'}:
-        if not source or Decimal(source.quantity_on_hand)-Decimal(source.reserved_quantity)<qty: raise OperationsConflictError('Insufficient available inventory at the source location')
-        source.quantity_on_hand=Decimal(source.quantity_on_hand)-qty
-    if payload.movement_type in {'inward','project_return','transfer'}:
-        if not destination: raise OperationsConflictError('Destination balance could not be created')
-        destination.quantity_on_hand=Decimal(destination.quantity_on_hand)+qty
-    if payload.movement_type=='adjustment':
-        target=source or destination
-        if not target: raise OperationsConflictError('Adjustment location is required')
-        target.quantity_on_hand=qty
-    row=InventoryMovement(company_id=company_id,item_id=item.id,movement_type=payload.movement_type,quantity=qty,source_location_id=payload.source_location_id,destination_location_id=payload.destination_location_id,project_id=payload.project_id,customer_id=payload.customer_id,challan_id=payload.challan_id,reference_number=payload.reference_number or f'MOV-{item.sku}-{uuid4().hex[:6].upper()}',supplier_name=payload.supplier_name,transporter_name=payload.transporter_name,note=payload.note,status='completed',created_by=actor.membership.id)
-    db.add(row); db.flush()
-    write_event(db,company_id=company_id,event='inventory.movement_posted',entity='inventory_movement',entity_id=row.id,actor=actor,project_id=row.project_id,customer_id=row.customer_id,changes={'item_id':row.item_id,'movement_type':row.movement_type,'quantity':str(row.quantity)})
-    db.commit(); return _movement_summaries(db,[row])[0]
+        project = get_project(db, actor, payload.project_id)
+        if customer_id and project.customer_id != customer_id:
+            raise OperationsConflictError('The project does not belong to the selected customer')
+        customer_id = project.customer_id
+    elif customer_id:
+        get_customer(db, actor, customer_id)
+    qty = _d(payload.quantity)
+    source = _balance(db, company_id, item.id, payload.source_location_id, False) if payload.source_location_id else None
+    destination = _balance(db, company_id, item.id, payload.destination_location_id, True) if payload.destination_location_id else None
+    if payload.movement_type in {'outward', 'project_dispatch', 'supplier_return', 'transfer'}:
+        if not source or Decimal(source.quantity_on_hand) - Decimal(source.reserved_quantity) < qty:
+            raise OperationsConflictError(f'Insufficient available inventory for {item.name} at the source location')
+        source.quantity_on_hand = Decimal(source.quantity_on_hand) - qty
+    if payload.movement_type in {'inward', 'project_return', 'transfer'}:
+        if not destination:
+            raise OperationsConflictError('Destination balance could not be created')
+        destination.quantity_on_hand = Decimal(destination.quantity_on_hand) + qty
+    if payload.movement_type == 'adjustment':
+        target = source or destination
+        if not target:
+            raise OperationsConflictError('Adjustment location is required')
+        target.quantity_on_hand = qty
+    row = InventoryMovement(
+        company_id=company_id,
+        item_id=item.id,
+        movement_type=payload.movement_type,
+        quantity=qty,
+        source_location_id=payload.source_location_id,
+        destination_location_id=payload.destination_location_id,
+        source_location_manual=payload.source_location_manual.strip(),
+        destination_location_manual=payload.destination_location_manual.strip(),
+        project_id=payload.project_id,
+        customer_id=customer_id,
+        challan_id=payload.challan_id,
+        movement_group_id=movement_group_id,
+        reference_number=payload.reference_number or f'MOV-{item.sku}-{uuid4().hex[:6].upper()}',
+        challan_date=payload.challan_date,
+        supplier_name=payload.supplier_name,
+        transporter_name=payload.transporter_name,
+        vehicle_number=payload.vehicle_number.upper().strip(),
+        driver_name=payload.driver_name,
+        driver_phone=payload.driver_phone,
+        eway_bill_number=payload.eway_bill_number,
+        note=payload.note,
+        status='completed',
+        created_by=actor.membership.id,
+    )
+    db.add(row)
+    db.flush()
+    write_event(
+        db,
+        company_id=company_id,
+        event='inventory.movement_posted',
+        entity='inventory_movement',
+        entity_id=row.id,
+        actor=actor,
+        project_id=row.project_id,
+        customer_id=row.customer_id,
+        changes={
+            'item_id': row.item_id,
+            'movement_type': row.movement_type,
+            'quantity': str(row.quantity),
+            'movement_group_id': movement_group_id,
+            'challan_number': row.reference_number,
+            'vehicle_number': row.vehicle_number,
+        },
+    )
+    return row
+
+
+def post_movement(db: Session, actor: CurrentSession, payload: CreateInventoryMovementRequest) -> InventoryMovementSummary:
+    try:
+        row = _post_movement_row(db, actor, payload)
+        db.commit()
+        return _movement_summaries(db, [row])[0]
+    except Exception:
+        db.rollback()
+        raise
+
+
+def post_movement_batch(
+    db: Session,
+    actor: CurrentSession,
+    payload: CreateInventoryMovementBatchRequest,
+) -> list[InventoryMovementSummary]:
+    group_id = str(uuid4())
+    reference_number = payload.reference_number.strip() or f'CH-{uuid4().hex[:8].upper()}'
+    rows: list[InventoryMovement] = []
+    try:
+        for line in payload.lines:
+            movement = CreateInventoryMovementRequest(
+                item_id=line.item_id,
+                movement_type=payload.movement_type,
+                quantity=line.quantity,
+                source_location_id=line.source_location_id,
+                destination_location_id=line.destination_location_id,
+                source_location_manual=line.source_location_manual,
+                destination_location_manual=line.destination_location_manual,
+                reference_number=reference_number,
+                challan_date=payload.challan_date,
+                supplier_name=payload.supplier_name,
+                transporter_name=payload.transporter_name,
+                vehicle_number=payload.vehicle_number,
+                driver_name=payload.driver_name,
+                driver_phone=payload.driver_phone,
+                eway_bill_number=payload.eway_bill_number,
+                note=payload.note,
+            )
+            rows.append(_post_movement_row(db, actor, movement, movement_group_id=group_id))
+        db.commit()
+        return _movement_summaries(db, rows)
+    except Exception:
+        db.rollback()
+        raise
 
 
 def get_pricing(db: Session, actor: CurrentSession) -> PricingBookSummary:

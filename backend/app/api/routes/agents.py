@@ -90,6 +90,22 @@ def patch_agent_transaction(
         _raise_service_error(exc)
 
 
+@router.delete(
+    "/{membership_id}/transactions/{transaction_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def delete_agent_transaction(
+    membership_id: str,
+    transaction_id: str,
+    db: Session = Depends(get_db),
+    session: CurrentSession = Depends(require_any_permissions("agents.transactions.submit", "agents.manage", "finance.manage")),
+) -> None:
+    try:
+        return agent_service.delete_agent_transaction(db, session, membership_id, transaction_id)
+    except AgentServiceError as exc:
+        _raise_service_error(exc)
+
+
 @router.post(
     "/{membership_id}/customers",
     response_model=AgentOverviewResponse,

@@ -654,3 +654,49 @@ def update_agent_transaction(
     db.expire_all()
     overview = get_agent_overview(db, actor, membership_id)
     return next(item for item in overview.transactions if item.id == transaction_id)
+
+
+def delete_agent_transaction(
+    db: Session,
+    actor: CurrentSession,
+    membership_id: str,
+    transaction_id: str,
+) -> None:
+    own_delete = membership_id == actor.membership.id and "agents.transactions.submit" in actor.permissions
+    privileged_delete = _is_admin(actor) or bool({"agents.manage", "finance.manage"}.intersection(actor.permissions))
+    if not own_delete and not privileged_delete:
+        raise AgentForbiddenError("You cannot delete agent transactions")
+
+    membership = _load_agent_membership(db, actor.membership.company_id, membership_id)
+    profile = _load_profile(db, membership)
+    transaction = db.scalar(select(AgentTransaction).where(
+        AgentTransaction.id == transaction_id,
+        AgentTransaction.company_id == actor.membership.company_id,
+        AgentTransaction.agent_profile_id == profile.id,
+    ))
+    if not transaction:
+        raise AgentNotFoundError("Agent transaction not found")
+    approval = db.scalar(select(TransactionApproval).where(
+        TransactionApproval.transaction_id == transaction.id,
+        TransactionApproval.company_id == transaction.company_id,
+    ))
+    write_event(
+        db,
+        company_id=transaction.company_id,
+        event="transaction.deleted",
+        entity="agent_transaction",
+        entity_id=transaction.id,
+        actor=actor,
+        project_id=transaction.project_id,
+        changes={
+            "reference": transaction.reference,
+            "type": transaction.transaction_type,
+            "debit": str(transaction.debit),
+            "credit": str(transaction.credit),
+            "approval_status": approval.status if approval else "approved",
+        },
+    )
+    if approval:
+        db.delete(approval)
+    db.delete(transaction)
+    db.commit()

@@ -363,12 +363,24 @@ body,
 }
 
 .inventory-workspace-body {
-  display: grid;
-  grid-template-rows: minmax(0, 1.25fr) minmax(0, .75fr);
-  gap: var(--workspace-gap);
+  display: block;
   overflow: hidden;
 }
 
+.inventory-main-tabs {
+  width: fit-content;
+}
+
+.inventory-stock-grid {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(330px, .9fr);
+  gap: var(--workspace-gap);
+}
+
+.inventory-stock-grid > .erp-panel,
 .inventory-workspace-body > .erp-panel {
   min-height: 0;
   display: flex;
@@ -376,9 +388,14 @@ body,
   overflow: hidden;
 }
 
+.inventory-stock-grid > .erp-panel > .erp-table-wrap,
 .inventory-workspace-body > .erp-panel > .erp-table-wrap {
   flex: 1 1 auto;
   min-height: 0;
+}
+
+.inventory-locations-panel .erp-table {
+  min-width: 590px;
 }
 
 .pricing-workspace-panel {
@@ -1062,7 +1079,8 @@ body,
     grid-template-rows: repeat(2, minmax(0, 1fr));
   }
 
-  .inventory-workspace-body {
+  .inventory-stock-grid {
+    grid-template-columns: 1fr;
     grid-template-rows: repeat(2, minmax(0, 1fr));
   }
 
@@ -1102,6 +1120,34 @@ body,
 .entity-edit-dialog__conflict { display: flex; align-items: flex-start; gap: 10px; padding: 10px; margin-bottom: 10px; border: 1px solid #f59e0b55; border-radius: 10px; background: #f59e0b12; }
 .entity-edit-dialog__conflict div { flex: 1; min-width: 0; }
 .entity-edit-dialog__conflict p { margin: 2px 0 0; }
+.erp-form label.checkbox-row {
+  min-height: 38px;
+  align-self: end;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  padding: 0 2px;
+  cursor: pointer;
+}
+.erp-form label.checkbox-row > input[type="checkbox"] {
+  appearance: auto;
+  width: 17px;
+  height: 17px;
+  min-width: 17px;
+  min-height: 17px;
+  margin: 0;
+  padding: 0;
+  border-radius: 4px;
+  accent-color: #d49318;
+  box-shadow: none;
+  cursor: pointer;
+}
+.erp-form label.checkbox-row > span {
+  color: #465466;
+  font-size: 9px;
+  line-height: 1;
+}
 @media (max-width: 640px) { .entity-edit-dialog { width: 100vw; height: 100dvh; max-height: 100dvh; border-radius: 0; } .entity-edit-dialog__footer { padding-bottom: max(10px, env(safe-area-inset-bottom)); } }
 
 /* Generated customer document pack */
@@ -1262,4 +1308,51 @@ body,
   .generated-pack-approved-field.is-wide{grid-column:auto}
   .generated-pack-preview__head{flex-direction:column}
   .generated-pack-zoom{align-self:flex-end}
+}
+
+/* Inventory inward / outward */
+.modal-layer .modal-card.inventory-movement-modal{width:min(1040px,100%)}
+.inventory-movement-form{gap:10px}
+.movement-choice{display:grid;grid-template-columns:100px minmax(0,1fr);align-items:center;gap:8px}
+.movement-choice>span{color:#667383;font-size:8px;font-weight:850;letter-spacing:.45px;text-transform:uppercase}
+.movement-choice>div,.movement-endpoint__toggle{display:flex;gap:3px;padding:3px;border:1px solid #dfe4e8;border-radius:8px;background:#f1f3f4}
+.movement-choice button,.movement-endpoint__toggle button{min-height:30px;padding:0 12px;border:0;border-radius:6px;color:#6d7885;background:transparent;font-size:8.5px;font-weight:800;cursor:pointer}
+.movement-choice button.is-active,.movement-endpoint__toggle button.is-active{color:#7f570d;background:#fff;box-shadow:0 2px 7px rgba(34,45,57,.1)}
+.movement-lines{display:grid;gap:7px;padding:10px;border:1px solid #e0e5e9;border-radius:10px;background:#f7f8f9}
+.movement-lines>header{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.movement-lines>header div{display:grid;gap:2px}
+.movement-lines>header strong{color:#293747;font-size:10px}
+.movement-lines>header small{color:#818b96;font-size:8px}
+.movement-line{position:relative;display:grid;grid-template-columns:24px minmax(160px,1.25fr) minmax(90px,.55fr) minmax(150px,1fr) minmax(190px,1.2fr) 28px;align-items:end;gap:7px;padding:9px;border:1px solid #e1e5e9;border-radius:9px;background:#fff}
+.movement-line__number{align-self:center;display:grid;place-items:center;width:22px;height:22px;border-radius:7px;color:#8c6010;background:#fff2d8;font-size:8px;font-weight:850}
+.movement-line label,.movement-endpoint{display:grid;gap:4px;color:#5c6877;font-size:8px;font-weight:800}
+.movement-line input,.movement-line select{width:100%;min-width:0;min-height:35px;padding:7px 8px;border:1px solid #dce2e7;border-radius:7px;background:#fff;color:#273443;font-size:9px}
+.movement-endpoint{grid-template-columns:auto 1fr}
+.movement-endpoint>span{align-self:center}
+.movement-endpoint__toggle{justify-self:end;padding:2px}
+.movement-endpoint__toggle button{min-height:21px;padding:0 7px;font-size:7px}
+.movement-endpoint>input,.movement-endpoint>select{grid-column:1/-1}
+.movement-line__remove{align-self:center;display:grid;place-items:center;width:28px;height:28px;border:1px solid #efd2cf;border-radius:7px;color:#a94842;background:#fff8f7;cursor:pointer}
+.movement-details{min-width:0;margin:0;padding:10px;border:1px solid #e0e5e9;border-radius:10px}
+.movement-details legend{padding:0 6px;color:#667383;font-size:8px;font-weight:850;letter-spacing:.45px;text-transform:uppercase}
+.inventory-history-tabs{margin-left:auto}
+.inventory-action--inward{color:#2e7147!important;border-color:#cbe3d2!important;background:#f1faf4!important}
+.inventory-action--outward{color:#956111!important;border-color:#ead8b7!important;background:#fff8e9!important}
+.agent-transaction-actions{display:flex;align-items:center;gap:5px;white-space:nowrap}
+.agent-transaction-actions .danger-icon-button,.finance-transaction-delete{flex:0 0 auto}
+
+@media(max-width:820px){
+  .movement-line{grid-template-columns:24px 1fr 1fr}
+  .movement-line label:first-of-type,.movement-endpoint{grid-column:span 2}
+  .movement-line__remove{position:absolute;top:7px;right:7px}
+}
+@media(max-width:600px){
+  .movement-choice{grid-template-columns:1fr}
+  .movement-choice>div{display:grid;grid-template-columns:1fr 1fr}
+  .movement-line{grid-template-columns:1fr}
+  .movement-line__number{position:absolute;top:9px;right:43px}
+  .movement-line label:first-of-type,.movement-endpoint{grid-column:auto}
+  .movement-lines>header{align-items:flex-start;flex-direction:column}
+  .inventory-history-tabs{width:100%;margin-left:0}
+  .inventory-history-tabs button{flex:1}
 }

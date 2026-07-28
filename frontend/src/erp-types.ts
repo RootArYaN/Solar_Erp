@@ -158,14 +158,23 @@ export type InventoryMovement = {
   quantity: number
   source_location_id: string | null
   source_location_name: string
+  source_location_manual: string
   destination_location_id: string | null
   destination_location_name: string
+  destination_location_manual: string
   project_id: string | null
   project_number: string
   customer_id: string | null
   customer_name: string
   reference_number: string
+  movement_group_id: string | null
+  challan_date: string | null
   partner_name: string
+  transporter_name: string
+  vehicle_number: string
+  driver_name: string
+  driver_phone: string
+  eway_bill_number: string
   note: string
   status: string
   created_at: string

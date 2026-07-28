@@ -99,6 +99,12 @@ def reverse_transaction(transaction_id: str, payload: ReverseFinanceTransactionR
     except FinanceServiceError as exc: _raise(exc)
 
 
+@router.delete('/transactions/{transaction_id}', status_code=204)
+def delete_transaction(transaction_id: str, db: Session = Depends(get_db), session: CurrentSession = Depends(require_any_permissions('finance.manage'))):
+    try: return finance_service.delete_transaction(db, session, transaction_id)
+    except FinanceServiceError as exc: _raise(exc)
+
+
 @router.post('/transfers', response_model=list[FinanceTransactionSummary], status_code=201)
 def post_transfer(payload: AccountTransferRequest, db: Session = Depends(get_db), session: CurrentSession = Depends(require_any_permissions('finance.manage'))):
     try: return finance_service.transfer_accounts(db, session, payload)

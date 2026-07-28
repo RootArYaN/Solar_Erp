@@ -1,7 +1,7 @@
-import { AlertTriangle, Boxes, IndianRupee, PackagePlus, Pencil, Plus, RefreshCw, Search, Warehouse } from 'lucide-react'
+import { AlertTriangle, Boxes, IndianRupee, PackagePlus, Pencil, Plus, RefreshCw, Search, Trash2, Warehouse } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
-import { createInventoryItem, createInventoryLocation, createInventoryMovement, getInventorySummary, updateInventoryItem, updateInventoryLocation } from '../../api/operations'
+import { createInventoryItem, createInventoryLocation, createInventoryMovementBatch, getInventorySummary, updateInventoryItem, updateInventoryLocation } from '../../api/operations'
 import type { InventoryItem, InventoryLocation, InventorySummary } from '../../erp-types'
 import { getModuleAccess } from '../../lib/permissions'
 import type { Session } from '../../types'
@@ -20,10 +20,137 @@ function formObject(form: HTMLFormElement): Record<string, unknown> {
   return Object.fromEntries(Object.entries(entries).map(([key, value]) => key.endsWith('_quantity') || ['unit_cost', 'reorder_level', 'quantity'].includes(key) ? [key, Number(value || 0)] : [key, value]))
 }
 
+type MovementDirection = 'inward' | 'outward'
+type EntryMode = 'individual' | 'multiple'
+type EndpointMode = 'stored' | 'manual'
+type MovementLine = {
+  key: string
+  item_id: string
+  quantity: string
+  stock_location_id: string
+  endpoint_mode: EndpointMode
+  endpoint_location_id: string
+  endpoint_manual: string
+}
+
+function newMovementLine(itemId = '', stockLocationId = ''): MovementLine {
+  return {
+    key: `${Date.now()}-${Math.random()}`,
+    item_id: itemId,
+    quantity: '',
+    stock_location_id: stockLocationId,
+    endpoint_mode: 'manual',
+    endpoint_location_id: '',
+    endpoint_manual: '',
+  }
+}
+
+function MovementDialog({ items, locations, initialItem, initialDirection, working, onClose, onSubmit }: {
+  items: InventoryItem[]
+  locations: InventoryLocation[]
+  initialItem: InventoryItem | null
+  initialDirection: MovementDirection
+  working: boolean
+  onClose: () => void
+  onSubmit: (body: Record<string, unknown>) => Promise<void>
+}) {
+  const [direction, setDirection] = useState<MovementDirection>(initialDirection)
+  const [entryMode, setEntryMode] = useState<EntryMode>('individual')
+  const [lines, setLines] = useState<MovementLine[]>([newMovementLine(initialItem?.id, initialItem?.location_id ?? '')])
+
+  function updateLine(key: string, patch: Partial<MovementLine>) {
+    setLines((current) => current.map((line) => line.key === key ? { ...line, ...patch } : line))
+  }
+
+  function changeEntryMode(mode: EntryMode) {
+    setEntryMode(mode)
+    if (mode === 'individual') setLines((current) => [current[0] ?? newMovementLine(initialItem?.id, initialItem?.location_id ?? '')])
+  }
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const details = formObject(event.currentTarget)
+    const movementLines = lines.map((line) => ({
+      item_id: line.item_id,
+      quantity: Number(line.quantity),
+      source_location_id: direction === 'outward'
+        ? line.stock_location_id
+        : line.endpoint_mode === 'stored' ? line.endpoint_location_id || null : null,
+      destination_location_id: direction === 'inward'
+        ? line.stock_location_id
+        : line.endpoint_mode === 'stored' ? line.endpoint_location_id || null : null,
+      source_location_manual: direction === 'inward' && line.endpoint_mode === 'manual' ? line.endpoint_manual : '',
+      destination_location_manual: direction === 'outward' && line.endpoint_mode === 'manual' ? line.endpoint_manual : '',
+    }))
+    await onSubmit({ ...details, movement_type: direction, lines: movementLines })
+  }
+
+  const otherSideLabel = direction === 'inward' ? 'Coming from' : 'Going to'
+
+  return <Modal className="inventory-movement-modal" title="Inventory inward / outward" subtitle="Choose an individual or multiple entry. Manual places stay separate from saved locations." onClose={onClose}>
+    <form className="erp-form inventory-movement-form" onSubmit={submit}>
+      <section className="movement-choice">
+        <span>Movement</span>
+        <div>
+          <button type="button" className={direction === 'inward' ? 'is-active' : ''} onClick={() => setDirection('inward')}>Inward</button>
+          <button type="button" className={direction === 'outward' ? 'is-active' : ''} onClick={() => setDirection('outward')}>Outward</button>
+        </div>
+      </section>
+      <section className="movement-choice">
+        <span>Entry type</span>
+        <div>
+          <button type="button" className={entryMode === 'individual' ? 'is-active' : ''} onClick={() => changeEntryMode('individual')}>Individual</button>
+          <button type="button" className={entryMode === 'multiple' ? 'is-active' : ''} onClick={() => changeEntryMode('multiple')}>Multiple items / locations</button>
+        </div>
+      </section>
+
+      <section className="movement-lines">
+        <header><div><strong>{direction === 'inward' ? 'Items received' : 'Items dispatched'}</strong><small>Each row may use a different inventory location and outside place.</small></div>{entryMode === 'multiple' && <button type="button" className="secondary-button secondary-button--compact" onClick={() => setLines((current) => [...current, newMovementLine()])}><Plus size={14} /> Add row</button>}</header>
+        {lines.map((line, index) => <article key={line.key} className="movement-line">
+          <span className="movement-line__number">{index + 1}</span>
+          <label><span>Item</span><select required value={line.item_id} onChange={(event) => updateLine(line.key, { item_id: event.target.value })}><option value="">Select item</option>{items.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.sku}</option>)}</select></label>
+          <label><span>Quantity</span><input required type="number" min="0.001" step="0.001" value={line.quantity} onChange={(event) => updateLine(line.key, { quantity: event.target.value })} /></label>
+          <label><span>{direction === 'inward' ? 'Inventory destination' : 'Inventory source'}</span><select required value={line.stock_location_id} onChange={(event) => updateLine(line.key, { stock_location_id: event.target.value })}><option value="">Select saved location</option>{locations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}</select></label>
+          <div className="movement-endpoint">
+            <span>{otherSideLabel}</span>
+            <div className="movement-endpoint__toggle">
+              <button type="button" className={line.endpoint_mode === 'manual' ? 'is-active' : ''} onClick={() => updateLine(line.key, { endpoint_mode: 'manual', endpoint_location_id: '' })}>Manual</button>
+              <button type="button" className={line.endpoint_mode === 'stored' ? 'is-active' : ''} onClick={() => updateLine(line.key, { endpoint_mode: 'stored', endpoint_manual: '' })}>Saved</button>
+            </div>
+            {line.endpoint_mode === 'manual'
+              ? <input aria-label={`${otherSideLabel} manual location`} required placeholder="Type supplier, site or address" value={line.endpoint_manual} onChange={(event) => updateLine(line.key, { endpoint_manual: event.target.value })} />
+              : <select aria-label={`${otherSideLabel} saved location`} required value={line.endpoint_location_id} onChange={(event) => updateLine(line.key, { endpoint_location_id: event.target.value })}><option value="">Select saved location</option>{locations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}</select>}
+          </div>
+          {entryMode === 'multiple' && lines.length > 1 && <button type="button" className="movement-line__remove" aria-label={`Remove row ${index + 1}`} onClick={() => setLines((current) => current.filter((candidate) => candidate.key !== line.key))}><Trash2 size={15} /></button>}
+        </article>)}
+      </section>
+
+      <fieldset className="movement-details">
+        <legend>Challan & transport details</legend>
+        <div className="erp-form-grid">
+          <label><span>Challan number</span><input name="reference_number" placeholder="Auto-generated if blank" /></label>
+          <label><span>Challan date</span><input name="challan_date" type="date" /></label>
+          <label><span>Party / supplier</span><input name="supplier_name" /></label>
+          <label><span>Transporter</span><input name="transporter_name" /></label>
+          <label><span>Vehicle number</span><input name="vehicle_number" placeholder="GJ 01 AB 1234" /></label>
+          <label><span>Driver name</span><input name="driver_name" /></label>
+          <label><span>Driver phone</span><input name="driver_phone" type="tel" /></label>
+          <label><span>E-way bill number</span><input name="eway_bill_number" /></label>
+          <label className="erp-form-wide"><span>Other details / note</span><textarea name="note" /></label>
+        </div>
+      </fieldset>
+      <footer className="erp-form-actions"><button type="button" className="secondary-button" onClick={onClose}>Cancel</button><button className="primary-button" disabled={working}>{working ? 'Posting…' : `Post ${lines.length} ${lines.length === 1 ? 'entry' : 'entries'}`}</button></footer>
+    </form>
+  </Modal>
+}
+
 export function InventoryPage({ session }: { session: Session }) {
   const [data, setData] = useState<InventorySummary | null>(null)
   const [search, setSearch] = useState('')
   const [category, setCategory] = useState('All')
+  const [activeView, setActiveView] = useState<'stock' | 'history'>('stock')
+  const [historyDirection, setHistoryDirection] = useState<'all' | MovementDirection>('all')
+  const [movementDirection, setMovementDirection] = useState<MovementDirection>('inward')
   const [modal, setModal] = useState<'item' | 'edit-item' | 'movement' | 'location' | 'edit-location' | null>(null)
   const [selected, setSelected] = useState<InventoryItem | null>(null)
   const [selectedLocation, setSelectedLocation] = useState<InventoryLocation | null>(null)
@@ -48,6 +175,7 @@ export function InventoryPage({ session }: { session: Session }) {
     const term = search.trim().toLowerCase()
     return (data?.items ?? []).filter((item) => (category === 'All' || item.category === category) && (!term || `${item.sku} ${item.name} ${item.supplier_name} ${item.location_name}`.toLowerCase().includes(term)))
   }, [category, data, search])
+  const movementHistory = useMemo(() => (data?.movements ?? []).filter((movement) => historyDirection === 'all' || movement.movement_type === historyDirection), [data, historyDirection])
 
   async function submitItem(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setWorking(true)
@@ -83,13 +211,14 @@ export function InventoryPage({ session }: { session: Session }) {
     } finally { setWorking(false) }
   }
 
-  async function submitMovement(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); setWorking(true)
+  async function submitMovementBatch(body: Record<string, unknown>) {
+    setWorking(true)
     try {
-      const body = formObject(event.currentTarget)
-      for (const key of ['source_location_id', 'destination_location_id', 'project_id', 'customer_id']) if (!body[key]) body[key] = null
-      await createInventoryMovement(body); setModal(null); setSelected(null); await load(); toast({ message: 'Stock movement posted', variant: 'success' })
-    } catch (reason) { toast({ message: reason instanceof Error ? reason.message : 'Could not post movement', variant: 'error' }) }
+      if (!body.challan_date) body.challan_date = null
+      const posted = await createInventoryMovementBatch(body)
+      setModal(null); setSelected(null); await load()
+      toast({ message: `${posted.length} inventory ${posted.length === 1 ? 'entry' : 'entries'} posted`, variant: 'success' })
+    } catch (reason) { toast({ message: reason instanceof Error ? reason.message : 'Could not post inventory entries', variant: 'error' }) }
     finally { setWorking(false) }
   }
 
@@ -97,19 +226,26 @@ export function InventoryPage({ session }: { session: Session }) {
   if (!data) return <WorkspacePage className="erp-page"><ErrorState message={error} onRetry={() => void load()} /></WorkspacePage>
 
   return <WorkspacePage className="erp-page">
-    <WorkspaceHeader className="erp-page-head"><div><span>Operations</span><h1>Inventory</h1></div><div className="erp-head-actions"><button className="secondary-button" onClick={() => void load()}><RefreshCw size={15} /> Refresh</button>{access.canCreate && <button className="secondary-button" onClick={() => setModal('location')}><Warehouse size={15} /> Location</button>}{access.canCreate && <button className="primary-button" onClick={() => setModal('item')}><Plus size={15} /> Add item</button>}</div></WorkspaceHeader>
+    <WorkspaceHeader className="erp-page-head"><div><span>Operations</span><h1>Inventory</h1></div><div className="erp-head-actions"><button className="secondary-button" onClick={() => void load()}><RefreshCw size={15} /> Refresh</button>{access.canEdit && <button className="secondary-button inventory-action--inward" onClick={() => { setSelected(null); setMovementDirection('inward'); setModal('movement') }}><PackagePlus size={15} /> Inward</button>}{access.canEdit && <button className="secondary-button inventory-action--outward" onClick={() => { setSelected(null); setMovementDirection('outward'); setModal('movement') }}><PackagePlus size={15} /> Outward</button>}{access.canCreate && <button className="secondary-button" onClick={() => setModal('location')}><Warehouse size={15} /> Location</button>}{access.canCreate && <button className="primary-button" onClick={() => setModal('item')}><Plus size={15} /> Add item</button>}</div></WorkspaceHeader>
     {access.readOnly && <ReadOnlyNotice />}
 
     <KpiGrid columns={4} className="erp-kpi-grid"><article><Boxes /><span>Active items</span><strong>{data.total_items}</strong><small>{number.format(data.total_quantity)} units on hand</small></article><article><AlertTriangle /><span>Low stock</span><strong>{data.low_stock_items}</strong><small>At or below reorder level</small></article><article><IndianRupee /><span>Stock value</span><strong>{money.format(data.stock_value)}</strong><small>Based on current unit cost</small></article><article><Warehouse /><span>Locations</span><strong>{data.locations.length}</strong><small>Active storage locations</small></article></KpiGrid>
 
+    <nav className="erp-tabs inventory-main-tabs" role="tablist" aria-label="Inventory views">
+      <button type="button" role="tab" aria-selected={activeView === 'stock'} className={activeView === 'stock' ? 'is-active' : ''} onClick={() => setActiveView('stock')}><Boxes size={14} /> Stock & locations</button>
+      <button type="button" role="tab" aria-selected={activeView === 'history'} className={activeView === 'history' ? 'is-active' : ''} onClick={() => setActiveView('history')}><RefreshCw size={14} /> Inventory history</button>
+    </nav>
+
     <div className="inventory-workspace-body">
-    <section className="erp-panel"><div className="erp-toolbar"><label className="erp-search"><Search size={15} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search item, SKU, supplier or location" /></label><select value={category} onChange={(event) => setCategory(event.target.value)}>{categories.map((row) => <option key={row}>{row}</option>)}</select></div>
-      {items.length ? <div className="erp-table-wrap"><table className="erp-table"><thead><tr><th>Item</th><th>Category</th><th>Location</th><th>On hand</th><th>Reserved</th><th>Available</th><th>Unit cost</th><th>Status</th><th /></tr></thead><tbody>{items.map((item) => <tr key={item.id}><td><strong>{item.name}</strong><small>{item.sku} · {item.supplier_name || 'No supplier'}</small></td><td>{item.category}</td><td>{item.location_name || '—'}</td><td>{number.format(item.quantity_on_hand)} {item.unit}</td><td>{number.format(item.reserved_quantity)}</td><td><strong>{number.format(item.available_quantity)}</strong></td><td>{money.format(item.unit_cost)}</td><td><span className={`soft-badge ${item.low_stock ? 'soft-badge--warning' : 'soft-badge--success'}`}>{item.low_stock ? 'Low stock' : 'Available'}</span></td><td>{access.canEdit && <div className="table-row-actions"><button className="secondary-button secondary-button--compact" onClick={() => { setSelected(item); setEditDirty(false); setEditError(''); setEditConflict(false); setModal('edit-item') }}><Pencil size={14} /> Edit</button><button className="secondary-button secondary-button--compact" onClick={() => { setSelected(item); setModal('movement') }}><PackagePlus size={14} /> Move</button></div>}</td></tr>)}</tbody></table></div> : <EmptyState title="No inventory items found" message="Change the filters or add the first item." />}
-    </section>
+      {activeView === 'stock' && <div className="inventory-stock-grid" role="tabpanel">
+        <section className="erp-panel inventory-items-panel"><div className="erp-toolbar"><label className="erp-search"><Search size={15} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search item, SKU, supplier or location" /></label><select value={category} onChange={(event) => setCategory(event.target.value)}>{categories.map((row) => <option key={row}>{row}</option>)}</select></div>
+          {items.length ? <div className="erp-table-wrap"><table className="erp-table"><thead><tr><th>Item</th><th>Category</th><th>Location</th><th>On hand</th><th>Reserved</th><th>Available</th><th>Unit cost</th><th>Status</th><th /></tr></thead><tbody>{items.map((item) => <tr key={item.id}><td><strong>{item.name}</strong><small>{item.sku} · {item.supplier_name || 'No supplier'}</small></td><td>{item.category}</td><td>{item.location_name || '—'}</td><td>{number.format(item.quantity_on_hand)} {item.unit}</td><td>{number.format(item.reserved_quantity)}</td><td><strong>{number.format(item.available_quantity)}</strong></td><td>{money.format(item.unit_cost)}</td><td><span className={`soft-badge ${item.low_stock ? 'soft-badge--warning' : 'soft-badge--success'}`}>{item.low_stock ? 'Low stock' : 'Available'}</span></td><td>{access.canEdit && <div className="table-row-actions"><button className="secondary-button secondary-button--compact" onClick={() => { setSelected(item); setEditDirty(false); setEditError(''); setEditConflict(false); setModal('edit-item') }}><Pencil size={14} /> Edit</button><button className="secondary-button secondary-button--compact" onClick={() => { setSelected(item); setMovementDirection('outward'); setModal('movement') }}><PackagePlus size={14} /> Outward</button></div>}</td></tr>)}</tbody></table></div> : <EmptyState title="No inventory items found" message="Change the filters or add the first item." />}
+        </section>
 
-    <section className="erp-panel"><header><div><span>Storage master</span><h2>Locations</h2></div></header><div className="erp-table-wrap"><table className="erp-table"><thead><tr><th>Name</th><th>Type</th><th>Address</th><th>Status</th><th /></tr></thead><tbody>{data.locations.map((row) => <tr key={row.id}><td><strong>{row.name}</strong></td><td>{row.location_type.replaceAll('_', ' ')}</td><td>{row.address || '—'}</td><td><span className={`soft-badge ${row.is_active ? 'soft-badge--success' : ''}`}>{row.is_active ? 'Active' : 'Inactive'}</span></td><td>{access.canEdit && <button className="secondary-button secondary-button--compact" onClick={() => { setSelectedLocation(row); setEditDirty(false); setEditError(''); setEditConflict(false); setModal('edit-location') }}><Pencil size={14} /> Edit</button>}</td></tr>)}</tbody></table></div></section>
+        <section className="erp-panel inventory-locations-panel"><header><div><span>Storage master</span><h2>Locations</h2></div></header><div className="erp-table-wrap"><table className="erp-table"><thead><tr><th>Name</th><th>Type</th><th>Address</th><th>Status</th><th /></tr></thead><tbody>{data.locations.map((row) => <tr key={row.id}><td><strong>{row.name}</strong></td><td>{row.location_type.replaceAll('_', ' ')}</td><td>{row.address || '—'}</td><td><span className={`soft-badge ${row.is_active ? 'soft-badge--success' : ''}`}>{row.is_active ? 'Active' : 'Inactive'}</span></td><td>{access.canEdit && <button className="secondary-button secondary-button--compact" onClick={() => { setSelectedLocation(row); setEditDirty(false); setEditError(''); setEditConflict(false); setModal('edit-location') }}><Pencil size={14} /> Edit</button>}</td></tr>)}</tbody></table></div></section>
+      </div>}
 
-    <section className="erp-panel"><header><div><span>Recent history</span><h2>Stock movements</h2></div></header>{data.movements.length ? <div className="erp-table-wrap"><table className="erp-table"><thead><tr><th>Date</th><th>Item</th><th>Movement</th><th>Quantity</th><th>From</th><th>To</th><th>Project / customer</th><th>Reference</th></tr></thead><tbody>{data.movements.map((row) => <tr key={row.id}><td>{shortDate.format(new Date(row.created_at))}</td><td><strong>{row.item_name}</strong><small>{row.partner_name}</small></td><td><span className="soft-badge">{row.movement_type.replaceAll('_', ' ')}</span></td><td>{number.format(row.quantity)}</td><td>{row.source_location_name || '—'}</td><td>{row.destination_location_name || '—'}</td><td>{row.project_number || row.customer_name || '—'}</td><td>{row.reference_number || '—'}</td></tr>)}</tbody></table></div> : <EmptyState title="No stock movements" message="Opening stock and future movements appear here." />}</section>
+      {activeView === 'history' && <section className="erp-panel inventory-history-panel" role="tabpanel"><header><div><span>Inventory history</span><h2>Inward & outward records</h2></div><div className="erp-tabs inventory-history-tabs">{(['all', 'inward', 'outward'] as const).map((option) => <button key={option} className={historyDirection === option ? 'is-active' : ''} onClick={() => setHistoryDirection(option)}>{option}</button>)}</div></header>{movementHistory.length ? <div className="erp-table-wrap"><table className="erp-table"><thead><tr><th>Date</th><th>Item</th><th>Movement</th><th>Quantity</th><th>From</th><th>To</th><th>Challan</th><th>Vehicle / transporter</th></tr></thead><tbody>{movementHistory.map((row) => <tr key={row.id}><td>{shortDate.format(new Date(row.created_at))}</td><td><strong>{row.item_name}</strong><small>{row.partner_name}</small></td><td><span className={`soft-badge ${row.movement_type === 'inward' ? 'soft-badge--success' : 'soft-badge--warning'}`}>{row.movement_type.replaceAll('_', ' ')}</span></td><td>{number.format(row.quantity)}</td><td>{row.source_location_name || row.source_location_manual || '—'}</td><td>{row.destination_location_name || row.destination_location_manual || '—'}</td><td><strong>{row.reference_number || '—'}</strong><small>{row.challan_date || ''}</small></td><td><strong>{row.vehicle_number || '—'}</strong><small>{row.transporter_name || row.driver_name}</small></td></tr>)}</tbody></table></div> : <EmptyState title={`No ${historyDirection === 'all' ? '' : `${historyDirection} `}inventory history`} message="Posted inventory entries appear here." />}</section>}
     </div>
 
     {modal === 'item' && <Modal title="Add inventory item" subtitle="Create the item and its opening balance in one step." onClose={() => setModal(null)}><form className="erp-form" onSubmit={submitItem}><div className="erp-form-grid"><label><span>SKU</span><input name="sku" required /></label><label><span>Item name</span><input name="name" required /></label><label><span>Category</span><input name="category" defaultValue="Solar Panels" required /></label><label><span>Unit</span><input name="unit" defaultValue="Nos" required /></label><label><span>Supplier</span><input name="supplier_name" /></label><label><span>Unit cost</span><input type="number" min="0" step="0.01" name="unit_cost" defaultValue="0" /></label><label><span>Reorder level</span><input type="number" min="0" step="0.001" name="reorder_level" defaultValue="0" /></label><label><span>Location</span><select name="location_id" required><option value="">Select location</option>{data.locations.map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}</select></label><label><span>Opening quantity</span><input type="number" min="0" step="0.001" name="opening_quantity" defaultValue="0" /></label></div><footer className="erp-form-actions"><button type="button" className="secondary-button" onClick={() => setModal(null)}>Cancel</button><button className="primary-button" disabled={working}>Create item</button></footer></form></Modal>}
@@ -120,6 +256,6 @@ export function InventoryPage({ session }: { session: Session }) {
 
     {modal === 'edit-location' && selectedLocation && <EntityEditDialog title="Edit inventory location" isDirty={editDirty} isSaving={working} error={editError} conflict={editConflict} onClose={() => { setModal(null); setSelectedLocation(null) }} onReload={() => { setModal(null); setSelectedLocation(null); void load() }} onSave={() => document.getElementById('inventory-location-edit-form')?.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }))}><form id="inventory-location-edit-form" className="erp-form" onSubmit={submitLocationEdit} onChange={() => setEditDirty(true)}><input type="hidden" name="version" value={selectedLocation.version} /><div className="erp-form-grid"><label><span>Name</span><input name="name" defaultValue={selectedLocation.name} required /></label><label><span>Type</span><select name="location_type" defaultValue={selectedLocation.location_type}><option value="warehouse">Warehouse</option><option value="store">Store</option><option value="project_site">Project site</option></select></label><label className="erp-form-wide"><span>Address</span><textarea name="address" defaultValue={selectedLocation.address} /></label><label className="checkbox-row"><input type="checkbox" name="is_active" value="true" defaultChecked={selectedLocation.is_active} /><span>Active location</span></label></div></form></EntityEditDialog>}
 
-    {modal === 'movement' && selected && <Modal title="Record stock movement" subtitle={`${selected.name} · ${number.format(selected.available_quantity)} ${selected.unit} available`} onClose={() => setModal(null)}><form className="erp-form" onSubmit={submitMovement}><input type="hidden" name="item_id" value={selected.id} /><div className="erp-form-grid"><label><span>Movement</span><select name="movement_type"><option value="inward">Inward</option><option value="outward">Outward</option><option value="transfer">Transfer</option><option value="project_dispatch">Project dispatch</option><option value="project_return">Project return</option><option value="supplier_return">Supplier return</option><option value="adjustment">Adjustment</option></select></label><label><span>Quantity</span><input type="number" min="0.001" step="0.001" name="quantity" required /></label><label><span>Source</span><select name="source_location_id"><option value="">None</option>{data.locations.map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}</select></label><label><span>Destination</span><select name="destination_location_id"><option value="">None</option>{data.locations.map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}</select></label><label><span>Supplier</span><input name="supplier_name" /></label><label><span>Transporter</span><input name="transporter_name" /></label><label><span>Reference / challan</span><input name="reference_number" /></label><label className="erp-form-wide"><span>Note</span><textarea name="note" /></label></div><footer className="erp-form-actions"><button type="button" className="secondary-button" onClick={() => setModal(null)}>Cancel</button><button className="primary-button" disabled={working}>Post movement</button></footer></form></Modal>}
+    {modal === 'movement' && <MovementDialog items={data.items} locations={data.locations} initialItem={selected} initialDirection={movementDirection} working={working} onClose={() => { setModal(null); setSelected(null) }} onSubmit={submitMovementBatch} />}
   </WorkspacePage>
 }

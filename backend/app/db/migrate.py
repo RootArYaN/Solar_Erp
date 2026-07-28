@@ -59,6 +59,16 @@ COLUMN_DEFINITIONS = {
     "posters": {"version": "INTEGER NOT NULL DEFAULT 1"},
     "inventory_locations": {"version": "INTEGER NOT NULL DEFAULT 1"},
     "inventory_items": {"version": "INTEGER NOT NULL DEFAULT 1"},
+    "inventory_movements": {
+        "source_location_manual": "VARCHAR(180) NOT NULL DEFAULT ''",
+        "destination_location_manual": "VARCHAR(180) NOT NULL DEFAULT ''",
+        "movement_group_id": "VARCHAR(36)",
+        "challan_date": "DATE",
+        "vehicle_number": "VARCHAR(32) NOT NULL DEFAULT ''",
+        "driver_name": "VARCHAR(120) NOT NULL DEFAULT ''",
+        "driver_phone": "VARCHAR(32) NOT NULL DEFAULT ''",
+        "eway_bill_number": "VARCHAR(80) NOT NULL DEFAULT ''",
+    },
     "customer_projects": {
         "site_address": "VARCHAR(320) NOT NULL DEFAULT ''",
         "payment_mode": "VARCHAR(12) NOT NULL DEFAULT ''",
@@ -91,6 +101,7 @@ INDEXES = [
     ("ix_agent_customers_consumer_number", "agent_customers", "consumer_number"),
     ("ix_agent_customers_customer_type", "agent_customers", "customer_type"),
     ("ix_customer_projects_payment_mode", "customer_projects", "payment_mode"),
+    ("ix_inventory_movements_group_id", "inventory_movements", "movement_group_id"),
 ]
 
 

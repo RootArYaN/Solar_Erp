@@ -5,7 +5,6 @@ import {
   FileCheck2,
   FilePlus2,
   RefreshCw,
-  TriangleAlert,
   UserRound,
   X,
 } from 'lucide-react'
@@ -166,10 +165,9 @@ export function ApprovalCenterPage({ session }: { session: Session }) {
                     <td data-label="Action">
                       <div className="approval-row-actions">
                         {quotation && <button className="table-action-button table-action-button--neutral" type="button" onClick={() => setPreviewRequest(item)}><Eye size={13} /> View</button>}
-                        {(!quotation || ['condition', 'rejected'].includes(quotation.status)) && ['pending', 'quotation_ready', 'condition', 'rejected'].includes(item.status) && <button className="table-action-button table-action-button--neutral" type="button" onClick={() => setBuilderRequest(item)}><FilePlus2 size={13} /> {quotation ? 'Revise' : 'Generate'}</button>}
+                        {(!quotation || ['condition', 'rejected'].includes(quotation.status)) && ['pending', 'quotation_ready', 'condition', 'rejected'].includes(item.status) && <button className="table-action-button table-action-button--neutral" type="button" onClick={() => setBuilderRequest(item)}><FilePlus2 size={13} /> Generate</button>}
                         {quotation?.status === 'pending_approval' && <>
                           <button className="approval-action approval-action--approve" type="button" onClick={() => setDecisionTarget({ kind: 'quotation', item, decision: 'approved' })}><Check size={13} /> Approve</button>
-                          <button className="approval-action approval-action--condition" type="button" onClick={() => setDecisionTarget({ kind: 'quotation', item, decision: 'condition' })}><TriangleAlert size={13} /> Conditions</button>
                           <button className="approval-action approval-action--reject" type="button" onClick={() => setDecisionTarget({ kind: 'quotation', item, decision: 'rejected' })}><X size={13} /> Reject</button>
                         </>}
                       </div>

@@ -408,6 +408,79 @@ def reverse_transaction(db: Session, actor: CurrentSession, transaction_id: str,
     db.commit(); db.refresh(reversal)
     return _transaction_summaries(db, [reversal])[0]
 
+
+def delete_transaction(db: Session, actor: CurrentSession, transaction_id: str) -> None:
+    row = db.scalar(select(FinanceTransaction).where(
+        FinanceTransaction.id == transaction_id,
+        FinanceTransaction.company_id == actor.membership.company_id,
+    ))
+    if not row:
+        raise FinanceNotFoundError('Finance transaction not found')
+
+    bill_payments = list(db.scalars(select(BillPayment).where(
+        BillPayment.transaction_id == row.id,
+        BillPayment.company_id == row.company_id,
+    )).all())
+    for payment in bill_payments:
+        bill = db.scalar(select(Bill).where(
+            Bill.id == payment.bill_id,
+            Bill.company_id == row.company_id,
+        ))
+        if bill:
+            bill.paid_amount = max(Decimal('0.00'), Decimal(bill.paid_amount) - Decimal(payment.amount))
+            bill.balance_amount = max(Decimal('0.00'), Decimal(bill.total_amount) - Decimal(bill.paid_amount))
+            bill.payment_status = 'unpaid' if bill.paid_amount <= 0 else ('paid' if bill.balance_amount <= 0 else 'partially_paid')
+        db.delete(payment)
+
+    if row.source_type == 'company_loan_repayment' and row.source_id:
+        loan = db.scalar(select(CompanyLoan).where(
+            CompanyLoan.id == row.source_id,
+            CompanyLoan.company_id == row.company_id,
+        ))
+        if loan:
+            loan.outstanding_amount = min(
+                Decimal(loan.principal_amount),
+                Decimal(loan.outstanding_amount) + Decimal(row.amount),
+            )
+            loan.status = 'active' if loan.outstanding_amount > 0 else loan.status
+
+    if row.reversed_transaction_id:
+        original = db.scalar(select(FinanceTransaction).where(
+            FinanceTransaction.id == row.reversed_transaction_id,
+            FinanceTransaction.company_id == row.company_id,
+        ))
+        if original:
+            original.status = 'posted'
+    else:
+        reversals = list(db.scalars(select(FinanceTransaction).where(
+            FinanceTransaction.reversed_transaction_id == row.id,
+            FinanceTransaction.company_id == row.company_id,
+        )).all())
+        for reversal in reversals:
+            reversal.reversed_transaction_id = None
+            if reversal.source_id == row.id:
+                reversal.source_id = None
+
+    write_event(
+        db,
+        company_id=row.company_id,
+        event='finance.transaction_deleted',
+        entity='finance_transaction',
+        entity_id=row.id,
+        actor=actor,
+        project_id=row.project_id,
+        customer_id=row.customer_id,
+        changes={
+            'transaction_number': row.transaction_number,
+            'direction': row.direction,
+            'amount': str(row.amount),
+            'source_type': row.source_type,
+        },
+    )
+    db.delete(row)
+    db.commit()
+
+
 def transfer_accounts(db: Session, actor: CurrentSession, payload: AccountTransferRequest) -> list[FinanceTransactionSummary]:
     source = _load_account(db, actor, payload.source_account_id)
     destination = _load_account(db, actor, payload.destination_account_id)

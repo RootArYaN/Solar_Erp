@@ -1236,7 +1236,7 @@ button { color: inherit; }
   box-shadow: 0 28px 74px rgba(5, 15, 24, .28);
   animation: dialog-pop-in .22s cubic-bezier(.22, 1, .36, 1) both;
 }
-.alert-dialog > header { display: flex; align-items: center; justify-content: space-between; }
+.alert-dialog__content { display: grid; grid-template-columns: 42px minmax(0, 1fr) 34px; align-items: start; gap: 12px; }
 .alert-dialog__icon {
   width: 42px;
   height: 42px;
@@ -1259,10 +1259,10 @@ button { color: inherit; }
   cursor: pointer;
 }
 .alert-dialog__close:hover { background: #f2f0ec; }
-.alert-dialog__body { padding: 16px 1px 18px; }
-.alert-dialog__body h2 { margin: 0; font-size: 21px; letter-spacing: -.5px; }
-.alert-dialog__body p { margin: 7px 0 0; color: #68717c; font-size: 13px; line-height: 1.5; }
-.alert-dialog footer { display: flex; justify-content: flex-end; gap: 9px; padding-top: 14px; border-top: 1px solid var(--line); }
+.alert-dialog__body { min-width: 0; padding: 2px 0 16px; }
+.alert-dialog__body h2 { margin: 0; color: #202b38; font-size: 18px; letter-spacing: -.35px; }
+.alert-dialog__body p { margin: 6px 0 0; color: #68717c; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.alert-dialog footer { display: flex; justify-content: flex-end; gap: 9px; margin-top: 2px; padding-top: 13px; border-top: 1px solid var(--line); }
 .danger-button {
   min-height: 40px;
   padding: 0 15px;

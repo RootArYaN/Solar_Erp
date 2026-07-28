@@ -103,17 +103,17 @@ export function AlertDialog({
       if (event.target === event.currentTarget && !busy) onCancel()
     }}>
       <section ref={dialogRef} className={`alert-dialog alert-dialog--${variant}`} role="alertdialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={description ? descriptionId : undefined}>
-        <header>
+        <div className="alert-dialog__content">
           <div className="alert-dialog__icon"><Icon size={20} /></div>
+          <div className="alert-dialog__body">
+            <h2 id={titleId}>{title}</h2>
+            {description && <p id={descriptionId}>{description}</p>}
+          </div>
           <button type="button" className="alert-dialog__close" onClick={onCancel} disabled={busy} aria-label="Close dialog"><X size={17} /></button>
-        </header>
-        <div className="alert-dialog__body">
-          <h2 id={titleId}>{title}</h2>
-          {description && <p id={descriptionId}>{description}</p>}
         </div>
         <footer>
           <button ref={cancelRef} type="button" className="secondary-button" onClick={onCancel} disabled={busy}>{cancelLabel}</button>
-          <button type="button" className="danger-button" onClick={() => void confirm()} disabled={busy}>{busy ? 'Working…' : confirmLabel}</button>
+          <button type="button" className={variant === 'danger' ? 'danger-button' : 'primary-button'} onClick={() => void confirm()} disabled={busy}>{busy ? 'Working…' : confirmLabel}</button>
         </footer>
       </section>
     </div>,

@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import CurrentSession, require_any_permissions
 from app.db.session import get_db
 from app.schemas.operations import (
+    CreateInventoryMovementBatchRequest,
     CreateInventoryItemRequest,
     CreateInventoryLocationRequest,
     CreateInventoryMovementRequest,
@@ -70,6 +71,12 @@ def patch_location(location_id: str, payload: UpdateInventoryLocationRequest, db
 @router.post('/inventory/movements', response_model=InventoryMovementSummary, status_code=201)
 def post_movement(payload: CreateInventoryMovementRequest, db: Session = Depends(get_db), session: CurrentSession = Depends(require_any_permissions('inventory.edit', 'inventory.manage'))):
     try: return operations_service.post_movement(db, session, payload)
+    except OperationsServiceError as exc: _raise(exc)
+
+
+@router.post('/inventory/movement-batches', response_model=list[InventoryMovementSummary], status_code=201)
+def post_movement_batch(payload: CreateInventoryMovementBatchRequest, db: Session = Depends(get_db), session: CurrentSession = Depends(require_any_permissions('inventory.edit', 'inventory.manage'))):
+    try: return operations_service.post_movement_batch(db, session, payload)
     except OperationsServiceError as exc: _raise(exc)
 
 

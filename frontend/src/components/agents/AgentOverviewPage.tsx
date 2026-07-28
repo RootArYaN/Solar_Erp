@@ -13,6 +13,7 @@ import {
   Plus,
   RefreshCw,
   Search,
+  Trash2,
   UsersRound,
 } from 'lucide-react'
 import { motion } from 'motion/react'
@@ -22,6 +23,7 @@ import {
   createAgentCustomer,
   createAgentTransaction,
   createQuotationRequest,
+  deleteAgentTransaction,
   getAgentOverview,
   getAgents,
   updateAgentCustomer,
@@ -41,6 +43,7 @@ import type {
   UpdateAgentProfileInput,
 } from '../../types'
 import { useToast } from '../ui/ToastProvider'
+import { AlertDialog } from '../ui/AlertDialog'
 import { AgentCustomerDialog } from './AgentCustomerDialog'
 import { AgentProfileDialog } from './AgentProfileDialog'
 import { AgentTransactionDialog } from './AgentTransactionDialog'
@@ -81,6 +84,7 @@ export function AgentOverviewPage({ session }: { session: Session }) {
   const [editingProfile, setEditingProfile] = useState(false)
   const [postingTransaction, setPostingTransaction] = useState(false)
   const [editingTransaction, setEditingTransaction] = useState<AgentTransaction | null>(null)
+  const [transactionToDelete, setTransactionToDelete] = useState<AgentTransaction | null>(null)
   const [registeringCustomer, setRegisteringCustomer] = useState(false)
   const [editingCustomer, setEditingCustomer] = useState<AgentCustomer | null>(null)
   const [quotationCustomer, setQuotationCustomer] = useState<AgentCustomer | null>(null)
@@ -239,6 +243,25 @@ export function AgentOverviewPage({ session }: { session: Session }) {
       toast({ message: 'Agent transaction updated', variant: 'success' })
     } catch (reason) {
       toast({ message: reason instanceof Error ? reason.message : 'Could not update agent transaction', variant: 'error' })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function confirmTransactionDelete() {
+    if (!overview || !transactionToDelete) return
+    setBusy(true)
+    try {
+      await deleteAgentTransaction(
+        session.access_token,
+        overview.profile.membership_id,
+        transactionToDelete.id,
+      )
+      setTransactionToDelete(null)
+      await Promise.all([loadOverview(overview.profile.membership_id), loadAgentList()])
+      toast({ message: 'Agent transaction deleted', variant: 'success' })
+    } catch (reason) {
+      toast({ message: reason instanceof Error ? reason.message : 'Could not delete agent transaction', variant: 'error' })
     } finally {
       setBusy(false)
     }
@@ -536,7 +559,7 @@ export function AgentOverviewPage({ session }: { session: Session }) {
                           <td data-label="Debit" className="numeric-cell amount-debit">{transaction.debit > 0 ? currency.format(transaction.debit) : '—'}</td>
                           <td data-label="Credit" className="numeric-cell amount-credit">{transaction.credit > 0 ? currency.format(transaction.credit) : '—'}</td>
                           <td data-label="Balance" className="numeric-cell"><strong>{currency.format(transaction.running_balance)}</strong></td>
-                          {canPostTransactions && <td data-label="Action">{(canManageAgentTransactions || transaction.approval_status === 'pending') && <button className="table-action-button table-action-button--neutral" type="button" onClick={() => setEditingTransaction(transaction)}><Edit3 size={12} /> Edit</button>}</td>}
+                          {canPostTransactions && <td data-label="Action"><div className="agent-transaction-actions">{(canManageAgentTransactions || transaction.approval_status === 'pending') && <button className="table-action-button table-action-button--neutral" type="button" onClick={() => setEditingTransaction(transaction)}><Edit3 size={12} /> Edit</button>}<button className="danger-icon-button" type="button" onClick={() => setTransactionToDelete(transaction)} aria-label={`Delete transaction ${transaction.reference || transaction.id}`} title="Delete transaction"><Trash2 size={14} /></button></div></td>}
                         </tr>
                       ))}
                     </tbody>
@@ -555,6 +578,16 @@ export function AgentOverviewPage({ session }: { session: Session }) {
       {quotationCustomer && <QuotationRequestDialog customer={quotationCustomer} busy={busy} onClose={() => setQuotationCustomer(null)} onSubmit={requestQuotation} />}
       {postingTransaction && <AgentTransactionDialog busy={busy} onClose={() => setPostingTransaction(false)} onSubmit={postTransaction} />}
       {editingTransaction && <AgentTransactionDialog transaction={editingTransaction} busy={busy} onClose={() => setEditingTransaction(null)} onSubmit={saveTransaction} />}
+      <AlertDialog
+        open={Boolean(transactionToDelete)}
+        title="Delete agent transaction?"
+        description={transactionToDelete ? `${transactionLabel(transactionToDelete.transaction_type)} · ${currency.format(Math.max(transactionToDelete.debit, transactionToDelete.credit))}. The agent balance will be recalculated.` : ''}
+        confirmLabel="Delete transaction"
+        icon="delete"
+        loading={busy}
+        onCancel={() => setTransactionToDelete(null)}
+        onConfirm={confirmTransactionDelete}
+      />
     </WorkspacePage>
   )
 }

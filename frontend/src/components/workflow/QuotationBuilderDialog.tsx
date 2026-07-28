@@ -39,7 +39,7 @@ export function QuotationBuilderDialog({ request, busy, onClose, onSubmit }: {
     await onSubmit({ title, valid_until: validUntil ? new Date(`${validUntil}T18:29:59Z`).toISOString() : null, lines })
   }
 
-  return <Modal className="quotation-builder-modal" title={request.quotation ? "Revise quotation" : "Generate quotation"} onClose={onClose}>
+  return <Modal className="quotation-builder-modal" title="Generate quotation" onClose={onClose}>
     <form className="admin-form quotation-builder" onSubmit={submit}>
       <div className="workflow-customer-strip"><strong>{request.customer_name}</strong><span>{request.agent_name} · {request.proposed_capacity_kw} kW</span></div>
       <div className="admin-form__grid"><label className="field"><span>Quotation title</span><div className="field__control"><input required value={title} onChange={(event) => setTitle(event.target.value)} /></div></label><label className="field"><span>Valid until</span><div className="field__control"><input type="date" value={validUntil} onChange={(event) => setValidUntil(event.target.value)} /></div></label></div>
