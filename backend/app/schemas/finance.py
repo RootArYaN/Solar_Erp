@@ -98,6 +98,23 @@ class CreateFinanceTransactionRequest(BaseModel):
         return ' '.join(value.split())
 
 
+class UpdateFinanceTransactionRequest(BaseModel):
+    transaction_date: date
+    direction: Literal['credit', 'debit']
+    category_id: str | None = None
+    amount: float = Field(gt=0, le=999999999999.99)
+    account_id: str
+    payment_method: str = Field(max_length=24)
+    source_type: str = Field(pattern=r'^[a-z][a-z0-9_]{1,39}$')
+    reference_number: str = Field(default='', max_length=80)
+    description: str = Field(default='', max_length=320)
+
+    @field_validator('payment_method', 'reference_number', 'description')
+    @classmethod
+    def clean(cls, value: str) -> str:
+        return ' '.join(value.split())
+
+
 
 
 class ReverseFinanceTransactionRequest(BaseModel):

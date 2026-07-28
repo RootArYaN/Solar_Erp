@@ -36,6 +36,25 @@ export type DocumentPackTemplate = {
   agreement_wording: string
   footer: string
   terms: string
+  feasibility_title: string
+  feasibility_status: string
+  feasibility_note: string
+  feasibility_checks: string
+  estimate_title: string
+  estimate_note: string
+  component_specs: string
+  agreement_title: string
+  agreement_subtitle: string
+  agreement_intro: string
+  first_party_activities: string
+  second_party_activities: string
+  agreement_disclaimer: string
+  quotation_title: string
+  customer_signature_label: string
+  customer_signature_line: string
+  vendor_signature_label: string
+  vendor_signatory_name: string
+  vendor_signatory_title: string
 }
 
 export const documentTabs: Array<{ key: Exclude<DocumentPackTab, 'full'>; label: string; file: string }> = [
@@ -106,6 +125,66 @@ const secondPartyActivities = [
   'Subsidy Documents: Provide and help upload project documents required for National Portal subsidy processing.',
   'Plant Performance: Target a Performance Ratio of 75% at commissioning and support required testing under the applicable scheme and DISCOM procedure.',
 ]
+
+export const defaultDocumentPackTemplate: DocumentPackTemplate = {
+  company_name: '',
+  brand_name: '',
+  address: '',
+  gstin: '',
+  phone: '',
+  email: '',
+  bank_details: '',
+  quotation_notes: '',
+  agreement_wording: '',
+  footer: '',
+  terms: '',
+  feasibility_title: 'Vendor Feasibility Report',
+  feasibility_status: 'FEASIBLE — YES',
+  feasibility_note: 'Site layout images: Upload 2–4 site photographs to the PM Surya Ghar portal or the customer document checklist.',
+  feasibility_checks: feasibilityChecks.map(([label, value]) => `${label} | ${value}`).join('\n'),
+  estimate_title: 'Estimate for Solar Rooftop',
+  estimate_note: 'T&C: Three-phase meter or site-specific DISCOM charges, additional structure height and non-standard civil work are charged only after approval.',
+  component_specs: bankComponentSpecs.map(([component, description, make]) => `${component} | ${description} | ${make}`).join('\n'),
+  agreement_title: 'Consumer–Vendor Agreement',
+  agreement_subtitle: 'Annexure 2 · PM – Surya Ghar: Muft Bijli Yojana',
+  agreement_intro: 'design, supply, installation, commissioning and five-year comprehensive maintenance of the RTS project/system along with warranty',
+  first_party_activities: firstPartyActivities.join('\n'),
+  second_party_activities: secondPartyActivities.join('\n'),
+  agreement_disclaimer: 'This agreement is between vendor and consumer. Any dispute related to it shall not involve MNRE or the Distribution Utility except where required by law or applicable scheme procedure.',
+  quotation_title: 'Solar Quotation',
+  customer_signature_label: 'Customer',
+  customer_signature_line: 'Signature: ____________________',
+  vendor_signature_label: 'Vendor',
+  vendor_signatory_name: '',
+  vendor_signatory_title: 'Authorized signatory',
+}
+
+export function normalizeDocumentPackTemplate(settings: Record<string, unknown> = {}): DocumentPackTemplate {
+  return Object.fromEntries(
+    Object.entries(defaultDocumentPackTemplate).map(([key, fallback]) => [key, String(settings[key] ?? fallback)]),
+  ) as DocumentPackTemplate
+}
+
+function templateLines(value: string, fallback: string[]): string[] {
+  const lines = value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
+  return lines.length ? lines : fallback
+}
+
+function templateChecks(value: string): Array<[string, string]> {
+  const rows = templateLines(value, []).map((line) => {
+    const [label, ...rest] = line.split('|')
+    return [label.trim(), rest.join('|').trim()] as [string, string]
+  }).filter(([label, result]) => label && result)
+  return rows.length ? rows : feasibilityChecks
+}
+
+function templateComponentSpecs(value: string): Array<[string, string, string]> {
+  const rows = templateLines(value, []).map((line) => {
+    const [component, description, ...rest] = line.split('|')
+    return [component.trim(), description?.trim() ?? '', rest.join('|').trim()] as [string, string, string]
+  }).filter(([component, description]) => component && description)
+  return rows.length ? rows : bankComponentSpecs
+}
 
 const money = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 })
 const number = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 2 })
@@ -192,7 +271,7 @@ function kv(rows: Array<[string, unknown]>) {
 }
 
 function signature(input: DocumentPackInput, template: DocumentPackTemplate) {
-  return `<div class="pack-doc__signatures"><div><span>Customer</span><strong>${esc(input.customerSignatureName || input.customerName)}</strong><small>Signature: ____________________</small></div><div><span>Vendor</span><strong>${esc(template.company_name || 'Shree Enterprise')}</strong><small>Authorized signatory</small></div></div>`
+  return `<div class="pack-doc__signatures"><div><span>${esc(template.customer_signature_label || 'Customer')}</span><strong>${esc(input.customerSignatureName || input.customerName)}</strong><small>${esc(template.customer_signature_line || 'Signature: ____________________')}</small></div><div><span>${esc(template.vendor_signature_label || 'Vendor')}</span><strong>${esc(template.vendor_signatory_name || template.company_name || 'Shree Enterprise')}</strong><small>${esc(template.vendor_signatory_title || 'Authorized signatory')}</small></div></div>`
 }
 
 export function renderDocumentHtml(tab: Exclude<DocumentPackTab, 'full'>, input: DocumentPackInput, template: DocumentPackTemplate) {
@@ -203,6 +282,10 @@ export function renderDocumentHtml(tab: Exclude<DocumentPackTab, 'full'>, input:
   const systemTax = systemGross - systemTaxable
   const installTaxable = installation / 1.18
   const installTax = installation - installTaxable
+  const configuredFeasibilityChecks = templateChecks(template.feasibility_checks)
+  const configuredComponentSpecs = templateComponentSpecs(template.component_specs)
+  const configuredFirstPartyActivities = templateLines(template.first_party_activities, firstPartyActivities)
+  const configuredSecondPartyActivities = templateLines(template.second_party_activities, secondPartyActivities)
   const common = kv([
     ['Name of Consumer', input.customerName],
     ['Consumer No.', input.consumerNumber],
@@ -214,21 +297,21 @@ export function renderDocumentHtml(tab: Exclude<DocumentPackTab, 'full'>, input:
     ['Actual RTS Capacity to be Installed', `${input.plantCapacity} kW`],
   ])
 
-  if (tab === 'feasibility') return `<article class="pack-doc">${companyHeader(template, 'Vendor Feasibility Report', input)}<p class="pack-doc__subtitle">Residential Rooftop Solar Installation</p><h4>Project & Consumer Details</h4>${common}${kv([
+  if (tab === 'feasibility') return `<article class="pack-doc">${companyHeader(template, template.feasibility_title || 'Vendor Feasibility Report', input)}<p class="pack-doc__subtitle">Residential Rooftop Solar Installation</p><h4>Project & Consumer Details</h4>${common}${kv([
     ['OEM / Panel Brand', input.panelBrand],
     ['Channel Partner', template.company_name || 'Shree Enterprise'],
     ['EPC Contractor Address', template.address],
     ['EPC Bank Details', template.bank_details],
     ['Vendor Registered in MNRE Portal?', 'YES'],
-    ['Feasibility Status', 'FEASIBLE — YES'],
+    ['Feasibility Status', template.feasibility_status || 'FEASIBLE — YES'],
     ['Project Cost (All Inclusive)', money.format(total)],
-  ])}<h4>Feasibility Assessment</h4><p><strong>Site Surveyor:</strong> ${esc(input.salesPerson || 'Assigned Agent')} &nbsp; <strong>Designation:</strong> ENGINEER / AGENT</p><table class="pack-doc__check-table"><tbody>${feasibilityChecks.map(([label, value]) => `<tr><th>${esc(label)}</th><td>${esc(value)}</td></tr>`).join('')}</tbody></table><p class="pack-doc__note">Site layout images: Upload 2–4 site photographs to the PM Surya Ghar portal or the customer document checklist.</p>${signature(input, template)}<footer>${esc(template.footer || 'Computer-generated ERP document.')}</footer></article>`
+  ])}<h4>Feasibility Assessment</h4><p><strong>Site Surveyor:</strong> ${esc(input.salesPerson || 'Assigned Agent')} &nbsp; <strong>Designation:</strong> ENGINEER / AGENT</p><table class="pack-doc__check-table"><tbody>${configuredFeasibilityChecks.map(([label, value]) => `<tr><th>${esc(label)}</th><td>${esc(value)}</td></tr>`).join('')}</tbody></table><p class="pack-doc__note">${esc(template.feasibility_note)}</p>${signature(input, template)}<footer>${esc(template.footer || 'Computer-generated ERP document.')}</footer></article>`
 
-  if (tab === 'estimate') return `<article class="pack-doc">${companyHeader(template, 'Estimate for Solar Rooftop', input)}<div class="pack-doc__two"><section><h4>Bill To</h4><p><strong>${esc(input.customerName)}</strong><br>${esc(input.address)}</p></section><section><h4>Project Specs</h4><p><strong>Capacity:</strong> ${esc(input.plantCapacity)} kW · <strong>Panels:</strong> ${esc(input.numberOfPanels)}<br><strong>Panel:</strong> ${esc(input.panelSize)} WP – ${esc(input.panelBrand)}<br><strong>Inverter:</strong> ${esc(input.inverterBrand)}</p></section></div><h4>Line Items</h4><table class="pack-doc__quote"><thead><tr><th>#</th><th>Description</th><th>KW</th><th>Amount</th></tr></thead><tbody><tr><td>1</td><td>Grid Connected Rooftop Solar System</td><td>${esc(input.plantCapacity)}</td><td>${money.format(total)}</td></tr><tr><td>2</td><td>GUVNL subsidy as per applicable norms</td><td>1.00</td><td>Subject to portal eligibility</td></tr><tr><td>3</td><td>DISCOM meter and stamp charges</td><td>1.00</td><td>As applicable</td></tr><tr><td>4</td><td>Fabrication / additional customization</td><td>1.00</td><td>As approved</td></tr><tr class="is-total"><td colspan="3">TOTAL ERP-APPROVED PROJECT VALUE</td><td>${money.format(total)}</td></tr></tbody></table><p class="pack-doc__note"><strong>T&C:</strong> Three-phase meter or site-specific DISCOM charges, additional structure height and non-standard civil work are charged only after approval.</p><h4>Component Specifications</h4><table class="pack-doc__quote"><thead><tr><th>Component</th><th>Description</th><th>Make / Brand</th></tr></thead><tbody>${bankComponentSpecs.map(([component, description, make]) => `<tr><td>${esc(component)}</td><td>${esc(description)}</td><td>${esc(component === 'PV Module' ? input.panelBrand : component === 'Inverter' ? input.inverterBrand : make)}</td></tr>`).join('')}</tbody></table><h4>Banking Details</h4><p class="pack-doc__pre">${esc(template.bank_details || 'Configure bank details in the shared company document template.')}</p><p><strong>Estimate date:</strong> ${esc(input.agreementDate || new Date().toLocaleDateString('en-IN'))} · <strong>Valid until:</strong> ${esc(expiryDate(input.agreementDate, input.validityDays))}</p>${signature(input, template)}<footer>${esc(template.footer || 'Computer-generated ERP document.')}</footer></article>`
+  if (tab === 'estimate') return `<article class="pack-doc">${companyHeader(template, template.estimate_title || 'Estimate for Solar Rooftop', input)}<div class="pack-doc__two"><section><h4>Bill To</h4><p><strong>${esc(input.customerName)}</strong><br>${esc(input.address)}</p></section><section><h4>Project Specs</h4><p><strong>Capacity:</strong> ${esc(input.plantCapacity)} kW · <strong>Panels:</strong> ${esc(input.numberOfPanels)}<br><strong>Panel:</strong> ${esc(input.panelSize)} WP – ${esc(input.panelBrand)}<br><strong>Inverter:</strong> ${esc(input.inverterBrand)}</p></section></div><h4>Line Items</h4><table class="pack-doc__quote"><thead><tr><th>#</th><th>Description</th><th>KW</th><th>Amount</th></tr></thead><tbody><tr><td>1</td><td>Grid Connected Rooftop Solar System</td><td>${esc(input.plantCapacity)}</td><td>${money.format(total)}</td></tr><tr><td>2</td><td>GUVNL subsidy as per applicable norms</td><td>1.00</td><td>Subject to portal eligibility</td></tr><tr><td>3</td><td>DISCOM meter and stamp charges</td><td>1.00</td><td>As applicable</td></tr><tr><td>4</td><td>Fabrication / additional customization</td><td>1.00</td><td>As approved</td></tr><tr class="is-total"><td colspan="3">TOTAL ERP-APPROVED PROJECT VALUE</td><td>${money.format(total)}</td></tr></tbody></table><p class="pack-doc__note">${esc(template.estimate_note)}</p><h4>Component Specifications</h4><table class="pack-doc__quote"><thead><tr><th>Component</th><th>Description</th><th>Make / Brand</th></tr></thead><tbody>${configuredComponentSpecs.map(([component, description, make]) => `<tr><td>${esc(component)}</td><td>${esc(description)}</td><td>${esc(component === 'PV Module' ? input.panelBrand : component === 'Inverter' ? input.inverterBrand : make)}</td></tr>`).join('')}</tbody></table><h4>Banking Details</h4><p class="pack-doc__pre">${esc(template.bank_details || 'Configure bank details in the shared company document template.')}</p><p><strong>Estimate date:</strong> ${esc(input.agreementDate || new Date().toLocaleDateString('en-IN'))} · <strong>Valid until:</strong> ${esc(expiryDate(input.agreementDate, input.validityDays))}</p>${signature(input, template)}<footer>${esc(template.footer || 'Computer-generated ERP document.')}</footer></article>`
 
-  if (tab === 'agreement') return `<article class="pack-doc">${companyHeader(template, 'Consumer–Vendor Agreement', input)}<p class="pack-doc__subtitle">Annexure 2 · PM – Surya Ghar: Muft Bijli Yojana</p><p>This agreement is executed on <strong>${esc(input.agreementDate || new Date().toLocaleDateString('en-IN'))}</strong> for design, supply, installation, commissioning and five-year comprehensive maintenance of the RTS project/system along with warranty.</p><div class="pack-doc__two"><section><h4>First Party (Consumer)</h4><p><strong>${esc(input.customerName)}</strong><br>${esc(input.address)}</p></section><section><h4>Second Party (Vendor)</h4><p><strong>${esc(template.company_name || 'Shree Enterprise')}</strong><br>${esc(template.address)}</p></section></div><h4>The First Party Undertakes to Perform</h4><ol>${firstPartyActivities.map((item) => `<li>${esc(item)}</li>`).join('')}</ol><h4>The Second Party Undertakes to Perform</h4><ol>${secondPartyActivities.map((item) => `<li>${esc(item)}</li>`).join('')}</ol>${template.agreement_wording ? `<h4>Company Agreement Wording</h4><p>${esc(template.agreement_wording)}</p>` : ''}${template.terms ? `<h4>Additional Terms</h4><p>${esc(template.terms)}</p>` : ''}<p class="pack-doc__note"><strong>Disclaimer:</strong> This agreement is between vendor and consumer. Any dispute related to it shall not involve MNRE or the Distribution Utility except where required by law or applicable scheme procedure.</p>${signature(input, template)}<footer>${esc(template.footer || 'Computer-generated ERP document.')}</footer></article>`
+  if (tab === 'agreement') return `<article class="pack-doc">${companyHeader(template, template.agreement_title || 'Consumer–Vendor Agreement', input)}<p class="pack-doc__subtitle">${esc(template.agreement_subtitle)}</p><p>This agreement is executed on <strong>${esc(input.agreementDate || new Date().toLocaleDateString('en-IN'))}</strong> for ${esc(template.agreement_intro)}.</p><div class="pack-doc__two"><section><h4>First Party (Consumer)</h4><p><strong>${esc(input.customerName)}</strong><br>${esc(input.address)}</p></section><section><h4>Second Party (Vendor)</h4><p><strong>${esc(template.company_name || 'Shree Enterprise')}</strong><br>${esc(template.address)}</p></section></div><h4>The First Party Undertakes to Perform</h4><ol>${configuredFirstPartyActivities.map((item) => `<li>${esc(item)}</li>`).join('')}</ol><h4>The Second Party Undertakes to Perform</h4><ol>${configuredSecondPartyActivities.map((item) => `<li>${esc(item)}</li>`).join('')}</ol>${template.agreement_wording ? `<h4>Company Agreement Wording</h4><p>${esc(template.agreement_wording)}</p>` : ''}${template.terms ? `<h4>Additional Terms</h4><p>${esc(template.terms)}</p>` : ''}<p class="pack-doc__note"><strong>Disclaimer:</strong> ${esc(template.agreement_disclaimer)}</p>${signature(input, template)}<footer>${esc(template.footer || 'Computer-generated ERP document.')}</footer></article>`
 
-  return `<article class="pack-doc">${companyHeader(template, 'QUOTE', input)}<h4>Customer</h4>${kv([
+  return `<article class="pack-doc">${companyHeader(template, template.quotation_title || 'Solar Quotation', input)}<h4>Customer</h4>${kv([
     ['Name', input.customerName],
     ['Address', input.address],
     ['Quote Number', input.quotationNumber],
@@ -501,12 +584,12 @@ class DocumentPackPdfLayout {
     this.line(PDF_MARGIN_X, this.cursorTop, PDF_MARGIN_X + PDF_CONTENT_WIDTH, this.cursorTop, PDF_BORDER, 0.8)
     const columnWidth = (PDF_CONTENT_WIDTH - 42) / 2
     const vendorX = PDF_MARGIN_X + columnWidth + 42
-    this.text(PDF_MARGIN_X, this.cursorTop + 14, 'Customer', 7.6, false, PDF_MUTED)
+    this.text(PDF_MARGIN_X, this.cursorTop + 14, this.template.customer_signature_label || 'Customer', 7.6, false, PDF_MUTED)
     this.text(PDF_MARGIN_X, this.cursorTop + 31, this.input.customerSignatureName || this.input.customerName, 9, true, PDF_INK)
-    this.text(PDF_MARGIN_X, this.cursorTop + 48, 'Signature: ____________________', 7.6, false, PDF_MUTED)
-    this.text(vendorX, this.cursorTop + 14, 'Vendor', 7.6, false, PDF_MUTED)
-    this.text(vendorX, this.cursorTop + 31, this.template.company_name || 'Shree Enterprise', 9, true, PDF_INK)
-    this.text(vendorX, this.cursorTop + 48, 'Authorized signatory', 7.6, false, PDF_MUTED)
+    this.text(PDF_MARGIN_X, this.cursorTop + 48, this.template.customer_signature_line || 'Signature: ____________________', 7.6, false, PDF_MUTED)
+    this.text(vendorX, this.cursorTop + 14, this.template.vendor_signature_label || 'Vendor', 7.6, false, PDF_MUTED)
+    this.text(vendorX, this.cursorTop + 31, this.template.vendor_signatory_name || this.template.company_name || 'Shree Enterprise', 9, true, PDF_INK)
+    this.text(vendorX, this.cursorTop + 48, this.template.vendor_signatory_title || 'Authorized signatory', 7.6, false, PDF_MUTED)
     this.cursorTop += height
   }
 
@@ -535,6 +618,10 @@ function buildDocumentPackPdfStreams(input: DocumentPackInput, template: Documen
   const systemTax = systemGross - systemTaxable
   const installTaxable = installation / 1.18
   const installTax = installation - installTaxable
+  const configuredFeasibilityChecks = templateChecks(template.feasibility_checks)
+  const configuredComponentSpecs = templateComponentSpecs(template.component_specs)
+  const configuredFirstPartyActivities = templateLines(template.first_party_activities, firstPartyActivities)
+  const configuredSecondPartyActivities = templateLines(template.second_party_activities, secondPartyActivities)
   const layout = new DocumentPackPdfLayout(input, template)
   const shouldRender = (tab: Exclude<DocumentPackTab, 'full'>) => selected === 'all' || selected === tab
   const commonRows: Array<[string, unknown]> = [
@@ -549,7 +636,7 @@ function buildDocumentPackPdfStreams(input: DocumentPackInput, template: Documen
   ]
 
   if (shouldRender('feasibility')) {
-    layout.beginDocument('Vendor Feasibility Report', 'Residential Rooftop Solar Installation')
+    layout.beginDocument(template.feasibility_title || 'Vendor Feasibility Report', 'Residential Rooftop Solar Installation')
     layout.section('Project & Consumer Details')
     layout.kvTable(commonRows)
     layout.kvTable([
@@ -558,21 +645,21 @@ function buildDocumentPackPdfStreams(input: DocumentPackInput, template: Documen
       ['EPC Contractor Address', template.address],
       ['EPC Bank Details', template.bank_details],
       ['Vendor Registered in MNRE Portal?', 'YES'],
-      ['Feasibility Status', 'FEASIBLE - YES'],
+      ['Feasibility Status', template.feasibility_status || 'FEASIBLE - YES'],
       ['Project Cost (All Inclusive)', pdfMoney(total)],
     ])
     layout.section('Feasibility Assessment')
     layout.paragraph(`Site Surveyor: ${input.salesPerson || 'Assigned Agent'}    Designation: ENGINEER / AGENT`, { bold: true })
-    layout.table(null, feasibilityChecks.map(([label, value]) => [
+    layout.table(null, configuredFeasibilityChecks.map(([label, value]) => [
       { text: label, bold: true, fill: PDF_LIGHT_BLUE, color: '#203b67' },
       { text: value, bold: true, color: PDF_GREEN, align: 'center' },
     ]), [360, PDF_CONTENT_WIDTH - 360], { fontSize: 7.7, padding: 4.5 })
-    layout.note('Site layout images: Upload 2-4 site photographs to the PM Surya Ghar portal or the customer document checklist.')
+    layout.note(template.feasibility_note)
     layout.signatures()
   }
 
   if (shouldRender('estimate')) {
-    layout.beginDocument('Estimate for Solar Rooftop')
+    layout.beginDocument(template.estimate_title || 'Estimate for Solar Rooftop')
     layout.twoBoxes([
       { title: 'Bill To', lines: [input.customerName, input.address] },
       { title: 'Project Specs', lines: [`Capacity: ${input.plantCapacity} kW - Panels: ${input.numberOfPanels}`, `Panel: ${input.panelSize} WP - ${input.panelBrand}`, `Inverter: ${input.inverterBrand}`] },
@@ -590,11 +677,11 @@ function buildDocumentPackPdfStreams(input: DocumentPackInput, template: Documen
       [28, 286, 52, PDF_CONTENT_WIDTH - 366],
       { fontSize: 7.5, padding: 4.5 },
     )
-    layout.note('T&C: Three-phase meter or site-specific DISCOM charges, additional structure height and non-standard civil work are charged only after approval.')
+    layout.note(template.estimate_note)
     layout.section('Component Specifications')
     layout.table(
       [{ text: 'Component' }, { text: 'Description' }, { text: 'Make / Brand' }],
-      bankComponentSpecs.map(([component, description, make]) => [
+      configuredComponentSpecs.map(([component, description, make]) => [
         { text: component, bold: true },
         { text: description },
         { text: component === 'PV Module' ? input.panelBrand : component === 'Inverter' ? input.inverterBrand : make },
@@ -609,16 +696,16 @@ function buildDocumentPackPdfStreams(input: DocumentPackInput, template: Documen
   }
 
   if (shouldRender('agreement')) {
-    layout.beginDocument('Consumer-Vendor Agreement', 'Annexure 2 - PM Surya Ghar: Muft Bijli Yojana')
-    layout.paragraph(`This agreement is executed on ${input.agreementDate || new Date().toLocaleDateString('en-IN')} for design, supply, installation, commissioning and five-year comprehensive maintenance of the RTS project/system along with warranty.`)
+    layout.beginDocument(template.agreement_title || 'Consumer-Vendor Agreement', template.agreement_subtitle)
+    layout.paragraph(`This agreement is executed on ${input.agreementDate || new Date().toLocaleDateString('en-IN')} for ${template.agreement_intro}.`)
     layout.twoBoxes([
       { title: 'First Party (Consumer)', lines: [input.customerName, input.address] },
       { title: 'Second Party (Vendor)', lines: [template.company_name || 'Shree Enterprise', template.address] },
     ])
     layout.section('The First Party Undertakes to Perform')
-    layout.numberedList(firstPartyActivities)
+    layout.numberedList(configuredFirstPartyActivities)
     layout.section('The Second Party Undertakes to Perform')
-    layout.numberedList(secondPartyActivities)
+    layout.numberedList(configuredSecondPartyActivities)
     if (template.agreement_wording) {
       layout.section('Company Agreement Wording')
       layout.paragraph(template.agreement_wording)
@@ -627,12 +714,12 @@ function buildDocumentPackPdfStreams(input: DocumentPackInput, template: Documen
       layout.section('Additional Terms')
       layout.paragraph(template.terms)
     }
-    layout.note('Disclaimer: This agreement is between vendor and consumer. Any dispute related to it shall not involve MNRE or the Distribution Utility except where required by law or applicable scheme procedure.')
+    layout.note(`Disclaimer: ${template.agreement_disclaimer}`)
     layout.signatures()
   }
 
   if (shouldRender('quotation')) {
-    layout.beginDocument('Solar Quotation')
+    layout.beginDocument(template.quotation_title || 'Solar Quotation')
     layout.section('Customer')
     layout.kvTable([
       ['Name', input.customerName],

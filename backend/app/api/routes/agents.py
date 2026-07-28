@@ -11,6 +11,7 @@ from app.schemas.agent import (
     CreateAgentTransactionRequest,
     UpdateAgentProfileRequest,
     UpdateAgentCustomerRequest,
+    UpdateAgentTransactionRequest,
 )
 from app.services import agent_service
 from app.services.agent_service import AgentServiceError
@@ -68,6 +69,23 @@ def post_agent_transaction(
 ) -> AgentTransactionSummary:
     try:
         return agent_service.create_agent_transaction(db, session, membership_id, payload)
+    except AgentServiceError as exc:
+        _raise_service_error(exc)
+
+
+@router.patch(
+    "/{membership_id}/transactions/{transaction_id}",
+    response_model=AgentTransactionSummary,
+)
+def patch_agent_transaction(
+    membership_id: str,
+    transaction_id: str,
+    payload: UpdateAgentTransactionRequest,
+    db: Session = Depends(get_db),
+    session: CurrentSession = Depends(require_any_permissions("agents.transactions.submit", "agents.manage", "finance.manage")),
+) -> AgentTransactionSummary:
+    try:
+        return agent_service.update_agent_transaction(db, session, membership_id, transaction_id, payload)
     except AgentServiceError as exc:
         _raise_service_error(exc)
 

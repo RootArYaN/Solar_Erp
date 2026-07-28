@@ -11,7 +11,6 @@ import type { Session } from './types'
 
 const Dashboard = lazy(() => import('./components/Dashboard').then((module) => ({ default: module.Dashboard })))
 const AdminPage = lazy(() => import('./components/admin/AdminPage').then((module) => ({ default: module.AdminPage })))
-const DataArchivePage = lazy(() => import('./components/archive/DataArchivePage').then((module) => ({ default: module.DataArchivePage })))
 const AgentOverviewPage = lazy(() => import('./components/agents/AgentOverviewPage').then((module) => ({ default: module.AgentOverviewPage })))
 const CustomerWorkspacePage = lazy(() => import('./components/customers/CustomerWorkspacePage').then((module) => ({ default: module.CustomerWorkspacePage })))
 const FinancePage = lazy(() => import('./components/finance/FinancePage').then((module) => ({ default: module.FinancePage })))
@@ -123,7 +122,6 @@ export default function App() {
           <Route path="finance" element={session && <ProtectedRoute session={session} permissions={[PERMISSIONS.finance.view]}><FinancePage session={session} /></ProtectedRoute>} />
           <Route path="inventory" element={session && <ProtectedRoute session={session} permissions={[PERMISSIONS.inventory.view]}><InventoryPage session={session} /></ProtectedRoute>} />
           <Route path="security/devices" element={session && <ProtectedRoute session={session} permissions={[PERMISSIONS.security.view]}><ActiveDevicesPage session={session} /></ProtectedRoute>} />
-          <Route path="archives" element={session && <ProtectedRoute session={session} permissions={[PERMISSIONS.archive.view]}><DataArchivePage session={session} /></ProtectedRoute>} />
         </Route>
         <Route path="*" element={<Navigate to={session ? '/app' : '/login'} replace />} />
       </Routes>

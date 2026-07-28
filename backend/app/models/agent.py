@@ -57,9 +57,6 @@ class AgentCustomer(TimestampMixin, Base):
     project_name: Mapped[str] = mapped_column(String(180), default="", nullable=False)
     status: Mapped[str] = mapped_column(String(32), default="active", index=True, nullable=False)
     outstanding_balance: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=Decimal("0.00"), nullable=False)
-    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    archived_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
-    archive_id: Mapped[str | None] = mapped_column(String(36), index=True, nullable=True)
 
     agent: Mapped[AgentProfile] = relationship(back_populates="customers")
 
@@ -92,8 +89,5 @@ class AgentTransaction(TimestampMixin, Base):
     debit: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=Decimal("0.00"), nullable=False)
     credit: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=Decimal("0.00"), nullable=False)
     project_id: Mapped[str | None] = mapped_column(String(36), index=True, nullable=True)
-    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    archived_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
-    archive_id: Mapped[str | None] = mapped_column(String(36), index=True, nullable=True)
 
     agent: Mapped[AgentProfile] = relationship(back_populates="transactions")

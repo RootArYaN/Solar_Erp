@@ -12,7 +12,7 @@ export async function uploadStoredFile(input: { file: File; ownerType: string; o
   return apiRequest('/files', { method: 'POST', body, idempotencyKey: createClientId() })
 }
 export const getStoredFiles = (ownerType: string, ownerId: string): Promise<StoredFileList> => apiRequest(`/files?owner_type=${encodeURIComponent(ownerType)}&owner_id=${encodeURIComponent(ownerId)}&page_size=100`)
-export const setStoredFileStatus = (id: string, status: 'active' | 'archived' | 'deleted'): Promise<StoredFile> => apiRequest(`/files/${id}/status`, { method: 'PATCH', body: { status } })
+export const setStoredFileStatus = (id: string, status: 'deleted'): Promise<StoredFile> => apiRequest(`/files/${id}/status`, { method: 'PATCH', body: { status } })
 export const removeStoredFile = (id: string): Promise<StoredFile> => setStoredFileStatus(id, 'deleted')
 export const downloadStoredFile = (id: string, name: string) => downloadRequest(`/files/${id}/download`, name)
 

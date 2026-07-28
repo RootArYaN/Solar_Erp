@@ -42,18 +42,18 @@ export function QuotationBuilderDialog({ request, busy, onClose, onSubmit }: {
   return <Modal className="quotation-builder-modal" title={request.quotation ? "Revise quotation" : "Generate quotation"} onClose={onClose}>
     <form className="admin-form quotation-builder" onSubmit={submit}>
       <div className="workflow-customer-strip"><strong>{request.customer_name}</strong><span>{request.agent_name} · {request.proposed_capacity_kw} kW</span></div>
-      <div className="admin-form__grid"><label className="field"><span>Quotation title</span><input required value={title} onChange={(event) => setTitle(event.target.value)} /></label><label className="field"><span>Valid until</span><input type="date" value={validUntil} onChange={(event) => setValidUntil(event.target.value)} /></label></div>
+      <div className="admin-form__grid"><label className="field"><span>Quotation title</span><div className="field__control"><input required value={title} onChange={(event) => setTitle(event.target.value)} /></div></label><label className="field"><span>Valid until</span><div className="field__control"><input type="date" value={validUntil} onChange={(event) => setValidUntil(event.target.value)} /></div></label></div>
       <div className="quotation-lines">
         <div className="quotation-line quotation-line--header" aria-hidden="true">
           <span>Description</span><span>Qty</span><span>Unit</span><span>Unit price</span><span>Tax %</span><span />
         </div>
         {lines.map((line, index) => <div className="quotation-line" key={index}>
-          <input required value={line.description} onChange={(event) => patchLine(index, { description: event.target.value })} placeholder="Line description" />
+          <input required value={line.description} onChange={(event) => patchLine(index, { description: event.target.value })} placeholder="Line description" aria-label={`Line ${index + 1} description`} />
           <input required min="0.01" step="0.01" type="number" value={line.quantity} onChange={(event) => patchLine(index, { quantity: Number(event.target.value) })} aria-label="Quantity" />
           <input required value={line.unit} onChange={(event) => patchLine(index, { unit: event.target.value })} aria-label="Unit" />
           <input required min="0" step="0.01" type="number" value={line.unit_price} onChange={(event) => patchLine(index, { unit_price: Number(event.target.value) })} aria-label="Unit price" />
           <input required min="0" max="100" step="0.01" type="number" value={line.tax_rate} onChange={(event) => patchLine(index, { tax_rate: Number(event.target.value) })} aria-label="Tax rate" />
-          <button type="button" className="icon-button" onClick={() => setLines((current) => current.filter((_, lineIndex) => lineIndex !== index))} disabled={lines.length === 1}><Trash2 size={15} /></button>
+          <button type="button" className="icon-button" onClick={() => setLines((current) => current.filter((_, lineIndex) => lineIndex !== index))} disabled={lines.length === 1} aria-label={`Remove line ${index + 1}`}><Trash2 size={15} /></button>
         </div>)}
       </div>
       <div className="quotation-builder-footer"><button type="button" className="secondary-button" onClick={() => setLines((current) => [...current, newLine()])}><Plus size={14} /> Add line</button><div><span>Subtotal ₹{totals.subtotal.toLocaleString('en-IN')}</span><span>Tax ₹{totals.tax.toLocaleString('en-IN')}</span><strong>Total ₹{(totals.subtotal + totals.tax).toLocaleString('en-IN')}</strong></div></div>

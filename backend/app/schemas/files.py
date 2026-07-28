@@ -15,7 +15,6 @@ class StoredFileSummary(BaseModel):
     checksum: str
     status: str
     created_at: datetime
-    archived_at: datetime | None
 
 
 class StoredFileList(BaseModel):
@@ -34,4 +33,4 @@ class DocumentCustomerOption(BaseModel):
 
 
 class FileStatusRequest(BaseModel):
-    status: str = Field(pattern=r"^(active|archived|deleted)$")
+    status: str = Field(pattern=r"^deleted$")

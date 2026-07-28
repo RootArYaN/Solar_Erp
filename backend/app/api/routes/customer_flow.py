@@ -1,10 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.api.deps import CurrentSession, require_any_permissions, require_permissions
+from app.api.deps import CurrentSession, require_any_permissions
 from app.db.session import get_db
 from app.schemas.customer_flow import (
-    ArchiveCustomerRequest,
     CustomerFlowList,
     CustomerFlowSnapshot,
     SaveMaterialDraftRequest,
@@ -67,26 +66,3 @@ def save_material_request_draft(
         _raise_service_error(exc)
 
 
-@router.post("/customers/{customer_id}/archive", response_model=CustomerFlowSnapshot)
-def archive_customer(
-    customer_id: str,
-    payload: ArchiveCustomerRequest,
-    db: Session = Depends(get_db),
-    session: CurrentSession = Depends(require_permissions("customers.archive")),
-) -> CustomerFlowSnapshot:
-    try:
-        return customer_flow_service.archive_customer(db, session, customer_id, payload.reason)
-    except CustomerFlowError as exc:
-        _raise_service_error(exc)
-
-
-@router.post("/customers/{customer_id}/restore", response_model=CustomerFlowSnapshot)
-def restore_customer(
-    customer_id: str,
-    db: Session = Depends(get_db),
-    session: CurrentSession = Depends(require_permissions("customers.archive")),
-) -> CustomerFlowSnapshot:
-    try:
-        return customer_flow_service.restore_customer(db, session, customer_id)
-    except CustomerFlowError as exc:
-        _raise_service_error(exc)

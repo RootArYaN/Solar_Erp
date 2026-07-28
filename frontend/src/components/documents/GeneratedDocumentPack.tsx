@@ -1,9 +1,8 @@
 import {
   CheckCircle2,
-  ClipboardCheck,
   Download,
   Eye,
-  FileArchive,
+  Files,
   FileSpreadsheet,
   FileText,
   LoaderCircle,
@@ -17,14 +16,17 @@ import {
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import type { CustomerFlowSnapshot } from '../../contracts/domain-contracts'
 import type { DocumentTemplate, GeneratedDocumentPack } from '../../erp-types'
+import type { StoredFile } from '../../types'
+import { downloadStoredFile } from '../../api/files'
+import { downloadMergedDocumentPack } from '../../api/operations'
 import {
   documentTabs,
-  downloadDocumentPackPdf,
   downloadDocumentWord,
   downloadQuotationCsv,
   printDocumentPack,
   renderDocumentHtml,
   renderFullDocumentHtml,
+  normalizeDocumentPackTemplate,
   validateDocumentPack,
   type DocumentPackInput,
   type DocumentPackTab,
@@ -32,20 +34,7 @@ import {
 } from '../../lib/document-pack'
 
 function templateSettings(template: DocumentTemplate | null): DocumentPackTemplate {
-  const settings = template?.settings ?? {}
-  return {
-    company_name: String(settings.company_name ?? ''),
-    brand_name: String(settings.brand_name ?? ''),
-    address: String(settings.address ?? ''),
-    gstin: String(settings.gstin ?? ''),
-    phone: String(settings.phone ?? ''),
-    email: String(settings.email ?? ''),
-    bank_details: String(settings.bank_details ?? ''),
-    quotation_notes: String(settings.quotation_notes ?? ''),
-    agreement_wording: String(settings.agreement_wording ?? ''),
-    footer: String(settings.footer ?? ''),
-    terms: String(settings.terms ?? ''),
-  }
+  return normalizeDocumentPackTemplate(template?.settings)
 }
 
 function todayInput() {
@@ -124,6 +113,8 @@ export function GeneratedDocumentPackPanel({
   canEdit,
   canApprove,
   working,
+  packFiles,
+  missingRequiredDocuments,
   onSelectPack,
   onSave,
   onFinalize,
@@ -136,13 +127,15 @@ export function GeneratedDocumentPackPanel({
   canEdit: boolean
   canApprove: boolean
   working: boolean
+  packFiles: StoredFile[]
+  missingRequiredDocuments: string[]
   onSelectPack: (pack: GeneratedDocumentPack) => void
   onSave: (input: DocumentPackInput, status: 'draft' | 'generated') => Promise<GeneratedDocumentPack | null>
   onFinalize: (pack: GeneratedDocumentPack) => Promise<void>
 }) {
   const [activeTab, setActiveTab] = useState<DocumentPackTab>('feasibility')
   const [validationError, setValidationError] = useState('')
-  const [exportingPdf, setExportingPdf] = useState<'current' | 'merged' | null>(null)
+  const [exportingPdf, setExportingPdf] = useState<'stored' | 'merged' | null>(null)
   const [previewZoom, setPreviewZoom] = useState(0.8)
   const [autoFitPreview, setAutoFitPreview] = useState(true)
   const previewViewportRef = useRef<HTMLDivElement>(null)
@@ -190,6 +183,10 @@ export function GeneratedDocumentPackPanel({
         setValidationError(`Complete ${missing.slice(0, 4).join(', ')}${missing.length > 4 ? ' and the remaining required fields' : ''}.`)
         return
       }
+      if (missingRequiredDocuments.length) {
+        setValidationError(`Upload ${missingRequiredDocuments.join(' and ')} before generating the full pack.`)
+        return
+      }
     }
     setValidationError('')
     await onSave(input, status)
@@ -202,14 +199,32 @@ export function GeneratedDocumentPackPanel({
     ? 'Complete document pack'
     : documentTabs.find((tab) => tab.key === activeTab)?.label || 'Document preview'
 
-  async function exportPdf(selected: Exclude<DocumentPackTab, 'full'> | 'all', mode: 'current' | 'merged') {
-    if (exportingPdf) return
+  const storedPackFile = packFiles.find((file) => file.status === 'active' && file.mime_type === 'application/pdf')
+
+  async function downloadStoredPack() {
+    if (!storedPackFile || exportingPdf) return
     setValidationError('')
-    setExportingPdf(mode)
+    setExportingPdf('stored')
     try {
-      await downloadDocumentPackPdf(input, settings, selected, selectedPack?.version)
+      await downloadStoredFile(storedPackFile.id, storedPackFile.name)
     } catch (reason) {
-      setValidationError(reason instanceof Error ? reason.message : 'Could not prepare the formatted PDF.')
+      setValidationError(reason instanceof Error ? reason.message : 'Could not download the stored full pack.')
+    } finally {
+      setExportingPdf(null)
+    }
+  }
+
+  async function downloadMergedPack() {
+    if (!selectedPack || !storedPackFile || exportingPdf) return
+    setValidationError('')
+    setExportingPdf('merged')
+    try {
+      await downloadMergedDocumentPack(
+        selectedPack.id,
+        `${storedPackFile.name.replace(/\.pdf$/i, '')}_With_Attachments.pdf`,
+      )
+    } catch (reason) {
+      setValidationError(reason instanceof Error ? reason.message : 'Could not merge the full pack and customer attachments.')
     } finally {
       setExportingPdf(null)
     }
@@ -225,12 +240,16 @@ export function GeneratedDocumentPackPanel({
     <div className="generated-pack-toolbar">
       <div className="generated-pack-actions generated-pack-actions--workflow">
         {canEdit && <button type="button" className="secondary-button" disabled={working} onClick={() => void save('draft')}><Save size={14} /> {locked ? 'New draft' : 'Save draft'}</button>}
-        {canEdit && <button type="button" className="primary-button" disabled={working} onClick={() => void save('generated')}>{working ? <LoaderCircle className="spin" size={14} /> : <Sparkles size={14} />} {locked ? 'Regenerate version' : 'Generate & store'}</button>}
+        {canEdit && <button type="button" className="primary-button" disabled={working} onClick={() => void save('generated')}>{working ? <LoaderCircle className="spin" size={14} /> : <Sparkles size={14} />} {locked ? 'Regenerate full pack' : 'Generate full pack'}</button>}
         {canApprove && selectedPack?.status === 'generated' && <button type="button" className="secondary-button generated-pack-finalize" disabled={working} onClick={() => void onFinalize(selectedPack)}><LockKeyhole size={14} /> Finalize</button>}
       </div>
       <div className="generated-pack-actions generated-pack-actions--exports">
-        <button type="button" className="secondary-button" disabled={working || exportingPdf !== null} onClick={() => void exportPdf(activeTab === 'full' ? 'all' : activeTab, 'current')}>{exportingPdf === 'current' ? <LoaderCircle className="spin" size={14} /> : <Download size={14} />} {exportingPdf === 'current' ? 'Preparing PDF' : 'Current PDF'}</button>
-        <button type="button" className="secondary-button" disabled={working || exportingPdf !== null} onClick={() => void exportPdf('all', 'merged')}>{exportingPdf === 'merged' ? <LoaderCircle className="spin" size={14} /> : <FileArchive size={14} />} {exportingPdf === 'merged' ? 'Preparing pack' : 'Merged PDF'}</button>
+        {packs.length > 0 && <label className="generated-pack-version"><span>Version</span><select value={selectedPack?.id || ''} onChange={(event) => {
+          const pack = packs.find((row) => row.id === event.target.value)
+          if (pack) onSelectPack(pack)
+        }}>{packs.map((pack) => <option key={pack.id} value={pack.id}>v{pack.version} · {statusLabel(pack.status)}</option>)}</select></label>}
+        <button type="button" className="secondary-button" disabled={working || exportingPdf !== null || !storedPackFile} onClick={() => void downloadStoredPack()} title={storedPackFile ? `Download the stored full pack for version ${selectedPack?.version}` : 'Generate this version to create its full-pack PDF'}>{exportingPdf === 'stored' ? <LoaderCircle className="spin" size={14} /> : <Download size={14} />} {exportingPdf === 'stored' ? 'Downloading' : selectedPack ? `Download v${selectedPack.version}` : 'Download full pack'}</button>
+        <button type="button" className="secondary-button" disabled={working || exportingPdf !== null || !storedPackFile} onClick={() => void downloadMergedPack()} title="Download one PDF containing the full pack and all uploaded customer documents">{exportingPdf === 'merged' ? <LoaderCircle className="spin" size={14} /> : <Files size={14} />} {exportingPdf === 'merged' ? 'Merging files' : 'Full pack + attachments'}</button>
         <button type="button" className="secondary-button" onClick={() => printDocumentPack(input, settings, activeTab)}><Printer size={14} /> Print</button>
         {activeTab !== 'full' && activeTab !== 'quotation' && <button type="button" className="secondary-button" onClick={() => downloadDocumentWord(input, settings, activeTab)}><FileText size={14} /> Word</button>}
         {activeTab === 'quotation' && <button type="button" className="secondary-button" onClick={() => downloadQuotationCsv(input)}><FileSpreadsheet size={14} /> Excel CSV</button>}
@@ -242,10 +261,6 @@ export function GeneratedDocumentPackPanel({
 
     <div className="generated-pack-workspace">
       <div className="generated-pack-form">
-        <div className="generated-pack-form__section">
-          <div><strong>Approved ERP data</strong><small>Locked values from the approved quotation and project.</small></div>
-          <span className="generated-pack-section-badge">Read only</span>
-        </div>
         <div className="generated-pack-approved-grid">
           <ApprovedField label="Customer name" value={input.customerName} />
           <ApprovedField label="Customer number" value={input.customerNumber} mono />
@@ -259,7 +274,7 @@ export function GeneratedDocumentPackPanel({
         </div>
 
         <div className="generated-pack-form__section generated-pack-form__section--agent">
-          <div><strong>Agent completion fields</strong><small>Enter the technical details once; every document reuses them.</small></div>
+          <div><strong>Agent completion fields</strong></div>
           <span className="generated-pack-section-badge generated-pack-section-badge--required">Required</span>
         </div>
         <div className="generated-pack-fields erp-form-grid">

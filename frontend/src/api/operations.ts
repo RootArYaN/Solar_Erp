@@ -1,6 +1,6 @@
 import type { DocumentTemplate, GeneratedDocumentPack, InventoryItem, InventoryLocation, InventoryMovement, InventorySummary, Poster, PricingBook } from '../erp-types'
 import { createClientId } from '../lib/client-id'
-import { apiRequest } from './client'
+import { apiRequest, downloadRequest } from './client'
 
 export const getInventorySummary = (): Promise<InventorySummary> => apiRequest('/inventory/summary')
 export const createInventoryLocation = (body: Record<string, unknown>): Promise<InventoryLocation> => apiRequest('/inventory/locations', { method: 'POST', body })
@@ -20,3 +20,4 @@ export const saveDocumentTemplate = (type: string, body: Record<string, unknown>
 export const getGeneratedDocumentPacks = (customerId: string): Promise<GeneratedDocumentPack[]> => apiRequest(`/document-packs/customer/${customerId}`)
 export const saveGeneratedDocumentPack = (customerId: string, body: { input_snapshot: Record<string, unknown>; status: 'draft' | 'generated' }): Promise<GeneratedDocumentPack> => apiRequest(`/document-packs/customer/${customerId}`, { method: 'PUT', body })
 export const finalizeGeneratedDocumentPack = (packId: string): Promise<GeneratedDocumentPack> => apiRequest(`/document-packs/${packId}/finalize`, { method: 'POST' })
+export const downloadMergedDocumentPack = (packId: string, fallbackName: string): Promise<void> => downloadRequest(`/document-packs/${packId}/merged-download`, fallbackName)

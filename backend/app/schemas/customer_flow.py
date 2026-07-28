@@ -32,9 +32,6 @@ class FlowEntity(BaseModel):
     version: int = 1
     created_at: datetime
     updated_at: datetime
-    archived_at: datetime | None = None
-    archived_by: str | None = None
-    archive_reason: str | None = None
 
 
 class FlowCustomer(FlowEntity):
@@ -187,14 +184,6 @@ class SaveMaterialDraftRequest(BaseModel):
         return self
 
 
-class ArchiveCustomerRequest(BaseModel):
-    reason: str = Field(min_length=3, max_length=240)
-
-    @field_validator("reason")
-    @classmethod
-    def clean_reason(cls, value: str) -> str:
-        return " ".join(value.split())
-
 
 class FlowDocument(BaseModel):
     id: str
@@ -211,6 +200,8 @@ class FlowPayment(BaseModel):
     transaction_date: date
     direction: str
     amount: str
+    account_id: str
+    category_id: str | None
     source_type: str
     description: str
     payment_method: str

@@ -203,7 +203,7 @@ class CreatePosterRequest(BaseModel):
 
 
 class PosterStatusRequest(BaseModel):
-    status: str = Field(pattern=r'^(draft|active|archived)$')
+    status: str = Field(pattern=r'^(draft|active)$')
 
 
 class DocumentTemplateSummary(BaseModel):

@@ -2,82 +2,20 @@ import type { Session } from '../types'
 
 export const PERMISSIONS = {
   dashboard: { view: 'dashboard.view' },
-  customers: {
-    view: 'customers.view',
-    create: 'customers.create',
-    edit: 'customers.edit',
-    archive: 'customers.archive',
-  },
-  sites: {
-    view: 'sites.view',
-    create: 'sites.create',
-    edit: 'sites.edit',
-    archive: 'sites.archive',
-  },
-  quotations: {
-    view: 'quotations.view',
-    create: 'quotations.create',
-    edit: 'quotations.edit',
-    archive: 'quotations.archive',
-    approve: 'quotations.approve',
-  },
-  projects: {
-    view: 'projects.view',
-    create: 'projects.create',
-    edit: 'projects.edit',
-    archive: 'projects.archive',
-    manage: 'projects.manage',
-  },
-  materialRequests: {
-    view: 'material_requests.view',
-    create: 'material_requests.create',
-    edit: 'material_requests.edit',
-    archive: 'material_requests.archive',
-    approve: 'material_requests.approve',
-  },
-  inventory: {
-    view: 'inventory.view',
-    create: 'inventory.create',
-    edit: 'inventory.edit',
-    archive: 'inventory.archive',
-    approve: 'inventory.approve',
-    manage: 'inventory.manage',
-  },
-  pricing: {
-    view: 'pricing.view',
-    create: 'pricing.create',
-    edit: 'pricing.edit',
-    archive: 'pricing.archive',
-    approve: 'pricing.approve',
-  },
-  documents: {
-    view: 'documents.view',
-    create: 'documents.create',
-    edit: 'documents.edit',
-    archive: 'documents.archive',
-    approve: 'documents.approve',
-    manage: 'documents.manage',
-  },
+  customers: { view: 'customers.view', create: 'customers.create', edit: 'customers.edit' },
+  sites: { view: 'sites.view', create: 'sites.create', edit: 'sites.edit' },
+  quotations: { view: 'quotations.view', create: 'quotations.create', edit: 'quotations.edit', approve: 'quotations.approve' },
+  projects: { view: 'projects.view', create: 'projects.create', edit: 'projects.edit', manage: 'projects.manage' },
+  materialRequests: { view: 'material_requests.view', create: 'material_requests.create', edit: 'material_requests.edit', approve: 'material_requests.approve' },
+  inventory: { view: 'inventory.view', create: 'inventory.create', edit: 'inventory.edit', approve: 'inventory.approve', manage: 'inventory.manage' },
+  pricing: { view: 'pricing.view', create: 'pricing.create', edit: 'pricing.edit', approve: 'pricing.approve' },
+  documents: { view: 'documents.view', create: 'documents.create', edit: 'documents.edit', approve: 'documents.approve', manage: 'documents.manage' },
   finance: { view: 'finance.view', manage: 'finance.manage' },
-  posters: {
-    view: 'posters.view',
-    create: 'posters.create',
-    edit: 'posters.edit',
-    archive: 'posters.archive',
-  },
+  posters: { view: 'posters.view', create: 'posters.create', edit: 'posters.edit' },
   agents: { view: 'agents.view', edit: 'agents.manage', submitTransaction: 'agents.transactions.submit', approveTransaction: 'agents.transactions.approve' },
   users: { view: 'users.view', edit: 'users.manage' },
   roles: { view: 'roles.view', edit: 'roles.manage' },
   security: { view: 'security.sessions.view', edit: 'security.sessions.manage' },
-  archive: {
-    view: 'archive.view',
-    create: 'archive.create',
-    download: 'archive.download',
-    verify: 'archive.verify',
-    cleanup: 'archive.cleanup',
-    restore: 'archive.restore',
-    purge: 'archive.purge',
-  },
   events: { view: 'events.view' },
 } as const
 
@@ -89,7 +27,6 @@ export type ModuleAccess = {
   canView: boolean
   canCreate: boolean
   canEdit: boolean
-  canArchive: boolean
   canApprove: boolean
   readOnly: boolean
 }
@@ -116,7 +53,6 @@ export function getModuleAccess(session: Session, module: ModulePermissionKey): 
   const canManage = Boolean(group.manage && hasPermission(session, group.manage))
   const canCreate = canManage || Boolean(group.create && hasPermission(session, group.create))
   const canEdit = canManage || Boolean(group.edit && hasPermission(session, group.edit))
-  const canArchive = canManage || Boolean(group.archive && hasPermission(session, group.archive))
   const canApprove = canManage || Boolean(group.approve && hasPermission(session, group.approve))
-  return { canView, canCreate, canEdit, canArchive, canApprove, readOnly: canView && !canCreate && !canEdit && !canArchive && !canApprove }
+  return { canView, canCreate, canEdit, canApprove, readOnly: canView && !canCreate && !canEdit && !canApprove }
 }

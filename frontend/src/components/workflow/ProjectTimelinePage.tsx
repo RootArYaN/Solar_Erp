@@ -13,7 +13,7 @@ import {
   UserRound,
   WalletCards,
 } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   getProjectTimeline,
   getProjectTimelines,
@@ -36,7 +36,7 @@ function formatDate(value: string | null): string {
 
 function ProjectListItem({ item, active, onSelect }: { item: ProjectTimelineListItem; active: boolean; onSelect: () => void }) {
   return (
-    <button className={`timeline-project-item ${active ? 'is-active' : ''}`} onClick={onSelect}>
+    <button type="button" className={`timeline-project-item ${active ? 'is-active' : ''}`} onClick={onSelect} aria-current={active ? 'true' : undefined}>
       <div className="timeline-project-avatar">{item.customer_name.slice(0, 1).toUpperCase()}</div>
       <span className="timeline-project-copy">
         <strong>{item.customer_name}</strong>
@@ -78,48 +78,95 @@ export function ProjectTimelinePage({ session }: { session: Session }) {
   const [loading, setLoading] = useState(true)
   const [detailLoading, setDetailLoading] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [error, setError] = useState('')
+  const [listError, setListError] = useState('')
+  const [detailError, setDetailError] = useState('')
   const [note, setNote] = useState('')
   const [eventDate, setEventDate] = useState('')
   const [paymentMode, setPaymentMode] = useState<'cash' | 'loan'>('cash')
+  const requestSequence = useRef(0)
   const { toast } = useToast()
 
-  async function loadProjects(preferredId?: string) {
+  function applyLoadedTimeline(next: ProjectTimeline) {
+    setTimeline(next)
+    setPaymentMode(next.payment_mode || 'cash')
+    setNote('')
+    setEventDate('')
+  }
+
+  async function refreshPage(notify = false) {
+    const requestId = ++requestSequence.current
     setLoading(true)
-    setError('')
+    setDetailLoading(true)
+    setListError('')
+    setDetailError('')
     try {
       const items = await getProjectTimelines(session.access_token)
+      if (requestId !== requestSequence.current) return
+
+      const nextSelectedId = items.some((item) => item.project_id === selectedId)
+        ? selectedId
+        : items[0]?.project_id ?? ''
       setProjects(items)
-      setSelectedId((current) => preferredId || current || items[0]?.project_id || '')
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Could not load project timelines')
-    } finally {
+      setSelectedId(nextSelectedId)
       setLoading(false)
+
+      if (!nextSelectedId) {
+        setTimeline(null)
+        setDetailLoading(false)
+        if (notify) toast({ message: 'Projects refreshed', variant: 'success' })
+        return
+      }
+
+      try {
+        const next = await getProjectTimeline(session.access_token, nextSelectedId)
+        if (requestId !== requestSequence.current) return
+        applyLoadedTimeline(next)
+        if (notify) toast({ message: 'Projects and timeline refreshed', variant: 'success' })
+      } catch (reason) {
+        if (requestId !== requestSequence.current) return
+        setTimeline(null)
+        const message = reason instanceof Error ? reason.message : 'Could not refresh the selected timeline'
+        setDetailError(message)
+        if (notify) toast({ message, variant: 'error' })
+      } finally {
+        if (requestId === requestSequence.current) setDetailLoading(false)
+      }
+    } catch (reason) {
+      if (requestId !== requestSequence.current) return
+      const message = reason instanceof Error ? reason.message : 'Could not load project timelines'
+      setListError(message)
+      setDetailLoading(false)
+      if (notify) toast({ message, variant: 'error' })
+    } finally {
+      if (requestId === requestSequence.current) setLoading(false)
     }
   }
 
   async function loadTimeline(projectId: string) {
+    const requestId = ++requestSequence.current
+    setLoading(false)
+    setSelectedId(projectId)
     if (!projectId) {
       setTimeline(null)
+      setDetailError('')
       return
     }
     setDetailLoading(true)
-    setError('')
+    setDetailError('')
     try {
       const next = await getProjectTimeline(session.access_token, projectId)
-      setTimeline(next)
-      setPaymentMode(next.payment_mode || 'cash')
-      setNote('')
-      setEventDate('')
+      if (requestId !== requestSequence.current) return
+      applyLoadedTimeline(next)
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Could not load the selected timeline')
+      if (requestId !== requestSequence.current) return
+      setTimeline(null)
+      setDetailError(reason instanceof Error ? reason.message : 'Could not load the selected timeline')
     } finally {
-      setDetailLoading(false)
+      if (requestId === requestSequence.current) setDetailLoading(false)
     }
   }
 
-  useEffect(() => { void loadProjects() }, [])
-  useEffect(() => { void loadTimeline(selectedId) }, [selectedId])
+  useEffect(() => { void refreshPage() }, [])
 
   const visibleProjects = useMemo(() => {
     const term = search.trim().toLowerCase()
@@ -189,23 +236,23 @@ export function ProjectTimelinePage({ session }: { session: Session }) {
 
   return (
     <WorkspacePage variant="split" className="project-timeline-page">
-      {loading ? <LoadingSkeleton rows={8} /> : error && !projects.length ? <ErrorState message={error} onRetry={() => void loadProjects()} /> : !projects.length ? (
+      {loading && !projects.length ? <LoadingSkeleton rows={8} /> : listError && !projects.length ? <ErrorState message={listError} onRetry={() => void refreshPage()} /> : !projects.length ? (
         <EmptyState title="No projects yet" message="Approved quotations will appear here as project timelines." />
       ) : (
         <div className="project-timeline-layout">
           <aside className="timeline-projects-panel">
             <header>
               <div><ListChecks size={17} /><span><strong>Projects</strong><small>{projects.length} active timelines</small></span></div>
-              <button onClick={() => void loadProjects(selectedId)} disabled={loading} aria-label="Refresh projects"><RefreshCw size={14} /></button>
+              <button type="button" onClick={() => void refreshPage(true)} disabled={loading || detailLoading} aria-label="Refresh projects and selected timeline"><RefreshCw className={loading || detailLoading ? 'spin' : ''} size={14} /></button>
             </header>
             <label className="timeline-project-search"><Search size={15} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search project" /></label>
             <div className="timeline-project-list">
-              {visibleProjects.map((item) => <ProjectListItem key={item.project_id} item={item} active={item.project_id === selectedId} onSelect={() => setSelectedId(item.project_id)} />)}
+              {visibleProjects.map((item) => <ProjectListItem key={item.project_id} item={item} active={item.project_id === selectedId} onSelect={() => void loadTimeline(item.project_id)} />)}
             </div>
           </aside>
 
           <main className="timeline-detail-panel">
-            {detailLoading || !timeline ? <LoadingSkeleton rows={8} /> : (
+            {detailLoading ? <LoadingSkeleton rows={8} /> : detailError ? <ErrorState message={detailError} onRetry={() => void loadTimeline(selectedId)} /> : !timeline ? <EmptyState title="Select a project" message="Choose a project to load its timeline." /> : (
               <>
                 <header className="timeline-project-header">
                   <div className="timeline-project-heading">

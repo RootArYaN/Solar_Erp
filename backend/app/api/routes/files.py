@@ -32,7 +32,7 @@ def get_files(
     owner_id: str | None = Query(default=None, max_length=80),
     project_id: str | None = Query(default=None, max_length=36),
     customer_id: str | None = Query(default=None, max_length=36),
-    status: str | None = Query(default=None, pattern=r"^(active|archived|deleted)$"),
+    status: str | None = Query(default=None, pattern=r"^(active|deleted)$"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=settings.default_page_size, ge=1, le=settings.max_page_size),
     db: Session = Depends(get_db),
@@ -111,7 +111,7 @@ def patch_file_status(
     file_id: str,
     payload: FileStatusRequest,
     db: Session = Depends(get_db),
-    session: CurrentSession = Depends(require_any_permissions("documents.archive", "documents.manage", "posters.archive")),
+    session: CurrentSession = Depends(require_any_permissions("documents.edit", "documents.manage", "posters.edit")),
 ) -> StoredFileSummary:
     try:
         return file_service.set_file_status(db, session, file_id, payload.status)

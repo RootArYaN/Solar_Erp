@@ -19,11 +19,6 @@ export type ApiErrorBody = {
   request_id: string | null
 }
 
-export type ArchiveMetadata = {
-  archived_at: UTCTimestamp | null
-  archived_by: UUID | null
-  archive_reason: string | null
-}
 
 export type VersionedRecord = {
   version: number
@@ -33,7 +28,7 @@ export type VersionedRecord = {
 
 export type UploadStatus = 'pending' | 'uploading' | 'processing' | 'ready' | 'failed' | 'cancelled'
 
-export type FileMetadata = ArchiveMetadata & VersionedRecord & {
+export type FileMetadata = VersionedRecord & {
   id: UUID
   record_number: RecordNumber
   original_name: string
@@ -54,7 +49,7 @@ export type SignedFileUrl = {
   expires_at: UTCTimestamp
 }
 
-export type SyncCommandName = 'create' | 'update' | 'archive' | 'restore'
+export type SyncCommandName = 'create' | 'update' | 'delete'
 
 export type SyncCommand<TPayload = unknown> = {
   command_id: UUID

@@ -613,7 +613,7 @@ def list_project_timelines(db: Session, actor: CurrentSession):
         select(CustomerProject, AgentCustomer, CustomerQuotation)
         .join(AgentCustomer, AgentCustomer.id == CustomerProject.customer_id)
         .join(CustomerQuotation, CustomerQuotation.id == CustomerProject.quotation_id)
-        .where(CustomerProject.company_id == actor.membership.company_id, CustomerProject.archived_at.is_(None))
+        .where(CustomerProject.company_id == actor.membership.company_id)
         .order_by(CustomerProject.updated_at.desc())
         .limit(200)
     )
@@ -668,12 +668,58 @@ def get_project_timeline(db: Session, actor: CurrentSession, project_id: str):
     )
 
 
+def sync_documentation_progress(
+    db: Session,
+    actor: CurrentSession,
+    project_id: str,
+    documentation_status: str,
+) -> bool:
+    """Advance system-owned document milestones after pack generation/finalization."""
+    if documentation_status not in {"in_progress", "approved"}:
+        raise WorkflowConflictError("Unsupported documentation status")
+
+    project, customer, quotation = _get_project_context(db, actor, project_id)
+    status_rank = {"pending": 0, "in_progress": 1, "approved": 2}
+    if status_rank.get(project.documentation_status, 0) > status_rank[documentation_status]:
+        return False
+    timeline, steps = _ensure_timeline(db, project, customer, quotation)
+    target_keys = {"documents_uploaded"}
+    if documentation_status == "approved":
+        target_keys.add("documents_approved")
+
+    changed = project.documentation_status != documentation_status
+    completed_at = datetime.now(UTC).isoformat()
+    for step in steps:
+        if step["key"] not in target_keys or step["status"] == "completed":
+            continue
+        step.update({
+            "status": "completed",
+            "completed_at": completed_at,
+            "completed_by": actor.user.full_name,
+            "note": (
+                "Mandatory customer documents uploaded and full document pack generated."
+                if step["key"] == "documents_uploaded"
+                else "Final document pack approved and locked."
+            ),
+        })
+        changed = True
+
+    if not changed:
+        return False
+
+    project.documentation_status = documentation_status
+    if project.status == "planning":
+        project.status = "in_progress"
+    timeline.steps_json = json.dumps(steps, separators=(",", ":"))
+    timeline.updated_by_membership_id = actor.membership.id
+    _merge_timeline_steps(timeline, project, customer, quotation)
+    return True
+
+
 def set_project_payment_mode(db: Session, actor: CurrentSession, project_id: str, payment_mode: str):
     if not _timeline_can_manage(actor):
         raise WorkflowForbiddenError("Only an administrator can update the project timeline")
     project, customer, quotation = _get_project_context(db, actor, project_id)
-    if project.is_locked:
-        raise WorkflowConflictError("Archived projects are locked")
     timeline, steps = _ensure_timeline(db, project, customer, quotation)
     current = next((step for step in steps if step["status"] == "current"), None)
     if not current or current["key"] != "payment_mode":
@@ -708,8 +754,6 @@ def update_project_timeline_step(db: Session, actor: CurrentSession, project_id:
     if not _timeline_can_manage(actor):
         raise WorkflowForbiddenError("Only an administrator can update the project timeline")
     project, customer, quotation = _get_project_context(db, actor, project_id)
-    if project.is_locked:
-        raise WorkflowConflictError("Archived projects are locked")
     timeline, steps = _ensure_timeline(db, project, customer, quotation)
     target_index = next((index for index, step in enumerate(steps) if step["key"] == step_key), -1)
     if target_index < 0:

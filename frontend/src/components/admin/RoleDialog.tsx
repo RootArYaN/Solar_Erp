@@ -21,7 +21,6 @@ const tabOptions = [
   { label: 'Posters', codes: ['posters.view'] },
   { label: 'Solar pricing', codes: ['pricing.view'] },
   { label: 'Devices', codes: ['security.sessions.view'] },
-  { label: 'Data archive', codes: ['archive.view'] },
   { label: 'Users', codes: ['users.view'] },
   { label: 'Roles', codes: ['roles.view'] },
 ] as const

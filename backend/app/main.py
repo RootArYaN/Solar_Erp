@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import admin, agents, archives, auth, customer_flow, dashboard, files, finance, health, operations, workflow
+from app.api.routes import admin, agents, auth, customer_flow, dashboard, events, files, finance, health, operations, workflow
 from app.core.config import settings
 from app.core.middleware import add_error_handlers, add_request_middleware
 from app.db.migrate import run_migrations
@@ -51,4 +51,4 @@ app.include_router(finance.router, prefix="/api/v1")
 app.include_router(operations.router, prefix="/api/v1")
 app.include_router(dashboard.router, prefix="/api/v1")
 app.include_router(files.router, prefix="/api/v1")
-app.include_router(archives.router, prefix="/api/v1")
+app.include_router(events.router, prefix="/api/v1")

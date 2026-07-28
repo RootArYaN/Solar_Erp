@@ -188,7 +188,7 @@ export type PricingItem = {
 }
 export type PricingBook = { id: string; name: string; version: number; is_default: boolean; is_active: boolean; updated_at: string; items: PricingItem[] }
 
-export type Poster = { id: string; version: number; title: string; description: string; file_id: string; file_name: string; mime_type: string; category: string; status: 'draft' | 'active' | 'archived'; created_at: string; updated_at: string }
+export type Poster = { id: string; version: number; title: string; description: string; file_id: string; file_name: string; mime_type: string; category: string; status: 'draft' | 'active'; created_at: string; updated_at: string }
 
 export type DocumentTemplate = { id: string; template_type: string; name: string; settings: Record<string, unknown>; is_active: boolean; updated_at: string }
 

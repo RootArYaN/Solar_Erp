@@ -17,9 +17,9 @@ import {
   Upload,
 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
-import { createBill, createFinanceTransaction, getFinanceCategories, getFinancialAccounts, saveCustomerLoan } from '../../api/finance'
+import { createBill, createFinanceTransaction, getFinanceCategories, getFinancialAccounts, saveCustomerLoan, updateFinanceTransaction } from '../../api/finance'
 import { downloadStoredFile, uploadStoredFile } from '../../api/files'
-import type { Customer, CustomerFlowSnapshot } from '../../contracts/domain-contracts'
+import type { Customer, CustomerFlowSnapshot, CustomerPayment } from '../../contracts/domain-contracts'
 import type { FinanceCategory, FinancialAccount } from '../../erp-types'
 import { getModuleAccess } from '../../lib/permissions'
 import { createCustomerFlowRepository } from '../../lib/repositories/customer-flow-repository'
@@ -78,6 +78,7 @@ export function CustomerWorkspacePage({ session }: { session: Session }) {
   const [error, setError] = useState('')
   const [editOpen, setEditOpen] = useState(false)
   const [paymentOpen, setPaymentOpen] = useState(false)
+  const [editingPayment, setEditingPayment] = useState<CustomerPayment | null>(null)
   const [loanOpen, setLoanOpen] = useState(false)
   const [billOpen, setBillOpen] = useState(false)
   const [working, setWorking] = useState(false)
@@ -180,16 +181,24 @@ export function CustomerWorkspacePage({ session }: { session: Session }) {
     const direction = String(form.get('direction') || 'credit')
     setWorking(true)
     try {
-      await createFinanceTransaction({
+      const body = {
         transaction_date: form.get('transaction_date'), direction, amount,
         category_id: form.get('category_id') || null, account_id: form.get('account_id'),
-        payment_method: form.get('payment_method'), party_type: 'customer', party_name: snapshot.customer.display_name,
-        customer_id: snapshot.customer.id, project_id: project?.id ?? null,
         source_type: form.get('source_type'), reference_number: form.get('reference_number'), description: form.get('description'),
-      })
+      }
+      if (editingPayment) {
+        await updateFinanceTransaction(editingPayment.id, body)
+      } else {
+        await createFinanceTransaction({
+          ...body,
+          party_type: 'customer', party_name: snapshot.customer.display_name,
+          customer_id: snapshot.customer.id, project_id: project?.id ?? null,
+        })
+      }
       await loadSnapshot()
       setPaymentOpen(false)
-      toast({ message: direction === 'credit' ? 'Customer payment recorded' : 'Customer refund recorded', variant: 'success' })
+      setEditingPayment(null)
+      toast({ message: editingPayment ? 'Customer transaction updated' : direction === 'credit' ? 'Customer payment recorded' : 'Customer refund recorded', variant: 'success' })
     } catch (reason) {
       toast({ message: reason instanceof Error ? reason.message : 'Could not record payment', variant: 'error' })
     } finally { setWorking(false) }
@@ -304,7 +313,7 @@ export function CustomerWorkspacePage({ session }: { session: Session }) {
               {tab === 'timeline' && <TimelineTab snapshot={snapshot} />}
               {tab === 'quotations' && <QuotationsTab snapshot={snapshot} canApprove={quotationAccess.canApprove} working={working} onApprove={approveQuotation} />}
               {tab === 'documents' && <DocumentsTab snapshot={snapshot} canUpload={documentAccess.canCreate || documentAccess.canEdit} working={working} onUpload={uploadDocument} />}
-              {tab === 'payments' && <PaymentsTab snapshot={snapshot} approvedValue={approvedValue} totalReceived={totalReceived} balance={balance} canManage={financeAccess.canEdit || financeAccess.canCreate} onAdd={() => setPaymentOpen(true)} onBill={() => setBillOpen(true)} />}
+              {tab === 'payments' && <PaymentsTab snapshot={snapshot} approvedValue={approvedValue} totalReceived={totalReceived} balance={balance} canManage={financeAccess.canEdit || financeAccess.canCreate} onAdd={() => { setEditingPayment(null); setPaymentOpen(true) }} onEdit={(payment) => { setEditingPayment(payment); setPaymentOpen(true) }} onBill={() => setBillOpen(true)} />}
               {tab === 'loan' && <LoanTab snapshot={snapshot} canManage={financeAccess.canEdit} onEdit={() => setLoanOpen(true)} />}
               {tab === 'activity' && <ActivityTab snapshot={snapshot} />}
             </section>
@@ -313,7 +322,7 @@ export function CustomerWorkspacePage({ session }: { session: Session }) {
       </div>
 
       {editOpen && snapshot && <Modal title="Edit customer" subtitle="B2C customer and installation-site details" onClose={() => setEditOpen(false)}><CustomerEditForm snapshot={snapshot} working={working} onSubmit={saveCustomer} /></Modal>}
-      {paymentOpen && snapshot && <Modal title="Record customer money" subtitle="This posts once to the shared company finance ledger." onClose={() => setPaymentOpen(false)}><PaymentForm accounts={accounts} categories={categories} working={working} onSubmit={recordPayment} /></Modal>}
+      {paymentOpen && snapshot && <Modal title={editingPayment ? `Edit ${editingPayment.transaction_number}` : 'Record customer money'} subtitle={editingPayment ? 'Updates this shared-ledger transaction and records an audit event.' : 'This posts once to the shared company finance ledger.'} onClose={() => { setPaymentOpen(false); setEditingPayment(null) }}><PaymentForm key={`${editingPayment?.id ?? 'new'}-${accounts.length}-${categories.length}`} accounts={accounts} categories={categories} payment={editingPayment} working={working} onSubmit={recordPayment} /></Modal>}
       {billOpen && snapshot && <Modal title="Create customer sales bill" subtitle="The bill records the receivable; payment is posted separately." onClose={() => setBillOpen(false)}><SalesBillForm approvedValue={approvedValue} working={working} onSubmit={createSalesBill} /></Modal>}
       {loanOpen && project && <Modal title="Customer solar loan" subtitle="Project-specific bank approval and disbursement details" onClose={() => setLoanOpen(false)}><LoanForm snapshot={snapshot!} working={working} onSubmit={saveLoan} /></Modal>}
     </WorkspacePage>
@@ -348,11 +357,23 @@ function QuotationsTab({ snapshot, canApprove, working, onApprove }: { snapshot:
 }
 
 function DocumentsTab({ snapshot, canUpload, working, onUpload }: { snapshot: CustomerFlowSnapshot; canUpload: boolean; working: boolean; onUpload: (event: React.ChangeEvent<HTMLInputElement>) => void }) {
-  return <><div className="tab-toolbar"><div><strong>Customer documents</strong><span>{snapshot.documents.length} stored files</span></div>{canUpload && <label className="primary-button primary-button--compact"><Upload size={14} /> Upload<input hidden type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.docx,.xlsx" disabled={working} onChange={onUpload} /></label>}</div>{!snapshot.documents.length ? <EmptyState title="No documents uploaded" /> : <div className="erp-table-wrap"><table className="erp-table"><thead><tr><th>Document</th><th>Type</th><th>Project</th><th>Status</th><th>Uploaded</th><th /></tr></thead><tbody>{snapshot.documents.map((row) => <tr key={row.id}><td><strong>{row.name}</strong></td><td>{label(row.owner_type)}</td><td>{row.project_id ? 'Linked' : 'Customer'}</td><td><span className="soft-badge">{label(row.status)}</span></td><td>{shortDate.format(new Date(row.created_at))}</td><td><button className="secondary-button" onClick={() => void downloadStoredFile(row.id, row.name)}>Download</button></td></tr>)}</tbody></table></div>}</>
+  const [documentSearch, setDocumentSearch] = useState('')
+  useEffect(() => setDocumentSearch(''), [snapshot.customer.id])
+  const normalizedSearch = documentSearch.trim().toLowerCase()
+  const visibleDocuments = normalizedSearch
+    ? snapshot.documents.filter((row) => [
+      row.name,
+      label(row.owner_type),
+      row.project_id ? 'linked project' : 'customer',
+      label(row.status),
+    ].join(' ').toLowerCase().includes(normalizedSearch))
+    : snapshot.documents
+
+  return <><div className="tab-toolbar customer-documents-toolbar"><div><strong>Customer documents</strong><span>{visibleDocuments.length} of {snapshot.documents.length} stored files</span></div><div className="customer-documents-toolbar__actions"><label className="customer-document-search"><Search size={14} /><input value={documentSearch} onChange={(event) => setDocumentSearch(event.target.value)} placeholder="Search filename or document type" aria-label="Search customer documents" /></label>{canUpload && <label className="primary-button primary-button--compact"><Upload size={14} /> Upload<input hidden type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.docx,.xlsx" disabled={working} onChange={onUpload} /></label>}</div></div>{!snapshot.documents.length ? <EmptyState title="No documents uploaded" /> : !visibleDocuments.length ? <EmptyState title="No matching documents" message="Try a filename, document type, project, or status." /> : <div className="erp-table-wrap"><table className="erp-table"><thead><tr><th>Document</th><th>Type</th><th>Project</th><th>Status</th><th>Uploaded</th><th /></tr></thead><tbody>{visibleDocuments.map((row) => <tr key={row.id}><td><strong>{row.name}</strong></td><td>{label(row.owner_type)}</td><td>{row.project_id ? 'Linked' : 'Customer'}</td><td><span className="soft-badge">{label(row.status)}</span></td><td>{shortDate.format(new Date(row.created_at))}</td><td><button className="secondary-button" onClick={() => void downloadStoredFile(row.id, row.name)}>Download</button></td></tr>)}</tbody></table></div>}</>
 }
 
-function PaymentsTab({ snapshot, approvedValue, totalReceived, balance, canManage, onAdd, onBill }: { snapshot: CustomerFlowSnapshot; approvedValue: number; totalReceived: number; balance: number; canManage: boolean; onAdd: () => void; onBill: () => void }) {
-  return <><section className="mini-kpis"><article><span>Approved</span><strong>{money.format(approvedValue)}</strong></article><article><span>Received</span><strong>{money.format(totalReceived)}</strong></article><article><span>Pending</span><strong>{money.format(balance)}</strong></article><article><span>Entries</span><strong>{snapshot.payments.length}</strong></article></section><div className="tab-toolbar"><div><strong>Customer money</strong><span>Shared with company finance—no duplicate ledger.</span></div>{canManage && <div><button className="secondary-button" onClick={onBill}><FileText size={14} /> Sales bill</button><button className="primary-button primary-button--compact" onClick={onAdd}><Plus size={14} /> Record money</button></div>}</div>{!snapshot.payments.length ? <EmptyState title="No customer transactions" /> : <div className="erp-table-wrap"><table className="erp-table"><thead><tr><th>Date</th><th>Transaction</th><th>Description</th><th>Account</th><th>Money in</th><th>Money out</th><th>Status</th></tr></thead><tbody>{snapshot.payments.map((row) => <tr key={row.id}><td>{shortDate.format(new Date(row.transaction_date))}</td><td><strong>{row.transaction_number}</strong><small>{row.reference_number}</small></td><td>{row.description || label(row.source_type)}</td><td>{row.account_name}<small>{label(row.payment_method)}</small></td><td className="money-in">{row.direction === 'credit' ? money.format(Number(row.amount)) : '—'}</td><td className="money-out">{row.direction === 'debit' ? money.format(Number(row.amount)) : '—'}</td><td>{label(row.status)}</td></tr>)}</tbody></table></div>}</>
+function PaymentsTab({ snapshot, approvedValue, totalReceived, balance, canManage, onAdd, onEdit, onBill }: { snapshot: CustomerFlowSnapshot; approvedValue: number; totalReceived: number; balance: number; canManage: boolean; onAdd: () => void; onEdit: (payment: CustomerPayment) => void; onBill: () => void }) {
+  return <><section className="mini-kpis"><article><span>Approved</span><strong>{money.format(approvedValue)}</strong></article><article><span>Received</span><strong>{money.format(totalReceived)}</strong></article><article><span>Pending</span><strong>{money.format(balance)}</strong></article><article><span>Entries</span><strong>{snapshot.payments.length}</strong></article></section><div className="tab-toolbar"><div><strong>Customer money</strong><span>Shared with company finance—no duplicate ledger.</span></div>{canManage && <div><button className="secondary-button" onClick={onBill}><FileText size={14} /> Sales bill</button><button className="primary-button primary-button--compact" onClick={onAdd}><Plus size={14} /> Record money</button></div>}</div>{!snapshot.payments.length ? <EmptyState title="No customer transactions" /> : <div className="erp-table-wrap"><table className="erp-table"><thead><tr><th>Date</th><th>Transaction</th><th>Description</th><th>Account</th><th>Money in</th><th>Money out</th><th>Status</th>{canManage && <th />}</tr></thead><tbody>{snapshot.payments.map((row) => <tr key={row.id}><td>{shortDate.format(new Date(row.transaction_date))}</td><td><strong>{row.transaction_number}</strong><small>{row.reference_number}</small></td><td>{row.description || label(row.source_type)}</td><td>{row.account_name}<small>{label(row.payment_method)}</small></td><td className="money-in">{row.direction === 'credit' ? money.format(Number(row.amount)) : '—'}</td><td className="money-out">{row.direction === 'debit' ? money.format(Number(row.amount)) : '—'}</td><td>{label(row.status)}</td>{canManage && <td><button className="secondary-button secondary-button--compact" onClick={() => onEdit(row)}><Pencil size={13} /> Edit</button></td>}</tr>)}</tbody></table></div>}</>
 }
 
 function LoanTab({ snapshot, canManage, onEdit }: { snapshot: CustomerFlowSnapshot; canManage: boolean; onEdit: () => void }) {
@@ -381,8 +402,8 @@ function CustomerEditForm({ snapshot, working, onSubmit }: { snapshot: CustomerF
   </div><footer className="erp-form-actions"><button type="submit" className="primary-button" disabled={working}>Save customer</button></footer></form>
 }
 
-function PaymentForm({ accounts, categories, working, onSubmit }: { accounts: FinancialAccount[]; categories: FinanceCategory[]; working: boolean; onSubmit: (event: React.FormEvent<HTMLFormElement>) => void }) {
-  return <form className="erp-form" onSubmit={onSubmit}><div className="erp-form-grid"><label><span>Date</span><input type="date" name="transaction_date" defaultValue={new Date().toISOString().slice(0, 10)} required /></label><label><span>Direction</span><select name="direction"><option value="credit">Money in</option><option value="debit">Refund / money out</option></select></label><label><span>Amount</span><input type="number" min="0.01" step="0.01" name="amount" required /></label><label><span>Account</span><select name="account_id" required><option value="">Select account</option>{accounts.map((row) => <option value={row.id} key={row.id}>{row.name}</option>)}</select></label><label><span>Category</span><select name="category_id"><option value="">No category</option>{categories.map((row) => <option value={row.id} key={row.id}>{row.name}</option>)}</select></label><label><span>Payment method</span><select name="payment_method"><option value="bank">Bank</option><option value="cash">Cash</option><option value="upi">UPI</option><option value="cheque">Cheque</option></select></label><label><span>Type</span><select name="source_type"><option value="customer_payment">Customer payment</option><option value="customer_advance">Advance</option><option value="loan_disbursement">Loan disbursement</option><option value="subsidy_received">Subsidy received</option><option value="customer_refund">Refund</option></select></label><label><span>Reference</span><input name="reference_number" /></label><label className="erp-form-wide"><span>Description</span><input name="description" placeholder="Short payment note" /></label></div><footer className="erp-form-actions"><button className="primary-button" disabled={working || !accounts.length}>Post transaction</button></footer></form>
+function PaymentForm({ accounts, categories, payment, working, onSubmit }: { accounts: FinancialAccount[]; categories: FinanceCategory[]; payment?: CustomerPayment | null; working: boolean; onSubmit: (event: React.FormEvent<HTMLFormElement>) => void }) {
+  return <form className="erp-form" onSubmit={onSubmit}><div className="erp-form-grid"><label><span>Date</span><input type="date" name="transaction_date" defaultValue={payment?.transaction_date || new Date().toISOString().slice(0, 10)} required /></label><label><span>Direction</span><select name="direction" defaultValue={payment?.direction || 'credit'}><option value="credit">Money in</option><option value="debit">Refund / money out</option></select></label><label><span>Amount</span><input type="number" min="0.01" step="0.01" name="amount" defaultValue={payment?.amount} required /></label><label><span>Account</span><select name="account_id" defaultValue={payment?.account_id || ''} required><option value="">Select account</option>{accounts.map((row) => <option value={row.id} key={row.id}>{row.name}</option>)}</select></label><label><span>Category</span><select name="category_id" defaultValue={payment?.category_id || ''}><option value="">No category</option>{categories.map((row) => <option value={row.id} key={row.id}>{row.name}</option>)}</select></label><label><span>Payment method</span><select name="payment_method" defaultValue={payment?.payment_method || 'bank'}><option value="bank">Bank</option><option value="cash">Cash</option><option value="upi">UPI</option><option value="cheque">Cheque</option></select></label><label><span>Type</span><select name="source_type" defaultValue={payment?.source_type || 'customer_payment'}><option value="customer_payment">Customer payment</option><option value="customer_advance">Advance</option><option value="loan_disbursement">Loan disbursement</option><option value="subsidy_received">Subsidy received</option><option value="customer_refund">Refund</option></select></label><label><span>Reference</span><input name="reference_number" defaultValue={payment?.reference_number} /></label><label className="erp-form-wide"><span>Description</span><input name="description" defaultValue={payment?.description} placeholder="Short payment note" /></label></div><footer className="erp-form-actions"><button className="primary-button" disabled={working || !accounts.length}>{payment ? 'Save changes' : 'Post transaction'}</button></footer></form>
 }
 
 function LoanForm({ snapshot, working, onSubmit }: { snapshot: CustomerFlowSnapshot; working: boolean; onSubmit: (event: React.FormEvent<HTMLFormElement>) => void }) {

@@ -10,6 +10,7 @@ import {
   FileSpreadsheet,
   FileText,
   Landmark,
+  Pencil,
   Plus,
   ReceiptText,
   RefreshCw,
@@ -37,6 +38,7 @@ import {
   recordCompanyLoanPayment,
   reverseFinanceTransaction,
   transferFinancialAccounts,
+  updateFinanceTransaction,
 } from '../../api/finance'
 import type { Bill, BillCustomerOption, BillList, CompanyLoan, FinanceCategory, FinanceOverview, FinanceTransaction, FinanceTransactionList, FinancialAccount, Profitability } from '../../erp-types'
 import { getModuleAccess, PERMISSIONS } from '../../lib/permissions'
@@ -48,7 +50,7 @@ import { useToast } from '../ui/ToastProvider'
 import { KpiGrid, TabStrip, WorkspaceHeader, WorkspacePage } from '../workspace'
 
 type Tab = 'overview' | 'transactions' | 'expenses' | 'bills' | 'accounts' | 'loans' | 'profitability' | 'reports'
-type Dialog = 'transaction' | 'expense' | 'account' | 'transfer' | 'bill' | 'bill-payment' | 'loan' | 'loan-payment' | 'reverse-transaction' | null
+type Dialog = 'transaction' | 'edit-transaction' | 'expense' | 'account' | 'transfer' | 'bill' | 'bill-payment' | 'loan' | 'loan-payment' | 'reverse-transaction' | null
 const tabs: Tab[] = ['overview', 'transactions', 'expenses', 'bills', 'accounts', 'loans', 'profitability', 'reports']
 
 const money = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 })
@@ -231,6 +233,34 @@ export function FinancePage({ session }: { session: Session }) {
     finally { setWorking(false) }
   }
 
+  async function submitTransactionEdit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!selectedTransaction) return
+    setWorking(true)
+    const form = new FormData(event.currentTarget)
+    try {
+      await updateFinanceTransaction(selectedTransaction.id, {
+        transaction_date: form.get('transaction_date'),
+        direction: form.get('direction'),
+        amount: Number(form.get('amount') || 0),
+        account_id: form.get('account_id'),
+        category_id: form.get('category_id') || null,
+        payment_method: form.get('payment_method'),
+        source_type: form.get('source_type'),
+        reference_number: form.get('reference_number'),
+        description: form.get('description'),
+      })
+      setDialog(null)
+      setSelectedTransaction(null)
+      await refreshAll()
+      toast({ message: 'Transaction updated', variant: 'success' })
+    } catch (reason) {
+      toast({ message: reason instanceof Error ? reason.message : 'Could not update transaction', variant: 'error' })
+    } finally {
+      setWorking(false)
+    }
+  }
+
   const visibleTransactions = useMemo(() => {
     const term = search.trim().toLowerCase()
     const rows = transactions?.data ?? []
@@ -262,8 +292,8 @@ export function FinancePage({ session }: { session: Session }) {
     <div className={`finance-tab-panel finance-tab-panel--${tab}`} role="tabpanel" data-scroll-surface="tab-body">
       {loading ? <LoadingSkeleton rows={6} /> : <>
         {tab === 'overview' && overview && <Overview data={overview} />}
-        {(tab === 'transactions' || tab === 'reports') && <Transactions data={transactions} rows={visibleTransactions} search={search} setSearch={setSearch} direction={direction} setDirection={setDirection} dateFrom={dateFrom} setDateFrom={setDateFrom} dateTo={dateTo} setDateTo={setDateTo} reload={() => void loadTab(tab)} reportMode={tab === 'reports'} canEdit={access.canEdit} onReverse={(row) => { setSelectedTransaction(row); setDialog('reverse-transaction') }} />}
-        {tab === 'expenses' && <Expenses data={expenses} dateFrom={dateFrom} setDateFrom={setDateFrom} dateTo={dateTo} setDateTo={setDateTo} reload={() => void loadTab('expenses')} canEdit={access.canEdit} onAdd={() => setDialog('expense')} />}
+        {(tab === 'transactions' || tab === 'reports') && <Transactions data={transactions} rows={visibleTransactions} search={search} setSearch={setSearch} direction={direction} setDirection={setDirection} dateFrom={dateFrom} setDateFrom={setDateFrom} dateTo={dateTo} setDateTo={setDateTo} reload={() => void loadTab(tab)} reportMode={tab === 'reports'} canEdit={access.canEdit} onEdit={(row) => { setSelectedTransaction(row); setDialog('edit-transaction') }} onReverse={(row) => { setSelectedTransaction(row); setDialog('reverse-transaction') }} />}
+        {tab === 'expenses' && <Expenses data={expenses} dateFrom={dateFrom} setDateFrom={setDateFrom} dateTo={dateTo} setDateTo={setDateTo} reload={() => void loadTab('expenses')} canEdit={access.canEdit} onAdd={() => setDialog('expense')} onEdit={(row) => { setSelectedTransaction(row); setDialog('edit-transaction') }} />}
         {tab === 'bills' && <Bills data={bills} billType={billType} setBillType={setBillType} reload={() => void loadTab('bills')} canEdit={access.canEdit} onAdd={() => setDialog('bill')} onPay={(bill) => { setSelectedBill(bill); setDialog('bill-payment') }} />}
         {tab === 'accounts' && <Accounts rows={accounts} canEdit={access.canEdit} onAdd={() => setDialog('account')} onTransfer={() => setDialog('transfer')} />}
         {tab === 'loans' && <Loans rows={loans} canEdit={access.canEdit} onAdd={() => setDialog('loan')} onPay={(loan) => { setSelectedLoan(loan); setDialog('loan-payment') }} />}
@@ -278,6 +308,7 @@ export function FinancePage({ session }: { session: Session }) {
     {dialog === 'bill' && <Modal className="finance-modal" title="Create bill" subtitle="A bill records money owed; it does not post a payment." onClose={() => setDialog(null)}><BillForm customers={billCustomers} projects={projects} initialType={billType === 'purchase' ? 'purchase' : 'sales'} working={working} onSubmit={submitBill} /></Modal>}
     {dialog === 'bill-payment' && selectedBill && <Modal className="finance-modal" title={`Pay ${selectedBill.bill_number}`} subtitle={`${money.format(selectedBill.balance_amount)} outstanding`} onClose={() => setDialog(null)}><PaymentForm accounts={accounts} amount={selectedBill.balance_amount} working={working} onSubmit={submitBillPayment} /></Modal>}
     {dialog === 'loan' && <Modal className="finance-modal" title="Add company loan" subtitle="Separate from customer solar loans." onClose={() => setDialog(null)}><CompanyLoanForm accounts={accounts} working={working} onSubmit={submitLoan} /></Modal>}
+    {dialog === 'edit-transaction' && selectedTransaction && <Modal className="finance-modal" title={`Edit ${selectedTransaction.transaction_number}`} subtitle="Updates the shared ledger entry and records the changed fields in the audit log." onClose={() => { setDialog(null); setSelectedTransaction(null) }}><EditTransactionForm transaction={selectedTransaction} accounts={accounts} categories={categories} working={working} onSubmit={submitTransactionEdit} /></Modal>}
     {dialog === 'reverse-transaction' && selectedTransaction && <Modal title="Reverse transaction" subtitle={`${selectedTransaction.transaction_number} · ${money.format(selectedTransaction.amount)}`} onClose={() => { setDialog(null); setSelectedTransaction(null) }}><form className="erp-form" onSubmit={submitReversal}><div className="inline-warning">This does not delete or overwrite the original entry. A linked opposite entry will be posted.</div><div className="erp-form-grid"><label><span>Reversal date</span><input type="date" name="transaction_date" defaultValue={today()} required /></label><label className="erp-form-wide"><span>Reason</span><textarea name="reason" minLength={3} required /></label></div><footer className="erp-form-actions"><button type="button" className="secondary-button" onClick={() => { setDialog(null); setSelectedTransaction(null) }}>Cancel</button><button className="primary-button" disabled={working}>Post reversal</button></footer></form></Modal>}
 
     {dialog === 'loan-payment' && selectedLoan && <Modal className="finance-modal" title={`Pay ${selectedLoan.lender_name}`} subtitle={`${money.format(selectedLoan.outstanding_amount)} outstanding`} onClose={() => setDialog(null)}><LoanPaymentForm accounts={accounts} amount={selectedLoan.emi_amount || selectedLoan.outstanding_amount} working={working} onSubmit={submitLoanPayment} /></Modal>}
@@ -326,7 +357,7 @@ function Overview({ data }: { data: FinanceOverview }) {
   </>
 }
 
-function Transactions({ data, rows, search, setSearch, direction, setDirection, dateFrom, setDateFrom, dateTo, setDateTo, reload, reportMode, canEdit, onReverse }: { data: FinanceTransactionList | null; rows: FinanceTransactionList['data']; search: string; setSearch: (value: string) => void; direction: string; setDirection: (value: string) => void; dateFrom: string; setDateFrom: (value: string) => void; dateTo: string; setDateTo: (value: string) => void; reload: () => void; reportMode: boolean; canEdit: boolean; onReverse: (row: FinanceTransaction) => void }) {
+function Transactions({ data, rows, search, setSearch, direction, setDirection, dateFrom, setDateFrom, dateTo, setDateTo, reload, reportMode, canEdit, onEdit, onReverse }: { data: FinanceTransactionList | null; rows: FinanceTransactionList['data']; search: string; setSearch: (value: string) => void; direction: string; setDirection: (value: string) => void; dateFrom: string; setDateFrom: (value: string) => void; dateTo: string; setDateTo: (value: string) => void; reload: () => void; reportMode: boolean; canEdit: boolean; onEdit: (row: FinanceTransaction) => void; onReverse: (row: FinanceTransaction) => void }) {
   return <>
     <section className="mini-kpis finance-ledger-kpis">
       <article><span>Money in</span><strong>{money.format(data?.money_in ?? 0)}</strong></article>
@@ -349,11 +380,11 @@ function Transactions({ data, rows, search, setSearch, direction, setDirection, 
         <button className="secondary-button" onClick={() => window.print()}><FileText size={13} /> Print</button>
       </div>}
     </div>
-    <TransactionTable rows={rows} canEdit={canEdit && !reportMode} onReverse={onReverse} />
+    <TransactionTable rows={rows} canEdit={canEdit && !reportMode} onEdit={onEdit} onReverse={onReverse} />
   </>
 }
 
-function Expenses({ data, dateFrom, setDateFrom, dateTo, setDateTo, reload, canEdit, onAdd }: { data: FinanceTransactionList | null; dateFrom: string; setDateFrom: (value: string) => void; dateTo: string; setDateTo: (value: string) => void; reload: () => void; canEdit: boolean; onAdd: () => void }) {
+function Expenses({ data, dateFrom, setDateFrom, dateTo, setDateTo, reload, canEdit, onAdd, onEdit }: { data: FinanceTransactionList | null; dateFrom: string; setDateFrom: (value: string) => void; dateTo: string; setDateTo: (value: string) => void; reload: () => void; canEdit: boolean; onAdd: () => void; onEdit: (row: FinanceTransaction) => void }) {
   const isToday = dateFrom === today() && dateTo === today()
   return <>
     <section className="mini-kpis finance-expense-kpis">
@@ -377,7 +408,7 @@ function Expenses({ data, dateFrom, setDateFrom, dateTo, setDateTo, reload, canE
       <button className="secondary-button finance-expense-apply" onClick={reload}>Apply</button>
       {canEdit && <button className="primary-button finance-expense-create" onClick={onAdd}><Plus size={14} /> Add expense</button>}
     </div>
-    <TransactionTable rows={data?.data ?? []} />
+    <TransactionTable rows={data?.data ?? []} canEdit={canEdit} onEdit={onEdit} />
   </>
 }
 
@@ -421,9 +452,13 @@ function ProfitabilityPanel({ data }: { data: Profitability | null }) {
   return <><section className="finance-kpis"><article className="finance-kpi"><span><BadgeIndianRupee size={17} /></span><div><small>Sales value</small><strong>{money.format(data.sales_value)}</strong></div></article><article className="finance-kpi"><span><ArrowDownLeft size={17} /></span><div><small>Money received</small><strong>{money.format(data.money_received)}</strong></div></article><article className="finance-kpi"><span><ReceiptText size={17} /></span><div><small>Material + project cost</small><strong>{money.format(data.material_cost + data.project_expenses)}</strong></div></article><article className="finance-kpi"><span><BarChart3 size={17} /></span><div><small>Estimated gross profit</small><strong>{money.format(data.estimated_gross_profit)}</strong></div></article></section><div className="tab-toolbar"><div><strong>Project profitability</strong><span>Calculated from linked quotation value and project expenses.</span></div></div>{!data.projects.length ? <EmptyState title="No project profitability yet" /> : <div className="erp-table-wrap"><table className="erp-table"><thead><tr><th>Project</th><th>Sales value</th><th>Money received</th><th>Cost</th><th>Gross profit</th></tr></thead><tbody>{data.projects.map((row) => <tr key={row.project_id}><td><strong>{row.project_number}</strong><small>{row.project_name}</small></td><td>{money.format(row.sales_value)}</td><td>{money.format(row.money_received)}</td><td>{money.format(row.cost)}</td><td className={row.gross_profit >= 0 ? 'money-in' : 'money-out'}>{money.format(row.gross_profit)}</td></tr>)}</tbody></table></div>}</>
 }
 
-function TransactionTable({ rows, compact = false, canEdit = false, onReverse }: { rows: FinanceTransactionList['data']; compact?: boolean; canEdit?: boolean; onReverse?: (row: FinanceTransaction) => void }) {
+function TransactionTable({ rows, compact = false, canEdit = false, onEdit, onReverse }: { rows: FinanceTransactionList['data']; compact?: boolean; canEdit?: boolean; onEdit?: (row: FinanceTransaction) => void; onReverse?: (row: FinanceTransaction) => void }) {
   if (!rows.length) return <EmptyState title="No transactions found" />
-  return <div className={`erp-table-wrap ${compact ? 'erp-table-wrap--compact' : ''}`}><table className="erp-table"><thead><tr><th>Date</th><th>Transaction / party</th><th>Category / source</th>{!compact && <th>Account</th>}<th>Money in</th><th>Money out</th>{!compact && <th>Status</th>}{canEdit && <th />}</tr></thead><tbody>{rows.map((row) => <tr key={row.id}><td>{shortDate.format(new Date(row.transaction_date))}</td><td><strong>{row.transaction_number}</strong><small>{row.party_name || row.description}</small></td><td>{row.category_name || label(row.source_type)}<small>{row.reference_number}</small></td>{!compact && <td>{row.account_name}<small>{label(row.payment_method)}</small></td>}<td className="money-in">{row.direction === 'credit' ? money.format(row.amount) : '—'}</td><td className="money-out">{row.direction === 'debit' ? money.format(row.amount) : '—'}</td>{!compact && <td><span className="soft-badge">{label(row.status)}</span></td>}{canEdit && <td>{row.status === 'posted' && onReverse && <button className="secondary-button secondary-button--compact" onClick={() => onReverse(row)}><RotateCcw size={13} /> Reverse</button>}</td>}</tr>)}</tbody></table></div>
+  return <div className={`erp-table-wrap ${compact ? 'erp-table-wrap--compact' : ''}`}><table className="erp-table"><thead><tr><th>Date</th><th>Transaction / party</th><th>Category / source</th>{!compact && <th>Account</th>}<th>Money in</th><th>Money out</th>{!compact && <th>Status</th>}{canEdit && <th />}</tr></thead><tbody>{rows.map((row) => <tr key={row.id}><td>{shortDate.format(new Date(row.transaction_date))}</td><td><strong>{row.transaction_number}</strong><small>{row.party_name || row.description}</small></td><td>{row.category_name || label(row.source_type)}<small>{row.reference_number}</small></td>{!compact && <td>{row.account_name}<small>{label(row.payment_method)}</small></td>}<td className="money-in">{row.direction === 'credit' ? money.format(row.amount) : '—'}</td><td className="money-out">{row.direction === 'debit' ? money.format(row.amount) : '—'}</td>{!compact && <td><span className="soft-badge">{label(row.status)}</span></td>}{canEdit && <td><div className="erp-row-actions">{onEdit && <button className="secondary-button secondary-button--compact" onClick={() => onEdit(row)}><Pencil size={13} /> Edit</button>}{row.status === 'posted' && onReverse && <button className="secondary-button secondary-button--compact" onClick={() => onReverse(row)}><RotateCcw size={13} /> Reverse</button>}</div></td>}</tr>)}</tbody></table></div>
+}
+
+function EditTransactionForm({ transaction, accounts, categories, working, onSubmit }: { transaction: FinanceTransaction; accounts: FinancialAccount[]; categories: FinanceCategory[]; working: boolean; onSubmit: (event: React.FormEvent<HTMLFormElement>) => void }) {
+  return <form className="erp-form" onSubmit={onSubmit}><div className="erp-form-grid"><label><span>Date</span><input name="transaction_date" type="date" defaultValue={transaction.transaction_date} required /></label><label><span>Direction</span><select name="direction" defaultValue={transaction.direction}><option value="credit">Money in</option><option value="debit">Money out</option></select></label><label><span>Amount</span><input name="amount" type="number" min="0.01" step="0.01" defaultValue={transaction.amount} required /></label><label><span>Account</span><select name="account_id" defaultValue={transaction.account_id} required>{accounts.map((row) => <option value={row.id} key={row.id}>{row.name}</option>)}</select></label><label><span>Category</span><select name="category_id" defaultValue={transaction.category_id || ''}><option value="">No category</option>{categories.map((row) => <option value={row.id} key={row.id}>{row.name}</option>)}</select></label><label><span>Payment method</span><select name="payment_method" defaultValue={transaction.payment_method}><option value="bank">Bank</option><option value="cash">Cash</option><option value="upi">UPI</option><option value="cheque">Cheque</option></select></label><label><span>Source type</span><input name="source_type" defaultValue={transaction.source_type} required /></label><label><span>Reference</span><input name="reference_number" defaultValue={transaction.reference_number} /></label><label className="erp-form-wide"><span>Description</span><input name="description" defaultValue={transaction.description} /></label></div><footer className="erp-form-actions"><button className="primary-button" disabled={working || !accounts.length}>Save changes</button></footer></form>
 }
 
 function BillTable({ rows, compact = false, onPay }: { rows: Bill[]; compact?: boolean; onPay?: (bill: Bill) => void }) {

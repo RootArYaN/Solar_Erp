@@ -163,3 +163,7 @@ class CreateAgentTransactionRequest(BaseModel):
         if has_debit == has_credit:
             raise ValueError("Enter either a debit or a credit amount")
         return self
+
+
+class UpdateAgentTransactionRequest(CreateAgentTransactionRequest):
+    pass

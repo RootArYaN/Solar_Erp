@@ -42,6 +42,7 @@ from app.schemas.finance import (
     ProfitabilitySummary,
     RecordBillPaymentRequest,
     ReverseFinanceTransactionRequest,
+    UpdateFinanceTransactionRequest,
     UpsertCustomerLoanRequest,
 )
 from app.services.access_service import get_customer, get_project
@@ -325,6 +326,63 @@ def create_transaction(db: Session, actor: CurrentSession, payload: CreateFinanc
     return _transaction_summaries(db, [row])[0]
 
 
+def update_transaction(
+    db: Session,
+    actor: CurrentSession,
+    transaction_id: str,
+    payload: UpdateFinanceTransactionRequest,
+) -> FinanceTransactionSummary:
+    row = db.scalar(select(FinanceTransaction).where(
+        FinanceTransaction.id == transaction_id,
+        FinanceTransaction.company_id == actor.membership.company_id,
+    ))
+    if not row:
+        raise FinanceNotFoundError('Finance transaction not found')
+    _load_account(db, actor, payload.account_id)
+    if payload.category_id:
+        category = db.scalar(select(FinanceCategory).where(
+            FinanceCategory.id == payload.category_id,
+            FinanceCategory.company_id == actor.membership.company_id,
+            FinanceCategory.is_active.is_(True),
+        ))
+        if not category:
+            raise FinanceNotFoundError('Finance category not found')
+
+    editable_fields = (
+        'transaction_date', 'direction', 'category_id', 'amount', 'account_id',
+        'payment_method', 'source_type', 'reference_number', 'description',
+    )
+    before = {field: getattr(row, field) for field in editable_fields}
+    row.transaction_date = payload.transaction_date
+    row.direction = payload.direction
+    row.category_id = payload.category_id
+    row.amount = _decimal(payload.amount)
+    row.account_id = payload.account_id
+    row.payment_method = payload.payment_method
+    row.source_type = payload.source_type
+    row.reference_number = payload.reference_number
+    row.description = payload.description
+    changes = {
+        field: {'old': str(before[field]), 'new': str(getattr(row, field))}
+        for field in editable_fields
+        if before[field] != getattr(row, field)
+    }
+    write_event(
+        db,
+        company_id=row.company_id,
+        event='finance.transaction_updated',
+        entity='finance_transaction',
+        entity_id=row.id,
+        actor=actor,
+        project_id=row.project_id,
+        customer_id=row.customer_id,
+        changes={'transaction_number': row.transaction_number, 'fields': changes},
+    )
+    db.commit()
+    db.refresh(row)
+    return _transaction_summaries(db, [row])[0]
+
+
 
 def reverse_transaction(db: Session, actor: CurrentSession, transaction_id: str, payload: ReverseFinanceTransactionRequest) -> FinanceTransactionSummary:
     original = db.scalar(select(FinanceTransaction).where(FinanceTransaction.id == transaction_id, FinanceTransaction.company_id == actor.membership.company_id))
@@ -404,7 +462,6 @@ def list_bill_customers(db: Session, actor: CurrentSession) -> list[BillCustomer
         select(AgentCustomer)
         .where(
             AgentCustomer.company_id == actor.membership.company_id,
-            AgentCustomer.archived_at.is_(None),
         )
         .order_by(AgentCustomer.customer_name)
     ).all()
@@ -510,7 +567,8 @@ def overview(db: Session, actor: CurrentSession) -> FinanceOverview:
     recent_rows = list(db.scalars(select(FinanceTransaction).where(FinanceTransaction.company_id == company_id).order_by(FinanceTransaction.transaction_date.desc(), FinanceTransaction.created_at.desc()).limit(8)).all())
     pending_rows = list(db.scalars(select(Bill).where(Bill.company_id == company_id, Bill.balance_amount > 0, Bill.status != 'cancelled').order_by(Bill.due_date.asc().nullslast()).limit(8)).all())
     expense_rows = db.execute(select(FinanceCategory.name, func.sum(FinanceTransaction.amount)).join(FinanceTransaction, FinanceTransaction.category_id == FinanceCategory.id).where(FinanceTransaction.company_id == company_id, FinanceTransaction.direction == 'debit', FinanceTransaction.source_type == 'expense', FinanceTransaction.status == 'posted', FinanceTransaction.transaction_date >= start, FinanceTransaction.transaction_date < end).group_by(FinanceCategory.name).order_by(func.sum(FinanceTransaction.amount).desc()).limit(8)).all()
-    flow_rows = db.execute(select(func.strftime('%Y-%m', FinanceTransaction.transaction_date), FinanceTransaction.direction, func.sum(FinanceTransaction.amount)).where(FinanceTransaction.company_id == company_id, FinanceTransaction.status == 'posted').group_by(func.strftime('%Y-%m', FinanceTransaction.transaction_date), FinanceTransaction.direction).order_by(func.strftime('%Y-%m', FinanceTransaction.transaction_date).desc()).limit(12)).all() if db.bind and db.bind.dialect.name == 'sqlite' else []
+    month_bucket = func.to_char(func.date_trunc('month', FinanceTransaction.transaction_date), 'YYYY-MM')
+    flow_rows = db.execute(select(month_bucket, FinanceTransaction.direction, func.sum(FinanceTransaction.amount)).where(FinanceTransaction.company_id == company_id, FinanceTransaction.status == 'posted').group_by(month_bucket, FinanceTransaction.direction).order_by(month_bucket.desc()).limit(24)).all()
     flow_map: dict[str, dict[str, float | str]] = {}
     for month, direction, amount in flow_rows:
         bucket = flow_map.setdefault(str(month), {'month': str(month), 'money_in': 0.0, 'money_out': 0.0})
@@ -525,7 +583,7 @@ def profitability(db: Session, actor: CurrentSession) -> ProfitabilitySummary:
     subsidy = db.scalar(select(func.coalesce(func.sum(FinanceTransaction.amount), 0)).where(FinanceTransaction.company_id == actor.membership.company_id, FinanceTransaction.source_type == 'subsidy_received', FinanceTransaction.direction == 'credit', FinanceTransaction.status == 'posted')) or 0
     project_expenses = db.scalar(select(func.coalesce(func.sum(FinanceTransaction.amount), 0)).where(FinanceTransaction.company_id == actor.membership.company_id, FinanceTransaction.direction == 'debit', FinanceTransaction.project_id.is_not(None), FinanceTransaction.status == 'posted')) or 0
     operating = db.scalar(select(func.coalesce(func.sum(FinanceTransaction.amount), 0)).where(FinanceTransaction.company_id == actor.membership.company_id, FinanceTransaction.direction == 'debit', FinanceTransaction.project_id.is_(None), FinanceTransaction.status == 'posted')) or 0
-    projects = list(db.scalars(select(CustomerProject).where(CustomerProject.company_id == actor.membership.company_id, CustomerProject.archived_at.is_(None)).order_by(CustomerProject.created_at.desc()).limit(100)).all())
+    projects = list(db.scalars(select(CustomerProject).where(CustomerProject.company_id == actor.membership.company_id).order_by(CustomerProject.created_at.desc()).limit(100)).all())
     project_rows = []
     for project in projects:
         received = db.scalar(select(func.coalesce(func.sum(FinanceTransaction.amount), 0)).where(FinanceTransaction.project_id == project.id, FinanceTransaction.direction == 'credit', FinanceTransaction.status == 'posted')) or 0

@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from decimal import Decimal
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import Date, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -78,10 +78,6 @@ class CustomerProject(TimestampMixin, Base):
     dcr_status: Mapped[str] = mapped_column(String(32), default="pending", nullable=False)
     subsidy_status: Mapped[str] = mapped_column(String(32), default="pending", nullable=False)
     subsidiary_payment_status: Mapped[str] = mapped_column(String(32), default="pending", nullable=False)
-    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    archived_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
-    archive_id: Mapped[str | None] = mapped_column(String(36), index=True, nullable=True)
-    is_locked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
 
 class MaterialRequest(TimestampMixin, Base):

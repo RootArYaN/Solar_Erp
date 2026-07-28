@@ -8,6 +8,7 @@ export const createFinancialAccount = (body: Record<string, unknown>): Promise<F
 export const getFinanceCategories = (): Promise<FinanceCategory[]> => apiRequest('/finance/categories')
 export const getFinanceTransactions = (query = ''): Promise<FinanceTransactionList> => apiRequest(`/finance/transactions${query ? `?${query}` : ''}`)
 export const createFinanceTransaction = (body: Record<string, unknown>): Promise<FinanceTransaction> => apiRequest('/finance/transactions', { method: 'POST', body, idempotencyKey: createClientId() })
+export const updateFinanceTransaction = (id: string, body: Record<string, unknown>): Promise<FinanceTransaction> => apiRequest(`/finance/transactions/${id}`, { method: 'PATCH', body })
 export const reverseFinanceTransaction = (id: string, body: Record<string, unknown>): Promise<FinanceTransaction> => apiRequest(`/finance/transactions/${id}/reverse`, { method: 'POST', body, idempotencyKey: createClientId() })
 export const transferFinancialAccounts = (body: Record<string, unknown>): Promise<FinanceTransaction[]> => apiRequest('/finance/transfers', { method: 'POST', body, idempotencyKey: createClientId() })
 export const getExpenses = (query = ''): Promise<FinanceTransactionList> => apiRequest(`/finance/expenses${query ? `?${query}` : ''}`)

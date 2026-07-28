@@ -1,31 +1,34 @@
 import { CalendarDays, IndianRupee, ReceiptText } from 'lucide-react'
 import { FormEvent, useState } from 'react'
-import type { CreateAgentTransactionInput } from '../../types'
+import type { AgentTransaction, CreateAgentTransactionInput } from '../../types'
 import { Modal } from '../admin/Modal'
 
 type EntrySide = 'credit' | 'debit'
 
 export function AgentTransactionDialog({
   busy,
+  transaction,
   onClose,
   onSubmit,
 }: {
   busy: boolean
+  transaction?: AgentTransaction | null
   onClose: () => void
   onSubmit: (value: CreateAgentTransactionInput) => Promise<void>
 }) {
-  const [entrySide, setEntrySide] = useState<EntrySide>('credit')
-  const [transactionType, setTransactionType] = useState('commission')
-  const [reference, setReference] = useState('')
-  const [description, setDescription] = useState('')
-  const [amount, setAmount] = useState('')
-  const [transactionDate, setTransactionDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const [entrySide, setEntrySide] = useState<EntrySide>(transaction?.debit ? 'debit' : 'credit')
+  const [transactionType, setTransactionType] = useState(transaction?.transaction_type || 'commission')
+  const [reference, setReference] = useState(transaction?.reference || '')
+  const [description, setDescription] = useState(transaction?.description || '')
+  const [amount, setAmount] = useState(transaction ? String(transaction.debit || transaction.credit) : '')
+  const [transactionDate, setTransactionDate] = useState(() => transaction ? new Date(transaction.transaction_date).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10))
 
   async function submit(event: FormEvent) {
     event.preventDefault()
     const numericAmount = Number(amount)
     await onSubmit({
       transaction_date: new Date(`${transactionDate}T12:00:00`).toISOString(),
+      project_id: transaction?.project_id || undefined,
       reference,
       transaction_type: transactionType,
       description,
@@ -35,7 +38,7 @@ export function AgentTransactionDialog({
   }
 
   return (
-    <Modal title="Submit transaction" onClose={onClose}>
+    <Modal title={transaction ? `Edit ${transaction.reference || 'agent transaction'}` : 'Submit transaction'} onClose={onClose}>
       <form className="admin-form" onSubmit={submit}>
         <div className="admin-form__grid">
           <label className="field">
@@ -82,11 +85,11 @@ export function AgentTransactionDialog({
           <textarea required value={description} onChange={(event) => setDescription(event.target.value)} maxLength={240} placeholder="Transaction note" />
         </label>
 
-        <div className="workflow-note">Agent entries remain pending and do not change the balance until an administrator approves them.</div>
+        <div className="workflow-note">{transaction ? `Approval remains ${transaction.approval_status}; the edit is recorded in the audit log.` : 'Agent entries remain pending and do not change the balance until an administrator approves them.'}</div>
 
         <footer className="modal-actions">
           <button type="button" className="secondary-button" onClick={onClose}>Cancel</button>
-          <button type="submit" className="primary-button primary-button--compact" disabled={busy || Number(amount) <= 0}>{busy ? 'Submitting…' : 'Submit for approval'}</button>
+          <button type="submit" className="primary-button primary-button--compact" disabled={busy || Number(amount) <= 0}>{busy ? 'Saving…' : transaction ? 'Save changes' : 'Submit for approval'}</button>
         </footer>
       </form>
     </Modal>

@@ -26,9 +26,8 @@ class LocalStorage:
     def __init__(self, root: Path | None = None):
         self.root = (root or settings.storage_root).resolve()
         self.active_root = self.root / "active"
-        self.archive_root = self.root / "archives"
         self.temp_root = self.root / "temp"
-        for path in (self.active_root, self.archive_root, self.temp_root):
+        for path in (self.active_root, self.temp_root):
             path.mkdir(parents=True, exist_ok=True)
 
     def path(self, relative_path: str) -> Path:

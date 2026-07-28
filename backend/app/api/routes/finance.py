@@ -26,6 +26,7 @@ from app.schemas.finance import (
     ProfitabilitySummary,
     RecordBillPaymentRequest,
     ReverseFinanceTransactionRequest,
+    UpdateFinanceTransactionRequest,
     UpsertCustomerLoanRequest,
 )
 from app.services import finance_service
@@ -81,6 +82,12 @@ def get_transactions(
 @router.post('/transactions', response_model=FinanceTransactionSummary, status_code=201)
 def post_transaction(payload: CreateFinanceTransactionRequest, db: Session = Depends(get_db), session: CurrentSession = Depends(require_any_permissions('finance.manage'))):
     try: return finance_service.create_transaction(db, session, payload)
+    except FinanceServiceError as exc: _raise(exc)
+
+
+@router.patch('/transactions/{transaction_id}', response_model=FinanceTransactionSummary)
+def patch_transaction(transaction_id: str, payload: UpdateFinanceTransactionRequest, db: Session = Depends(get_db), session: CurrentSession = Depends(require_any_permissions('finance.manage'))):
+    try: return finance_service.update_transaction(db, session, transaction_id, payload)
     except FinanceServiceError as exc: _raise(exc)
 
 

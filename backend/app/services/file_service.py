@@ -32,6 +32,25 @@ ALLOWED_MIME = {
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 }
 
+CUSTOMER_DOCUMENT_FILE_SUFFIXES = {
+    "aadhaar": "Aadhaar_Card",
+    "pan": "PAN_Card",
+    "photo": "Passport_Size_Photo",
+    "electricity_bill": "Electricity_Bill",
+    "cancelled_cheque": "Cancelled_Cheque",
+    "bank_passbook": "Bank_Passbook",
+    "ownership_proof": "Property_Ownership_Proof",
+    "site_photo": "Site_Photographs",
+    "customer_signature": "Customer_Signature",
+    "loan_document": "Loan_Documents",
+    "discom_document": "DISCOM_Documents",
+    "installation_photo": "Installation_Photographs",
+    "dcr_document": "DCR_Documents",
+    "subsidy_document": "Subsidy_Documents",
+    "sales_bill": "Sales_Bill",
+    "completion_document": "Completion_Document",
+}
+
 
 class FileServiceError(Exception):
     status_code = 400
@@ -58,7 +77,6 @@ def _summary(row: StoredFile) -> StoredFileSummary:
         checksum=row.checksum,
         status=row.status,
         created_at=row.created_at,
-        archived_at=row.archived_at,
     )
 
 
@@ -80,7 +98,6 @@ def list_document_customers(db: Session, actor: CurrentSession) -> list[Document
         select(AgentCustomer)
         .where(
             AgentCustomer.company_id == actor.membership.company_id,
-            AgentCustomer.archived_at.is_(None),
             _customer_filter(actor),
         )
         .order_by(AgentCustomer.customer_name.asc())
@@ -92,7 +109,6 @@ def list_document_customers(db: Session, actor: CurrentSession) -> list[Document
         .where(
             CustomerProject.company_id == actor.membership.company_id,
             CustomerProject.customer_id.in_([row.id for row in customers]),
-            CustomerProject.archived_at.is_(None),
         )
         .order_by(CustomerProject.created_at.desc())
     ).all())
@@ -114,6 +130,24 @@ def list_document_customers(db: Session, actor: CurrentSession) -> list[Document
 def _clean_name(value: str) -> str:
     name = Path(value or "document").name.replace("\x00", "").strip()
     return name[:240] or "document"
+
+
+def _typed_customer_document_name(name: str, owner_type: str) -> str:
+    if not owner_type.startswith("customer_document:"):
+        return name
+    document_type = owner_type.partition(":")[2]
+    suffix = CUSTOMER_DOCUMENT_FILE_SUFFIXES.get(document_type)
+    if not suffix:
+        return name
+
+    path = Path(name)
+    extension = path.suffix
+    stem = path.stem or "document"
+    normalized_stem = stem.lower().replace(" ", "_").replace("-", "_")
+    if normalized_stem.endswith(f"_{suffix.lower()}"):
+        return name
+    max_stem_length = max(1, 240 - len(extension) - len(suffix) - 1)
+    return f"{stem[:max_stem_length]}_{suffix}{extension}"
 
 
 def _signature_mime(header: bytes, extension: str) -> str | None:
@@ -161,6 +195,7 @@ async def save_file(
         raise FileServiceError("The file content does not match an allowed document type")
     if declared_mime not in ALLOWED_MIME and not declared_mime.startswith("text/"):
         raise FileServiceError("The file MIME type is not allowed")
+    name = _typed_customer_document_name(name, owner_type)
 
     relative = f"active/{actor.membership.company_id}/{uuid4().hex}{extension}"
     try:
@@ -280,12 +315,8 @@ def get_file(db: Session, actor: CurrentSession, file_id: str) -> StoredFile:
 def set_file_status(db: Session, actor: CurrentSession, file_id: str, status: str) -> StoredFileSummary:
     row = get_file(db, actor, file_id)
     row.status = status
-    row.archived_at = datetime.now(UTC) if status in {"archived", "deleted"} else None
-    event = {
-        "archived": "document.archived",
-        "deleted": "document.deleted",
-        "active": "document.restored",
-    }[status]
+    row.deleted_at = datetime.now(UTC)
+    event = "document.deleted"
     write_event(
         db,
         company_id=row.company_id,

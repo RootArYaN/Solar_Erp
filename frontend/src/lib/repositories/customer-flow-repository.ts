@@ -13,8 +13,6 @@ export type CustomerFlowRepository = {
   updateCustomer(customerId: UUID, input: Record<string, unknown>): Promise<CustomerFlowSnapshot>
   approveQuotation(customerId: UUID, quotationId: UUID, comment: string): Promise<CustomerFlowSnapshot>
   saveMaterialRequest(customerId: UUID, input: Pick<MaterialRequest, 'purpose' | 'needed_at_site_by' | 'lines'>): Promise<CustomerFlowSnapshot>
-  archiveCustomer(customerId: UUID, reason: string): Promise<CustomerFlowSnapshot>
-  restoreCustomer(customerId: UUID): Promise<CustomerFlowSnapshot>
 }
 
 export function createCustomerFlowRepository(token?: string): CustomerFlowRepository {
@@ -44,19 +42,6 @@ export function createCustomerFlowRepository(token?: string): CustomerFlowReposi
         ...options,
         method: 'PUT',
         body: input,
-      })
-    },
-    archiveCustomer(customerId, reason) {
-      return apiRequest<CustomerFlowSnapshot>(`/customer-flow/customers/${customerId}/archive`, {
-        ...options,
-        method: 'POST',
-        body: { reason },
-      })
-    },
-    restoreCustomer(customerId) {
-      return apiRequest<CustomerFlowSnapshot>(`/customer-flow/customers/${customerId}/restore`, {
-        ...options,
-        method: 'POST',
       })
     },
   }

@@ -103,8 +103,7 @@ def _customer_summary(db: Session, customer: AgentCustomer, payment_mode: str = 
         addresses.append(FlowAddress(id=f'{customer.id}-billing', label='Billing', line_1=billing_address, district=customer.district, state=customer.state, postal_code=customer.postal_code, is_primary=False))
     return FlowCustomer(
         id=customer.id, record_number=_record_number('CUS', customer.created_at, customer.id), version=1,
-        created_at=customer.created_at, updated_at=customer.updated_at, archived_at=customer.archived_at,
-        archived_by=customer.archived_by, archive_reason='Archived from customer workspace' if customer.archived_at else None,
+        created_at=customer.created_at, updated_at=customer.updated_at,
         display_name=customer.customer_name, legal_name=customer.customer_name,
         customer_type=customer.customer_type or 'residential', status=customer.status,
         primary_contact_id=contact.id, contacts=[contact], addresses=addresses,
@@ -131,7 +130,7 @@ def _quotation_map(db: Session, requests: list[QuotationRequest]) -> dict[str, C
 def _project_map(db: Session, quotations: list[CustomerQuotation]) -> dict[str, CustomerProject]:
     if not quotations:
         return {}
-    rows = db.scalars(select(CustomerProject).where(CustomerProject.quotation_id.in_([row.id for row in quotations]), CustomerProject.archived_at.is_(None)).order_by(CustomerProject.created_at.desc())).all()
+    rows = db.scalars(select(CustomerProject).where(CustomerProject.quotation_id.in_([row.id for row in quotations])).order_by(CustomerProject.created_at.desc())).all()
     return {row.quotation_id: row for row in rows}
 
 
@@ -189,7 +188,7 @@ def _quotation_summary(request: QuotationRequest, quotation: CustomerQuotation) 
 def _project_summary(request: QuotationRequest, project: CustomerProject) -> FlowProject:
     return FlowProject(
         id=project.id, record_number=project.project_number, version=1, created_at=project.created_at,
-        updated_at=project.updated_at, archived_at=project.archived_at, archived_by=project.archived_by,
+        updated_at=project.updated_at,
         customer_id=project.customer_id, site_id=request.id, quotation_id=project.quotation_id, name=project.name,
         status=project.status, capacity_kw=_money(project.capacity_kw), approved_value=_money(project.approved_value),
         site_address=project.site_address or request.site_address, payment_mode=project.payment_mode,
@@ -245,7 +244,7 @@ def _payments(db: Session, customer_id: str) -> list[FlowPayment]:
     rows = list(db.scalars(select(FinanceTransaction).where(FinanceTransaction.customer_id == customer_id).order_by(FinanceTransaction.transaction_date.desc(), FinanceTransaction.created_at.desc()).limit(100)).all())
     account_ids = {row.account_id for row in rows}
     accounts = {row.id: row for row in db.scalars(select(FinancialAccount).where(FinancialAccount.id.in_(account_ids))).all()} if account_ids else {}
-    return [FlowPayment(id=row.id, transaction_number=row.transaction_number, transaction_date=row.transaction_date, direction=row.direction, amount=_money(row.amount), source_type=row.source_type, description=row.description, payment_method=row.payment_method, account_name=accounts[row.account_id].name if row.account_id in accounts else '', reference_number=row.reference_number, status=row.status) for row in rows]
+    return [FlowPayment(id=row.id, transaction_number=row.transaction_number, transaction_date=row.transaction_date, direction=row.direction, amount=_money(row.amount), account_id=row.account_id, category_id=row.category_id, source_type=row.source_type, description=row.description, payment_method=row.payment_method, account_name=accounts[row.account_id].name if row.account_id in accounts else '', reference_number=row.reference_number, status=row.status) for row in rows]
 
 
 def _loan(db: Session, project: CustomerProject | None) -> FlowLoan | None:
@@ -274,7 +273,6 @@ def list_customers(db: Session, actor: CurrentSession) -> CustomerFlowList:
         select(CustomerProject.customer_id, CustomerProject.payment_mode)
         .where(
             CustomerProject.customer_id.in_(customer_ids),
-            CustomerProject.archived_at.is_(None),
         )
         .order_by(CustomerProject.created_at.desc())
     ).all() if customer_ids else []
@@ -367,17 +365,3 @@ def save_material_draft(db: Session, actor: CurrentSession, customer_id: str, pa
     write_event(db, company_id=material.company_id, event='material_request.draft_saved', entity='material_request', entity_id=material.id, actor=actor, project_id=project.id, customer_id=customer.id, changes={'record_number': material.record_number, 'version': material.version, 'line_count': len(payload.lines)})
     db.commit()
     return get_snapshot(db, actor, customer.id)
-
-
-def archive_customer(db: Session, actor: CurrentSession, customer_id: str, reason: str) -> CustomerFlowSnapshot:
-    customer = _load_customer(db, actor, customer_id)
-    customer.archived_at = datetime.now(UTC); customer.archived_by = actor.membership.id
-    write_event(db, company_id=customer.company_id, event='customer.archived', entity='customer', entity_id=customer.id, actor=actor, customer_id=customer.id, changes={'reason': reason})
-    db.commit(); return get_snapshot(db, actor, customer.id)
-
-
-def restore_customer(db: Session, actor: CurrentSession, customer_id: str) -> CustomerFlowSnapshot:
-    customer = _load_customer(db, actor, customer_id)
-    customer.archived_at = None; customer.archived_by = None
-    write_event(db, company_id=customer.company_id, event='customer.restored', entity='customer', entity_id=customer.id, actor=actor, customer_id=customer.id)
-    db.commit(); return get_snapshot(db, actor, customer.id)

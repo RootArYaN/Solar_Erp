@@ -25,6 +25,7 @@ import {
   getAgentOverview,
   getAgents,
   updateAgentCustomer,
+  updateAgentTransaction,
   updateAgentProfile,
 } from '../../lib/api'
 import { downloadQuotationPdf } from '../../lib/quotation-document'
@@ -32,6 +33,7 @@ import type {
   AgentListItem,
   AgentCustomer,
   AgentOverview,
+  AgentTransaction,
   CreateAgentCustomerInput,
   CreateAgentTransactionInput,
   CreateQuotationRequestInput,
@@ -78,11 +80,13 @@ export function AgentOverviewPage({ session }: { session: Session }) {
   const { toast } = useToast()
   const [editingProfile, setEditingProfile] = useState(false)
   const [postingTransaction, setPostingTransaction] = useState(false)
+  const [editingTransaction, setEditingTransaction] = useState<AgentTransaction | null>(null)
   const [registeringCustomer, setRegisteringCustomer] = useState(false)
   const [editingCustomer, setEditingCustomer] = useState<AgentCustomer | null>(null)
   const [quotationCustomer, setQuotationCustomer] = useState<AgentCustomer | null>(null)
 
   const canPostTransactions = session.permissions.includes('agents.transactions.submit') || session.permissions.includes('agents.manage') || session.permissions.includes('finance.manage')
+  const canManageAgentTransactions = session.user.is_super_admin || session.permissions.includes('agents.manage') || session.permissions.includes('finance.manage')
   const canRegisterCustomers = session.permissions.includes('customers.create') || session.permissions.includes('agents.manage')
   const canRequestQuotations = session.permissions.includes('quotations.create') || session.permissions.includes('quotations.approve')
   const canOpenDocuments = session.user.is_super_admin || session.permissions.includes('documents.view') || session.permissions.includes('documents.manage')
@@ -215,6 +219,26 @@ export function AgentOverviewPage({ session }: { session: Session }) {
       toast({ message: transaction.approval_status === 'pending' ? 'Transaction submitted for admin approval' : 'Transaction approved and posted', variant: 'success' })
     } catch (reason) {
       toast({ message: reason instanceof Error ? reason.message : 'Could not submit transaction', variant: 'error' })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function saveTransaction(value: CreateAgentTransactionInput) {
+    if (!overview || !editingTransaction) return
+    setBusy(true)
+    try {
+      await updateAgentTransaction(
+        session.access_token,
+        overview.profile.membership_id,
+        editingTransaction.id,
+        value,
+      )
+      setEditingTransaction(null)
+      await Promise.all([loadOverview(overview.profile.membership_id), loadAgentList()])
+      toast({ message: 'Agent transaction updated', variant: 'success' })
+    } catch (reason) {
+      toast({ message: reason instanceof Error ? reason.message : 'Could not update agent transaction', variant: 'error' })
     } finally {
       setBusy(false)
     }
@@ -373,7 +397,7 @@ export function AgentOverviewPage({ session }: { session: Session }) {
         )}
 
         <div className="agent-page__actions">
-          <button className="secondary-button secondary-button--icon" onClick={() => void refreshPage()} disabled={loading}>
+          <button type="button" className="secondary-button secondary-button--icon" onClick={() => void refreshPage()} disabled={loading} aria-label="Refresh agent overview">
             <RefreshCw className={loading ? 'spin' : ''} size={16} /> Refresh
           </button>
           {overview && canEditSelectedProfile && (
@@ -501,7 +525,7 @@ export function AgentOverviewPage({ session }: { session: Session }) {
               {filteredTransactions.length === 0 ? <div className="empty-state">{overview.transactions.length === 0 ? 'No agent transactions have been posted.' : 'No transactions match this search.'}</div> : (
                 <div className="agent-table-wrap">
                   <table className="agent-table transaction-table">
-                    <thead><tr><th>Date</th><th>Reference</th><th>Transaction</th><th>Approval</th><th className="numeric-cell">Debit</th><th className="numeric-cell">Credit</th><th className="numeric-cell">Posted balance</th></tr></thead>
+                    <thead><tr><th>Date</th><th>Reference</th><th>Transaction</th><th>Approval</th><th className="numeric-cell">Debit</th><th className="numeric-cell">Credit</th><th className="numeric-cell">Posted balance</th>{canPostTransactions && <th>Action</th>}</tr></thead>
                     <tbody>
                       {filteredTransactions.map((transaction) => (
                         <tr key={transaction.id}>
@@ -512,6 +536,7 @@ export function AgentOverviewPage({ session }: { session: Session }) {
                           <td data-label="Debit" className="numeric-cell amount-debit">{transaction.debit > 0 ? currency.format(transaction.debit) : '—'}</td>
                           <td data-label="Credit" className="numeric-cell amount-credit">{transaction.credit > 0 ? currency.format(transaction.credit) : '—'}</td>
                           <td data-label="Balance" className="numeric-cell"><strong>{currency.format(transaction.running_balance)}</strong></td>
+                          {canPostTransactions && <td data-label="Action">{(canManageAgentTransactions || transaction.approval_status === 'pending') && <button className="table-action-button table-action-button--neutral" type="button" onClick={() => setEditingTransaction(transaction)}><Edit3 size={12} /> Edit</button>}</td>}
                         </tr>
                       ))}
                     </tbody>
@@ -529,6 +554,7 @@ export function AgentOverviewPage({ session }: { session: Session }) {
       {editingCustomer && <AgentCustomerDialog customer={editingCustomer} busy={busy} onClose={() => setEditingCustomer(null)} onSubmit={saveCustomer} />}
       {quotationCustomer && <QuotationRequestDialog customer={quotationCustomer} busy={busy} onClose={() => setQuotationCustomer(null)} onSubmit={requestQuotation} />}
       {postingTransaction && <AgentTransactionDialog busy={busy} onClose={() => setPostingTransaction(false)} onSubmit={postTransaction} />}
+      {editingTransaction && <AgentTransactionDialog transaction={editingTransaction} busy={busy} onClose={() => setEditingTransaction(null)} onSubmit={saveTransaction} />}
     </WorkspacePage>
   )
 }

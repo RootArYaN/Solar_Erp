@@ -32,18 +32,15 @@ def get_summary(db: Session, actor: CurrentSession) -> DashboardSummary:
     month_start = date.today().replace(day=1)
     active_project_filters = (
         CustomerProject.company_id == company_id,
-        CustomerProject.archived_at.is_(None),
         CustomerProject.status.in_(OPEN_PROJECT_STATUSES),
     )
 
     total_customers = _count(db, select(func.count()).select_from(AgentCustomer).where(
         AgentCustomer.company_id == company_id,
-        AgentCustomer.archived_at.is_(None),
     ))
     new_customers = _count(db, select(func.count()).select_from(AgentCustomer).where(
         AgentCustomer.company_id == company_id,
         AgentCustomer.created_at >= month_start,
-        AgentCustomer.archived_at.is_(None),
     ))
     active_projects = _count(db, select(func.count()).select_from(CustomerProject).where(
         *active_project_filters,
@@ -112,7 +109,6 @@ def get_summary(db: Session, actor: CurrentSession) -> DashboardSummary:
     ))
     completed_projects = _count(db, select(func.count()).select_from(CustomerProject).where(
         CustomerProject.company_id == company_id,
-        CustomerProject.archived_at.is_(None),
         CustomerProject.status == 'completed',
     ))
 

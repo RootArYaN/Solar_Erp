@@ -1,5 +1,4 @@
 import type {
-  ArchiveMetadata,
   DecimalString,
   RecordNumber,
   UUID,
@@ -7,7 +6,7 @@ import type {
   VersionedRecord,
 } from './api-contracts'
 
-export type EntityBase = ArchiveMetadata & VersionedRecord & {
+export type EntityBase = VersionedRecord & {
   id: UUID
   record_number: RecordNumber
 }
@@ -177,6 +176,8 @@ export type CustomerPayment = {
   transaction_date: string
   direction: 'credit' | 'debit'
   amount: DecimalString
+  account_id: UUID
+  category_id: UUID | null
   source_type: string
   description: string
   payment_method: string

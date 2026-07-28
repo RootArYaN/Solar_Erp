@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Index, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -28,57 +28,6 @@ class AuthSession(Base):
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     persistent: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
-
-class Archive(TimestampMixin, Base):
-    __tablename__ = "archives"
-    __table_args__ = (
-        Index("ix_archives_company_status_created", "company_id", "status", "created_at"),
-        Index("ix_archives_project", "project_id"),
-        Index("ix_archives_customer", "customer_id"),
-    )
-
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
-    company_id: Mapped[str] = mapped_column(ForeignKey("companies.id", ondelete="CASCADE"), index=True, nullable=False)
-    type: Mapped[str] = mapped_column(String(32), index=True, nullable=False)
-    ref_id: Mapped[str] = mapped_column(String(80), index=True, nullable=False)
-    project_id: Mapped[str | None] = mapped_column(String(36), index=True, nullable=True)
-    customer_id: Mapped[str | None] = mapped_column(String(36), index=True, nullable=True)
-    agent_profile_id: Mapped[str | None] = mapped_column(String(36), index=True, nullable=True)
-    status: Mapped[str] = mapped_column(String(32), default="queued", index=True, nullable=False)
-    file_name: Mapped[str] = mapped_column(String(240), default="", nullable=False)
-    storage_path: Mapped[str] = mapped_column(String(500), default="", nullable=False)
-    size_bytes: Mapped[int] = mapped_column(BigInteger, default=0, nullable=False)
-    checksum: Mapped[str] = mapped_column(String(64), default="", nullable=False)
-    version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
-    created_by: Mapped[str] = mapped_column(ForeignKey("memberships.id", ondelete="RESTRICT"), nullable=False)
-    verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    keep_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True, nullable=True)
-    cleaned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    restored_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    purged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    error: Mapped[str] = mapped_column(String(600), default="", nullable=False)
-    meta_json: Mapped[str] = mapped_column(Text, default="{}", nullable=False)
-
-
-class ArchiveJob(Base):
-    __tablename__ = "archive_jobs"
-    __table_args__ = (
-        Index("ix_archive_jobs_company_status_created", "company_id", "status", "created_at"),
-        Index("uq_archive_jobs_company_request_key", "company_id", "request_key", unique=True),
-    )
-
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
-    company_id: Mapped[str] = mapped_column(ForeignKey("companies.id", ondelete="CASCADE"), index=True, nullable=False)
-    archive_id: Mapped[str] = mapped_column(ForeignKey("archives.id", ondelete="CASCADE"), index=True, nullable=False)
-    action: Mapped[str] = mapped_column(String(24), nullable=False)
-    status: Mapped[str] = mapped_column(String(24), default="queued", index=True, nullable=False)
-    progress: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    worker_id: Mapped[str] = mapped_column(String(120), default="", nullable=False)
-    request_key: Mapped[str | None] = mapped_column(String(80), nullable=True)
-    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    error: Mapped[str] = mapped_column(String(600), default="", nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
 
 
 class AuditEvent(Base):
@@ -127,5 +76,4 @@ class StoredFile(Base):
     status: Mapped[str] = mapped_column(String(24), default="active", index=True, nullable=False)
     uploaded_by: Mapped[str] = mapped_column(ForeignKey("memberships.id", ondelete="RESTRICT"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True, nullable=False)
-    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

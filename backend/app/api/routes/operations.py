@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.api.deps import CurrentSession, require_any_permissions
@@ -25,6 +26,7 @@ from app.schemas.operations import (
     SavePricingBookRequest,
 )
 from app.services import operations_service
+from app.services.audit_service import write_event
 from app.services.operations_service import OperationsServiceError
 
 router = APIRouter(tags=['operations'])
@@ -83,7 +85,7 @@ def put_pricing(payload: SavePricingBookRequest, db: Session = Depends(get_db), 
 
 
 @router.get('/posters', response_model=list[PosterSummary])
-def get_posters(status: str | None = Query(default=None, pattern=r'^(draft|active|archived)$'), db: Session = Depends(get_db), session: CurrentSession = Depends(require_any_permissions('posters.view', 'posters.edit'))):
+def get_posters(status: str | None = Query(default=None, pattern=r'^(draft|active)$'), db: Session = Depends(get_db), session: CurrentSession = Depends(require_any_permissions('posters.view', 'posters.edit'))):
     return operations_service.list_posters(db, session, status)
 
 
@@ -102,7 +104,7 @@ def patch_poster(poster_id: str, payload: UpdatePosterRequest, db: Session = Dep
 
 
 @router.patch('/posters/{poster_id}/status', response_model=PosterSummary)
-def patch_poster_status(poster_id: str, payload: PosterStatusRequest, db: Session = Depends(get_db), session: CurrentSession = Depends(require_any_permissions('posters.edit', 'posters.archive'))):
+def patch_poster_status(poster_id: str, payload: PosterStatusRequest, db: Session = Depends(get_db), session: CurrentSession = Depends(require_any_permissions('posters.edit'))):
     try: return operations_service.set_poster_status(db, session, poster_id, payload.status)
     except OperationsServiceError as exc: _raise(exc)
 
@@ -134,3 +136,30 @@ def put_document_pack(customer_id: str, payload: SaveGeneratedDocumentPackReques
 def post_finalize_document_pack(pack_id: str, db: Session = Depends(get_db), session: CurrentSession = Depends(require_any_permissions('documents.approve', 'documents.manage'))):
     try: return operations_service.finalize_document_pack(db, session, pack_id)
     except OperationsServiceError as exc: _raise(exc)
+
+
+@router.get('/document-packs/{pack_id}/merged-download')
+def get_merged_document_pack(
+    pack_id: str,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    session: CurrentSession = Depends(require_any_permissions('documents.view', 'documents.manage')),
+):
+    try:
+        path, name, row, attachment_count = operations_service.merged_document_pack(db, session, pack_id)
+    except OperationsServiceError as exc:
+        _raise(exc)
+    write_event(
+        db,
+        company_id=row.company_id,
+        event='document_pack.merged_downloaded',
+        entity='generated_document_pack',
+        entity_id=row.id,
+        actor=session,
+        project_id=row.project_id,
+        customer_id=row.customer_id,
+        changes={'version': row.version, 'attachment_count': attachment_count},
+    )
+    db.commit()
+    background_tasks.add_task(path.unlink, missing_ok=True)
+    return FileResponse(path=path, media_type='application/pdf', filename=name, background=background_tasks)

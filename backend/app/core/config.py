@@ -8,7 +8,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     app_name: str = "Solar ERP API"
     environment: str = "development"
-    database_url: str = "sqlite:///./solar_erp.db"
+    database_url: str = "postgresql+psycopg://postgres:postgres@localhost:5432/solar_erp"
 
     jwt_secret: str = "replace-this-development-secret-with-at-least-32-characters"
     jwt_algorithm: str = "HS256"
@@ -22,9 +22,6 @@ class Settings(BaseSettings):
     storage_type: str = "local"
     storage_path: str = "./storage"
     max_upload_mb: int = 20
-    archive_keep_days: int = 30
-    archive_worker_limit: int = 1
-    archive_job_timeout_minutes: int = 60
     default_page_size: int = 25
     max_page_size: int = 100
     login_limit: int = 8
@@ -65,8 +62,8 @@ class Settings(BaseSettings):
             raise ValueError("SESSION_COOKIE_SAMESITE must be lax, strict or none")
         if self.storage_type != "local":
             raise ValueError("Only STORAGE_TYPE=local is available before cloud integration")
-        if self.archive_worker_limit < 1 or self.archive_job_timeout_minutes < 5:
-            raise ValueError("Archive worker limits must be positive and the timeout at least 5 minutes")
+        if not self.database_url.startswith("postgresql"):
+            raise ValueError("DATABASE_URL must use PostgreSQL")
         if self.is_production:
             if self.jwt_secret.startswith("replace-this-development-secret"):
                 raise ValueError("Set a private JWT_SECRET before production startup")

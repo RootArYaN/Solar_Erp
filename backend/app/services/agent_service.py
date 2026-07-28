@@ -11,7 +11,6 @@ from sqlalchemy.orm import Session, selectinload
 from app.api.deps import CurrentSession
 from app.models.agent import AgentCustomer, AgentCustomerEdit, AgentProfile, AgentTransaction
 from app.models.auth import Membership, Role, User
-from app.models.system import Archive
 from app.models.workflow import CustomerProject, CustomerQuotation, QuotationRequest, TransactionApproval
 from app.schemas.agent import (
     AgentCustomerSummary,
@@ -21,6 +20,7 @@ from app.schemas.agent import (
     AgentTransactionSummary,
     CreateAgentCustomerRequest,
     CreateAgentTransactionRequest,
+    UpdateAgentTransactionRequest,
     UpdateAgentCustomerRequest,
     UpdateAgentProfileRequest,
 )
@@ -185,33 +185,17 @@ def _is_posted(transaction: AgentTransaction, approvals: dict[str, TransactionAp
     return approval is None or approval.status == "approved"
 
 
-def _archived_balance(db: Session, profile_id: str) -> Decimal:
-    rows = list(db.scalars(select(Archive).where(
-        Archive.agent_profile_id == profile_id,
-        Archive.type == "agent_transactions",
-        Archive.status.in_(["ready", "cleaned"]),
-    )).all())
-    total = Decimal("0.00")
-    for row in rows:
-        try:
-            finance = json.loads(row.meta_json or "{}").get("finance", {})
-            total += Decimal(str(finance.get("total_credit", 0))) - Decimal(str(finance.get("total_debit", 0)))
-        except (TypeError, ValueError, json.JSONDecodeError):
-            continue
-    return total
-
-
 def _current_balance(db: Session, profile: AgentProfile, approvals: dict[str, TransactionApproval] | None = None) -> Decimal:
     approval_by_transaction = approvals if approvals is not None else {}
     live_total = sum(
         (
             Decimal(transaction.credit or 0) - Decimal(transaction.debit or 0)
             for transaction in profile.transactions
-            if transaction.archived_at is None and _is_posted(transaction, approval_by_transaction)
+            if _is_posted(transaction, approval_by_transaction)
         ),
         Decimal("0.00"),
     )
-    return Decimal(profile.opening_balance or 0) + _archived_balance(db, profile.id) + live_total
+    return Decimal(profile.opening_balance or 0) + live_total
 
 
 def list_agents(db: Session, actor: CurrentSession) -> list[AgentListItem]:
@@ -297,11 +281,11 @@ def get_agent_overview(db: Session, actor: CurrentSession, membership_id: str) -
     profile = _load_profile(db, membership)
 
     ordered_transactions = sorted(
-        (item for item in profile.transactions if item.archived_at is None),
+        profile.transactions,
         key=lambda item: (item.transaction_date, item.created_at),
     )
     approvals = _approval_map(db, ordered_transactions)
-    running_balance = Decimal(profile.opening_balance or 0) + _archived_balance(db, profile.id)
+    running_balance = Decimal(profile.opening_balance or 0)
     transaction_summaries: list[AgentTransactionSummary] = []
     for transaction in ordered_transactions:
         approval = approvals.get(transaction.id)
@@ -606,5 +590,67 @@ def create_agent_transaction(
     transaction_id = transaction.id
     db.expire_all()
 
+    overview = get_agent_overview(db, actor, membership_id)
+    return next(item for item in overview.transactions if item.id == transaction_id)
+
+
+def update_agent_transaction(
+    db: Session,
+    actor: CurrentSession,
+    membership_id: str,
+    transaction_id: str,
+    payload: UpdateAgentTransactionRequest,
+) -> AgentTransactionSummary:
+    own_edit = membership_id == actor.membership.id and "agents.transactions.submit" in actor.permissions
+    privileged_edit = _is_admin(actor) or bool({"agents.manage", "finance.manage"}.intersection(actor.permissions))
+    if not own_edit and not privileged_edit:
+        raise AgentForbiddenError("You cannot edit agent transactions")
+
+    membership = _load_agent_membership(db, actor.membership.company_id, membership_id)
+    profile = _load_profile(db, membership)
+    transaction = db.scalar(select(AgentTransaction).where(
+        AgentTransaction.id == transaction_id,
+        AgentTransaction.company_id == actor.membership.company_id,
+        AgentTransaction.agent_profile_id == profile.id,
+    ))
+    if not transaction:
+        raise AgentNotFoundError("Agent transaction not found")
+    approval = db.scalar(select(TransactionApproval).where(
+        TransactionApproval.transaction_id == transaction.id,
+        TransactionApproval.company_id == transaction.company_id,
+    ))
+    if own_edit and not privileged_edit and approval and approval.status != "pending":
+        raise AgentForbiddenError("Agents can only edit their pending transactions")
+
+    project = get_project(db, actor, payload.project_id) if payload.project_id else None
+    editable_fields = (
+        "transaction_date", "project_id", "reference", "transaction_type",
+        "description", "debit", "credit",
+    )
+    before = {field: getattr(transaction, field) for field in editable_fields}
+    transaction.transaction_date = payload.transaction_date or transaction.transaction_date
+    transaction.project_id = project.id if project else None
+    transaction.reference = payload.reference
+    transaction.transaction_type = payload.transaction_type
+    transaction.description = payload.description
+    transaction.debit = Decimal(str(payload.debit))
+    transaction.credit = Decimal(str(payload.credit))
+    changes = {
+        field: {"old": str(before[field]), "new": str(getattr(transaction, field))}
+        for field in editable_fields
+        if before[field] != getattr(transaction, field)
+    }
+    write_event(
+        db,
+        company_id=transaction.company_id,
+        event="transaction.updated",
+        entity="agent_transaction",
+        entity_id=transaction.id,
+        actor=actor,
+        project_id=transaction.project_id,
+        changes={"fields": changes, "approval_status": approval.status if approval else "approved"},
+    )
+    db.commit()
+    db.expire_all()
     overview = get_agent_overview(db, actor, membership_id)
     return next(item for item in overview.transactions if item.id == transaction_id)

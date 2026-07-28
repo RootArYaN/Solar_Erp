@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 import json
+import re
+import tempfile
+from io import BytesIO
+from pathlib import Path
 from datetime import UTC, datetime
 from uuid import uuid4
 from decimal import Decimal
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -45,6 +49,8 @@ from app.schemas.operations import (
 )
 from app.services.access_service import AccessError, get_customer, get_project
 from app.services.audit_service import write_event
+from app.services.storage import storage
+from app.services import workflow_service
 
 
 class OperationsServiceError(Exception):
@@ -57,6 +63,114 @@ class OperationsNotFoundError(OperationsServiceError):
 
 class OperationsConflictError(OperationsServiceError):
     status_code = 409
+
+
+def _customer_document_slot(row: StoredFile) -> str:
+    if row.owner_type.startswith("customer_document:"):
+        return row.owner_type.partition(":")[2]
+    normalized = re.sub(r"[^a-z0-9]+", " ", Path(row.name).stem.lower()).strip()
+    if any(alias in normalized for alias in ("aadhaar", "aadhar", "adhar")):
+        return "aadhaar"
+    if "customer signature" in normalized or normalized == "signature":
+        return "customer_signature"
+    return ""
+
+
+def _active_customer_documents(db: Session, row: GeneratedDocumentPack) -> list[StoredFile]:
+    return list(db.scalars(
+        select(StoredFile)
+        .where(
+            StoredFile.company_id == row.company_id,
+            StoredFile.customer_id == row.customer_id,
+            StoredFile.status == "active",
+            or_(
+                StoredFile.owner_type == "customer_document",
+                StoredFile.owner_type.like("customer_document:%"),
+            ),
+        )
+        .order_by(StoredFile.created_at.asc())
+    ).all())
+
+
+def _required_customer_documents(db: Session, row: GeneratedDocumentPack) -> list[str]:
+    present = {_customer_document_slot(file) for file in _active_customer_documents(db, row)}
+    labels = {"aadhaar": "Aadhaar card", "customer_signature": "Customer signature"}
+    return [labels[key] for key in ("aadhaar", "customer_signature") if key not in present]
+
+
+def merged_document_pack(
+    db: Session,
+    actor: CurrentSession,
+    pack_id: str,
+) -> tuple[Path, str, GeneratedDocumentPack, int]:
+    row = db.scalar(select(GeneratedDocumentPack).where(
+        GeneratedDocumentPack.id == pack_id,
+        GeneratedDocumentPack.company_id == actor.membership.company_id,
+    ))
+    if not row:
+        raise OperationsNotFoundError("Document pack not found")
+    _document_context(db, actor, row.customer_id)
+    if row.status not in {"generated", "final"}:
+        raise OperationsConflictError("Generate the full document pack before downloading a merged PDF")
+
+    generated = db.scalar(
+        select(StoredFile)
+        .where(
+            StoredFile.company_id == row.company_id,
+            StoredFile.owner_type == "generated_document_pack",
+            StoredFile.owner_id == row.id,
+            StoredFile.status == "active",
+            StoredFile.mime_type == "application/pdf",
+        )
+        .order_by(StoredFile.created_at.desc())
+    )
+    if not generated:
+        raise OperationsNotFoundError("The stored full-pack PDF is missing for this version")
+
+    attachments = _active_customer_documents(db, row)
+    try:
+        from PIL import Image, ImageOps
+        from pypdf import PdfReader, PdfWriter
+
+        writer = PdfWriter()
+        writer.append(str(storage.path(generated.storage_path)))
+        image_buffers: list[BytesIO] = []
+        for attachment in attachments:
+            path = storage.path(attachment.storage_path)
+            if attachment.mime_type == "application/pdf":
+                writer.append(str(path))
+                continue
+            if attachment.mime_type.startswith("image/"):
+                with Image.open(path) as source:
+                    image = ImageOps.exif_transpose(source).convert("RGB")
+                    image_pdf = BytesIO()
+                    image.save(image_pdf, format="PDF", resolution=150)
+                    image_pdf.seek(0)
+                    image_buffers.append(image_pdf)
+                    writer.append(PdfReader(image_pdf))
+                continue
+            raise OperationsConflictError(
+                f"{attachment.name} cannot be merged. Upload customer attachments as PDF, JPG, PNG, or WebP."
+            )
+
+        with tempfile.NamedTemporaryFile(
+            prefix=f"document-pack-v{row.version}-",
+            suffix=".pdf",
+            dir=storage.temp_root,
+            delete=False,
+        ) as output:
+            writer.write(output)
+            output_path = Path(output.name)
+        for buffer in image_buffers:
+            buffer.close()
+    except OperationsServiceError:
+        raise
+    except Exception as exc:
+        raise OperationsConflictError(f"Could not merge the document pack: {exc}") from exc
+
+    base_name = Path(generated.name).stem
+    download_name = f"{base_name}_With_Attachments.pdf"
+    return output_path, download_name, row, len(attachments)
 
 
 def _d(value) -> Decimal:
@@ -328,7 +442,6 @@ def _document_context(db: Session, actor: CurrentSession, customer_id: str) -> t
         .where(
             CustomerProject.company_id == actor.membership.company_id,
             CustomerProject.customer_id == customer.id,
-            CustomerProject.archived_at.is_(None),
         )
         .order_by(CustomerProject.created_at.desc())
     )
@@ -353,7 +466,7 @@ def _document_pack_summary(row: GeneratedDocumentPack) -> GeneratedDocumentPackS
 
 
 def list_document_packs(db: Session, actor: CurrentSession, customer_id: str) -> list[GeneratedDocumentPackSummary]:
-    _document_context(db, actor, customer_id)
+    _, project, _ = _document_context(db, actor, customer_id)
     rows = list(db.scalars(
         select(GeneratedDocumentPack)
         .where(
@@ -362,6 +475,15 @@ def list_document_packs(db: Session, actor: CurrentSession, customer_id: str) ->
         )
         .order_by(GeneratedDocumentPack.version.desc())
     ).all())
+    target_status = (
+        "approved" if any(row.status == "final" for row in rows)
+        else "in_progress" if any(row.status == "generated" for row in rows)
+        else None
+    )
+    if target_status and workflow_service.sync_documentation_progress(
+        db, actor, project.id, target_status
+    ):
+        db.commit()
     return [_document_pack_summary(row) for row in rows]
 
 
@@ -391,12 +513,21 @@ def save_document_pack(
         row.project_id = project.id
         row.quotation_id = quotation.id
         row.updated_by = actor.membership.id
+    if payload.status == "generated":
+        db.flush()
+        missing_documents = _required_customer_documents(db, row)
+        if missing_documents:
+            raise OperationsConflictError(
+                f"Upload {' and '.join(missing_documents)} before generating the full document pack"
+            )
     row.input_snapshot_json = json.dumps(payload.input_snapshot, separators=(',', ':'), default=str)
     row.template_snapshot_json = json.dumps(template.settings, separators=(',', ':'), default=str)
     row.status = payload.status
     row.generated_at = datetime.now(UTC) if payload.status == 'generated' else row.generated_at
     row.finalized_at = None
     db.flush()
+    if payload.status == "generated":
+        workflow_service.sync_documentation_progress(db, actor, project.id, "in_progress")
     write_event(
         db, company_id=row.company_id,
         event='document_pack.generated' if payload.status == 'generated' else 'document_pack.draft_saved',
@@ -415,12 +546,13 @@ def finalize_document_pack(db: Session, actor: CurrentSession, pack_id: str) -> 
     ))
     if not row:
         raise OperationsNotFoundError('Document pack not found')
-    _document_context(db, actor, row.customer_id)
+    _, project, _ = _document_context(db, actor, row.customer_id)
     if row.status != 'generated':
         raise OperationsConflictError('Generate the document pack before finalizing it')
     row.status = 'final'
     row.finalized_at = datetime.now(UTC)
     row.updated_by = actor.membership.id
+    workflow_service.sync_documentation_progress(db, actor, project.id, "approved")
     write_event(
         db, company_id=row.company_id, event='document_pack.finalized', entity='generated_document_pack',
         entity_id=row.id, actor=actor, project_id=row.project_id, customer_id=row.customer_id,

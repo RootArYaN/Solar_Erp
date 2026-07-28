@@ -317,35 +317,6 @@ export type ProjectTimelineStepInput = {
   event_date?: string | null
 }
 
-export type ArchiveStatus = 'queued' | 'collecting' | 'packing' | 'verifying' | 'ready' | 'cleaned' | 'failed' | 'restored' | 'purged'
-
-export type ArchiveSummary = {
-  id: string
-  type: 'project' | 'customer' | 'agent_transactions'
-  ref_id: string
-  project_id: string | null
-  customer_id: string | null
-  customer_name: string
-  agent_name: string
-  project_name: string
-  status: ArchiveStatus
-  file_name: string
-  size_bytes: number
-  checksum: string
-  created_at: string
-  verified_at: string | null
-  keep_until: string | null
-  cleaned_at: string | null
-  restored_at: string | null
-  error: string
-}
-
-export type ArchiveList = { data: ArchiveSummary[]; page: number; page_size: number; total: number }
-export type ArchiveKpis = { archived_projects: number; storage_used: number; ready_for_cleanup: number; failed_jobs: number; last_cleanup: string | null }
-export type ArchiveFile = { relative_path: string; name: string; size_bytes: number; checksum: string; mime_type: string; source_file_id: string | null }
-export type ArchiveDetail = ArchiveSummary & { version: number; meta: Record<string, unknown>; files: ArchiveFile[] }
-export type ArchiveJob = { id: string; archive_id: string; action: string; status: string; progress: number; started_at: string | null; finished_at: string | null; error: string; created_at: string }
-export type AgentTransactionArchiveInput = { agent_membership_id: string; from_date: string; to_date: string; transaction_type?: string; project_id?: string }
 
 export type AuditEvent = {
   id: string
@@ -381,8 +352,7 @@ export type StoredFile = {
   mime_type: string
   size_bytes: number
   checksum: string
-  status: 'active' | 'archived' | 'deleted'
+  status: 'active' | 'deleted'
   created_at: string
-  archived_at: string | null
 }
 export type StoredFileList = { data: StoredFile[]; page: number; page_size: number; total: number }

@@ -118,5 +118,5 @@ def write_project_summary_pdf(path: Path, project: CustomerProject, customer: Ag
         f"Capacity: {project.capacity_kw} kW",
         f"Approved value: {_money(project.approved_value)}",
         f"Created: {project.created_at.isoformat()}",
-        "This report was generated from the verified ERP archive snapshot.",
+        "This report was generated from verified ERP data.",
     ])
