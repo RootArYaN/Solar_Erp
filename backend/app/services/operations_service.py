@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from uuid import uuid4
 from decimal import Decimal
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -83,7 +83,6 @@ def _active_customer_documents(db: Session, row: GeneratedDocumentPack) -> list[
         .where(
             StoredFile.company_id == row.company_id,
             StoredFile.customer_id == row.customer_id,
-            StoredFile.status == "active",
             or_(
                 StoredFile.owner_type == "customer_document",
                 StoredFile.owner_type.like("customer_document:%"),
@@ -120,7 +119,6 @@ def merged_document_pack(
             StoredFile.company_id == row.company_id,
             StoredFile.owner_type == "generated_document_pack",
             StoredFile.owner_id == row.id,
-            StoredFile.status == "active",
             StoredFile.mime_type == "application/pdf",
         )
         .order_by(StoredFile.created_at.desc())
@@ -499,8 +497,10 @@ def list_posters(db: Session, actor: CurrentSession, status: str | None=None)->l
 
 
 def create_poster(db: Session, actor: CurrentSession, payload: CreatePosterRequest)->PosterSummary:
-    file=db.scalar(select(StoredFile).where(StoredFile.id==payload.file_id,StoredFile.company_id==actor.membership.company_id,StoredFile.status=='active'))
-    if not file: raise OperationsNotFoundError('Poster file not found')
+    file=db.scalar(select(StoredFile).where(StoredFile.id==payload.file_id,StoredFile.company_id==actor.membership.company_id))
+    if not file or file.owner_type != 'poster': raise OperationsNotFoundError('Poster file not found')
+    if file.uploaded_by != actor.membership.id and not (actor.user.is_super_admin or 'posters.edit' in actor.permissions):
+        raise OperationsConflictError('Use a poster file uploaded by your current session')
     if file.mime_type not in {'image/jpeg','image/png','image/webp','application/pdf'}: raise OperationsConflictError('Poster must be JPEG, PNG, WebP or PDF')
     row=Poster(company_id=actor.membership.company_id,title=payload.title,description=payload.description,file_id=file.id,category=payload.category,status='active',created_by=actor.membership.id)
     db.add(row); db.flush(); write_event(db,company_id=row.company_id,event='poster.uploaded',entity='poster',entity_id=row.id,actor=actor,changes={'title':row.title,'file_id':row.file_id}); db.commit(); return _poster_summary(db,row)

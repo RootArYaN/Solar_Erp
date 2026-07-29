@@ -4,7 +4,7 @@ import type {
   CustomerFlowSnapshot,
   MaterialRequest,
 } from '../../contracts/domain-contracts'
-import { apiRequest } from '../../api/client'
+import { apiRequest, apiSegment } from '../../api/client'
 import { createClientId } from '../client-id'
 
 export type CustomerFlowRepository = {
@@ -15,31 +15,28 @@ export type CustomerFlowRepository = {
   saveMaterialRequest(customerId: UUID, input: Pick<MaterialRequest, 'purpose' | 'needed_at_site_by' | 'lines'>): Promise<CustomerFlowSnapshot>
 }
 
-export function createCustomerFlowRepository(token?: string): CustomerFlowRepository {
-  const options = token ? { token } : {}
-
+export function createCustomerFlowRepository(): CustomerFlowRepository {
   return {
-    listCustomers() {
-      return apiRequest<PaginatedList<Customer>>('/customer-flow/customers', options)
+    listCustomers(cursor) {
+      const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''
+      return apiRequest<PaginatedList<Customer>>(`/customer-flow/customers${query}`)
     },
     getSnapshot(customerId) {
-      return apiRequest<CustomerFlowSnapshot>(`/customer-flow/customers/${customerId}`, options)
+      return apiRequest<CustomerFlowSnapshot>(`/customer-flow/customers/${apiSegment(customerId)}`)
     },
     updateCustomer(customerId, input) {
-      return apiRequest<CustomerFlowSnapshot>(`/customer-flow/customers/${customerId}`, { ...options, method: 'PATCH', body: input })
+      return apiRequest<CustomerFlowSnapshot>(`/customer-flow/customers/${apiSegment(customerId)}`, { method: 'PATCH', body: input })
     },
     async approveQuotation(customerId, quotationId, comment) {
-      await apiRequest(`/workflow/quotations/${quotationId}/decision`, {
-        ...options,
+      await apiRequest(`/workflow/quotations/${apiSegment(quotationId)}/decision`, {
         method: 'POST',
         body: { decision: 'approved', comment },
         idempotencyKey: createClientId(),
       })
-      return apiRequest<CustomerFlowSnapshot>(`/customer-flow/customers/${customerId}`, options)
+      return apiRequest<CustomerFlowSnapshot>(`/customer-flow/customers/${apiSegment(customerId)}`)
     },
     saveMaterialRequest(customerId, input) {
-      return apiRequest<CustomerFlowSnapshot>(`/customer-flow/customers/${customerId}/material-request`, {
-        ...options,
+      return apiRequest<CustomerFlowSnapshot>(`/customer-flow/customers/${apiSegment(customerId)}/material-request`, {
         method: 'PUT',
         body: input,
       })

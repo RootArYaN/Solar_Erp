@@ -1,9 +1,79 @@
-node_modules/
-dist/
-.venv/
-__pycache__/
-*.py[cod]
+# ---------------------------------------------------------------------------
+# Solar ERP repository-wide ignores
+# Keep framework-specific rules in frontend/.gitignore and backend/.gitignore.
+# ---------------------------------------------------------------------------
+
+# Secrets and local environment overrides
 .env
-*.db
+.env.*
+!.env.example
+!.env.sample
+!.env.template
+*.local
+secrets/
+credentials/
+credentials*.json
+service-account*.json
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+
+# Logs, process files and diagnostic output
+*.log
+logs/
+*.pid
+*.pid.lock
+*.seed
+*.stackdump
+
+# Test coverage and generic caches
+coverage/
+.coverage
+.coverage.*
+htmlcov/
+.cache/
+.tmp/
+tmp/
+temp/
+
+# Editor and IDE metadata
+.idea/
+.vscode/
+*.code-workspace
+*.sublime-project
+*.sublime-workspace
+*.swp
+*.swo
+*~
+
+# Operating-system metadata
 .DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Local archives, database dumps and backup files
 *.zip
+*.tar
+*.tar.gz
+*.tgz
+*.7z
+*.rar
+*.bak
+*.backup
+*.dump
+*.sql.gz
+
+# Patch/reject files and local tooling output
+*.orig
+*.rej
+*.patch
+.eslintcache
+.stylelintcache
+.sass-cache/

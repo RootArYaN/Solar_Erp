@@ -15,7 +15,7 @@ import { hasPermission, PERMISSIONS } from '../../lib/permissions'
 import type { ManagedUser, Permission, Role, Session } from '../../types'
 import { AlertDialog } from '../ui/AlertDialog'
 import { useToast } from '../ui/ToastProvider'
-import { KpiGrid, ScrollSurface, TabStrip, WorkspaceHeader, WorkspacePage } from '../workspace'
+import { KpiGrid, ScrollSurface, TabButton, TabStrip, WorkspaceHeader, WorkspacePage } from '../workspace'
 import { RoleDialog } from './RoleDialog'
 import { UserDialog } from './UserDialog'
 
@@ -70,9 +70,9 @@ export function AdminPage({
     setLoading(true)
     try {
       const [nextUsers, nextRoles, nextPermissions] = await Promise.all([
-        viewUsers ? getUsers(activeSession.access_token) : Promise.resolve([] as ManagedUser[]),
-        viewUsers || viewRoles ? getRoles(activeSession.access_token) : Promise.resolve([] as Role[]),
-        viewRoles ? getPermissions(activeSession.access_token) : Promise.resolve([] as Permission[]),
+        viewUsers ? getUsers() : Promise.resolve([] as ManagedUser[]),
+        viewUsers || viewRoles ? getRoles() : Promise.resolve([] as Role[]),
+        viewRoles ? getPermissions() : Promise.resolve([] as Permission[]),
       ])
       setUsers(nextUsers)
       setRoles(nextRoles)
@@ -140,16 +140,16 @@ export function AdminPage({
     setBusy(true)
     try {
       if (editingUser) {
-        await updateUser(session.access_token, editingUser.membership_id, {
+        await updateUser(editingUser.membership_id, {
           full_name: value.full_name,
           username: value.username,
           email: value.email,
           role_code: value.role_code,
           is_active: value.is_active,
         })
-        if (value.password) await resetUserPassword(session.access_token, editingUser.membership_id, value.password)
+        if (value.password) await resetUserPassword(editingUser.membership_id, value.password)
       } else {
-        await createUser(session.access_token, value)
+        await createUser(value)
       }
       setEditingUser(undefined)
       await syncAfterChange()
@@ -165,7 +165,7 @@ export function AdminPage({
     setBusy(true)
     try {
       const nextActive = !user.is_active
-      await updateUser(session.access_token, user.membership_id, { is_active: nextActive })
+      await updateUser(user.membership_id, { is_active: nextActive })
       await syncAfterChange()
       toast({ message: `${user.full_name} ${nextActive ? 'activated' : 'deactivated'}`, variant: 'success' })
     } catch (reason) {
@@ -180,13 +180,13 @@ export function AdminPage({
     setBusy(true)
     try {
       if (editingRole) {
-        await updateRole(session.access_token, editingRole.id, {
+        await updateRole(editingRole.id, {
           name: value.name,
           description: value.description,
           permission_codes: value.permission_codes,
         })
       } else {
-        await createRole(session.access_token, value)
+        await createRole(value)
       }
       setEditingRole(undefined)
       await syncAfterChange()
@@ -202,7 +202,7 @@ export function AdminPage({
     if (!roleToDelete) return
     setBusy(true)
     try {
-      await deleteRole(session.access_token, roleToDelete.id)
+      await deleteRole(roleToDelete.id)
       const deletedName = roleToDelete.name
       setRoleToDelete(null)
       await syncAfterChange()
@@ -244,8 +244,8 @@ export function AdminPage({
       </KpiGrid>
 
       <TabStrip className="segmented-tabs" label="Administration sections">
-        {canViewUsers && <button className={tab === 'users' ? 'active' : ''} onClick={() => setTab('users')}>Users</button>}
-        {canViewRoles && <button className={tab === 'roles' ? 'active' : ''} onClick={() => setTab('roles')}>Roles</button>}
+        {canViewUsers && <TabButton active={tab === 'users'} onClick={() => setTab('users')}>Users</TabButton>}
+        {canViewRoles && <TabButton active={tab === 'roles'} onClick={() => setTab('roles')}>Roles</TabButton>}
       </TabStrip>
 
       {tab === 'users' && canViewUsers ? (

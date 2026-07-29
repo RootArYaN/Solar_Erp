@@ -7,8 +7,8 @@ import type { Session } from '../types'
 import { useToast } from './ui/ToastProvider'
 
 export function LoginForm({ onAuthenticated, notice }: { onAuthenticated: (session: Session) => void; notice?: string }) {
-  const [username, setUsername] = useState(import.meta.env.DEV ? 'admin' : '')
-  const [password, setPassword] = useState(import.meta.env.DEV ? 'ChangeMe123!' : '')
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({})
   const [remember, setRemember] = useState(true)
   const [showPassword, setShowPassword] = useState(false)
@@ -21,12 +21,12 @@ export function LoginForm({ onAuthenticated, notice }: { onAuthenticated: (sessi
     setFieldErrors({})
 
     try {
-      const session = await login({
+      const response = await login({
         username: username.trim(),
         password,
         remember,
       })
-      saveSession(session, remember)
+      const session = saveSession(response, remember)
       toast({ message: 'Signed in successfully', variant: 'success' })
       onAuthenticated(session)
     } catch (caught) {

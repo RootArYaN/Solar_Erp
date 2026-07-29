@@ -1,7 +1,7 @@
-import type { Session } from '../types'
+import type { AuthSessionResponse, Session } from '../types'
 import { clearSession } from '../lib/auth-storage'
 import { createClientId } from '../lib/client-id'
-import { apiRequest } from './client'
+import { apiRequest, clearApiSecurityState } from './client'
 
 export type ActiveDevice = {
   id: string
@@ -15,13 +15,13 @@ export type ActiveDevice = {
   is_current: boolean
 }
 
-export function login(input: { username: string; password: string; remember: boolean }): Promise<Session> {
-  return apiRequest('/auth/login', { method: 'POST', auth: false, body: input })
+export function login(input: { username: string; password: string; remember: boolean }): Promise<AuthSessionResponse> {
+  return apiRequest('/auth/login', { method: 'POST', auth: false, retryOnUnauthorized: false, body: input })
 }
 export async function logout(): Promise<void> {
   try { await apiRequest('/auth/logout', { method: 'POST', retryOnUnauthorized: false }) }
-  finally { clearSession('signed_out') }
+  finally { clearApiSecurityState(); clearSession('signed_out') }
 }
-export function getCurrentSession(token?: string): Promise<Omit<Session, 'access_token' | 'token_type' | 'expires_at'>> { return apiRequest('/auth/me', { token }) }
+export function getCurrentSession(): Promise<Session> { return apiRequest('/auth/me') }
 export function getActiveDevices(): Promise<ActiveDevice[]> { return apiRequest('/auth/devices') }
 export function logoutOtherDevices(): Promise<void> { return apiRequest('/auth/devices/others', { method: 'DELETE', idempotencyKey: createClientId() }) }

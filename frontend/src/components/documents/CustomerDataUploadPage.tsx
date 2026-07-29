@@ -9,6 +9,7 @@ import type { DocumentTemplate, GeneratedDocumentPack } from '../../erp-types'
 import { getModuleAccess, hasPermission, PERMISSIONS } from '../../lib/permissions'
 import { createCustomerFlowRepository } from '../../lib/repositories/customer-flow-repository'
 import { createDocumentPackPdf, documentPackFilePrefix, normalizeDocumentPackTemplate, type DocumentPackInput } from '../../lib/document-pack'
+import { fileUploadRules, validateUploadFile } from '../../lib/file-validation'
 import type { Session, StoredFile } from '../../types'
 import { Modal } from '../admin/Modal'
 import { GeneratedDocumentPackPanel } from './GeneratedDocumentPack'
@@ -16,7 +17,7 @@ import { DocumentTemplateDialog } from './DocumentTemplateDialog'
 import { AlertDialog } from '../ui/AlertDialog'
 import { EmptyState, ErrorState, LoadingSkeleton } from '../ui/PageState'
 import { useToast } from '../ui/ToastProvider'
-import { KpiGrid, WorkspacePage } from '../workspace'
+import { KpiGrid, WorkspaceHeader, WorkspacePage } from '../workspace'
 
 const documentTypes = [
   ['aadhaar', 'Aadhaar card'], ['pan', 'PAN card'], ['photo', 'Passport-size photo'], ['electricity_bill', 'Electricity bill'], ['cancelled_cheque', 'Cancelled cheque'], ['bank_passbook', 'Bank passbook'], ['ownership_proof', 'Property ownership proof'], ['site_photo', 'Site photographs'], ['customer_signature', 'Customer signature'], ['loan_document', 'Loan documents'], ['discom_document', 'DISCOM documents'], ['installation_photo', 'Installation photographs'], ['dcr_document', 'DCR documents'], ['subsidy_document', 'Subsidy documents'], ['sales_bill', 'Sales bill'], ['completion_document', 'Completion document'],
@@ -62,7 +63,7 @@ function settingsFrom(template: DocumentTemplate | null) {
 }
 
 export function CustomerDataUploadPage({ session }: { session: Session }) {
-  const repository = useMemo(() => createCustomerFlowRepository(session.access_token), [session.access_token])
+  const repository = useMemo(() => createCustomerFlowRepository(), [])
   const [searchParams] = useSearchParams()
   const [customers, setCustomers] = useState<Customer[]>([])
   const [selectedId, setSelectedId] = useState('')
@@ -150,11 +151,16 @@ export function CustomerDataUploadPage({ session }: { session: Session }) {
     event.preventDefault(); if (!snapshot) return
     const form = event.currentTarget; const values = new FormData(form); const file = values.get('file')
     if (!(file instanceof File) || !file.size) return
+    const validation = await validateUploadFile(file, fileUploadRules.customerVerificationDocument)
+    if ('message' in validation) {
+      toast({ message: validation.message, variant: 'warning' })
+      return
+    }
     setWorking(true)
     try {
       const requestedType = String(values.get('document_type') || uploadType)
       const type = (documentTypes.some(([key]) => key === requestedType) ? requestedType : uploadType) as DocumentTypeKey
-      const previousFile = files.find((stored) => stored.status === 'active' && matchesDocumentType(stored, type))
+      const previousFile = files.find((stored) => matchesDocumentType(stored, type))
       await uploadStoredFile({ file, ownerType: `customer_document:${type}`, ownerId: snapshot.customer.id, customerId: snapshot.customer.id, projectId: snapshot.project?.id })
       if (previousFile && access.canEdit) await removeStoredFile(previousFile.id)
       setModal(null); await loadCustomer(snapshot.customer.id); toast({ message: `${documentTypes.find(([value]) => value === type)?.[1] ?? 'Document'} uploaded`, variant: 'success' })
@@ -265,7 +271,7 @@ export function CustomerDataUploadPage({ session }: { session: Session }) {
   const customer = snapshot?.customer
   const project = snapshot?.project
   const templateSettings = settingsFrom(template)
-  const activeFiles = files.filter((file) => file.status === 'active')
+  const activeFiles = files
   const checklistEntries = documentTypes.map(([key, label]) => {
     const file = activeFiles.find((candidate) => matchesDocumentType(candidate, key))
     return { key, label, file, required: requiredDocumentTypes.has(key) }
@@ -287,6 +293,12 @@ export function CustomerDataUploadPage({ session }: { session: Session }) {
   }
 
   return <WorkspacePage className="erp-page document-page">
+    <WorkspaceHeader
+      eyebrow="Customer records"
+      title="Documents and generated packs"
+      description="Manage the approved customer data, mandatory uploads, templates, versions and final document pack."
+      actions={<button type="button" className="secondary-button" onClick={() => void load()} disabled={loading || working}><RefreshCw className={loading ? 'spin' : ''} size={14} /> Refresh</button>}
+    />
     <KpiGrid columns={snapshot ? 5 : 1} className="erp-kpi-grid document-kpi-grid">
       <article className="document-customer-kpi">
         <label><span>Customer</span><select value={selectedId} onChange={(event) => void select(event.target.value)}><option value="">Select customer</option>{customers.map((row) => <option key={row.id} value={row.id}>{row.display_name} · {row.record_number}</option>)}</select></label>

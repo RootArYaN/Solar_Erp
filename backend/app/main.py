@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
 
 from app.api.routes import admin, agents, auth, customer_flow, dashboard, events, files, finance, health, operations, workflow
 from app.core.config import settings
@@ -32,13 +33,14 @@ app = FastAPI(
 add_request_middleware(app)
 add_error_handlers(app)
 
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.trusted_host_list)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "Idempotency-Key", "X-Request-ID"],
-    expose_headers=["X-Request-ID", "Content-Disposition"],
+    allow_headers=["Authorization", "Content-Type", "Idempotency-Key", "X-Request-ID", settings.csrf_header_name],
+    expose_headers=["X-Request-ID", "Content-Disposition", settings.csrf_header_name],
 )
 
 app.include_router(health.router, prefix="/api/v1")

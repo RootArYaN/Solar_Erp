@@ -1,6 +1,7 @@
 import { AlertTriangle, RotateCcw, Trash2, X } from 'lucide-react'
-import { useEffect, useId, useRef, useState } from 'react'
+import { useId, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { useDialogLifecycle } from './Dialog'
 
 type AlertDialogProps = {
   open: boolean
@@ -45,46 +46,15 @@ export function AlertDialog({
   busyRef.current = busy
   onCancelRef.current = onCancel
 
-  useEffect(() => {
-    if (!open) return
-    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null
-    const previousOverflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    const focusTimer = window.setTimeout(() => cancelRef.current?.focus(), 0)
-
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape' && !busyRef.current) {
-        event.preventDefault()
-        onCancelRef.current()
-        return
-      }
-      if (event.key !== 'Tab') return
-
-      const focusable = Array.from(
-        dialogRef.current?.querySelectorAll<HTMLElement>(
-          'button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])',
-        ) ?? [],
-      )
-      if (!focusable.length) return
-      const first = focusable[0]
-      const last = focusable[focusable.length - 1]
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault()
-        last.focus()
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault()
-        first.focus()
-      }
-    }
-
-    window.addEventListener('keydown', handleKeyDown)
-    return () => {
-      window.clearTimeout(focusTimer)
-      window.removeEventListener('keydown', handleKeyDown)
-      document.body.style.overflow = previousOverflow
-      previousFocus?.focus()
-    }
-  }, [open])
+  useDialogLifecycle({
+    open,
+    containerRef: dialogRef,
+    initialFocusRef: cancelRef,
+    onClose: () => {
+      if (!busyRef.current) onCancelRef.current()
+    },
+    closeOnEscape: !busy,
+  })
 
   if (!open) return null
 

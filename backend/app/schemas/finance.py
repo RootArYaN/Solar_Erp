@@ -199,6 +199,18 @@ class CreateBillRequest(BaseModel):
         return self
 
 
+class UpdateBillRequest(BaseModel):
+    bill_number: str = Field(min_length=2, max_length=48)
+    bill_date: date
+    customer_id: str | None = None
+    project_id: str | None = None
+    supplier_name: str = Field(default='', max_length=160)
+    subtotal: float = Field(ge=0, le=999999999999.99)
+    tax_amount: float = Field(default=0, ge=0, le=999999999999.99)
+    due_date: date | None = None
+    note: str = Field(default='', max_length=400)
+
+
 class RecordBillPaymentRequest(BaseModel):
     transaction_date: date
     amount: float = Field(gt=0, le=999999999999.99)
@@ -278,6 +290,18 @@ class CreateCompanyLoanRequest(BaseModel):
     next_due_date: date | None = None
     account_id: str
     reference_number: str = Field(default='', max_length=80)
+    note: str = Field(default='', max_length=500)
+
+
+class UpdateCompanyLoanRequest(BaseModel):
+    lender_name: str = Field(min_length=2, max_length=160)
+    loan_account_number: str = Field(default='', max_length=80)
+    principal_amount: float = Field(gt=0, le=999999999999.99)
+    interest_rate: float = Field(default=0, ge=0, le=100)
+    emi_amount: float = Field(default=0, ge=0, le=999999999999.99)
+    start_date: date
+    end_date: date | None = None
+    next_due_date: date | None = None
     note: str = Field(default='', max_length=500)
 
 

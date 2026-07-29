@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 
 class StoredFileSummary(BaseModel):
@@ -13,7 +13,6 @@ class StoredFileSummary(BaseModel):
     mime_type: str
     size_bytes: int
     checksum: str
-    status: str
     created_at: datetime
 
 
@@ -31,6 +30,3 @@ class DocumentCustomerOption(BaseModel):
     project_number: str | None = None
     project_status: str | None = None
 
-
-class FileStatusRequest(BaseModel):
-    status: str = Field(pattern=r"^deleted$")

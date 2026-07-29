@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import mimetypes
-from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
@@ -12,44 +10,24 @@ from sqlalchemy.orm import Session
 from app.api.deps import CurrentSession
 from app.core.config import settings
 from app.models.agent import AgentCustomer, AgentProfile
+from app.models.finance import Bill
+from app.models.operations import GeneratedDocumentPack, Poster
 from app.models.system import StoredFile
 from app.models.workflow import CustomerProject
 from app.schemas.files import DocumentCustomerOption, StoredFileList, StoredFileSummary
 from app.services.access_service import AccessError, get_customer, get_project, is_admin
 from app.services.audit_service import write_event
+from app.services.file_validation import (
+    ALLOWED_EXTENSIONS,
+    CUSTOMER_DOCUMENT_FILE_SUFFIXES,
+    FileValidationError,
+    accepted_mime_types,
+    clean_name,
+    declared_mime_type,
+    typed_customer_document_name,
+    validate_saved_content,
+)
 from app.services.storage import StorageError, storage
-
-ALLOWED_EXTENSIONS = {".pdf", ".jpg", ".jpeg", ".png", ".webp", ".csv", ".json", ".txt", ".docx", ".xlsx"}
-ALLOWED_MIME = {
-    "application/pdf",
-    "image/jpeg",
-    "image/png",
-    "image/webp",
-    "text/csv",
-    "application/json",
-    "text/plain",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-}
-
-CUSTOMER_DOCUMENT_FILE_SUFFIXES = {
-    "aadhaar": "Aadhaar_Card",
-    "pan": "PAN_Card",
-    "photo": "Passport_Size_Photo",
-    "electricity_bill": "Electricity_Bill",
-    "cancelled_cheque": "Cancelled_Cheque",
-    "bank_passbook": "Bank_Passbook",
-    "ownership_proof": "Property_Ownership_Proof",
-    "site_photo": "Site_Photographs",
-    "customer_signature": "Customer_Signature",
-    "loan_document": "Loan_Documents",
-    "discom_document": "DISCOM_Documents",
-    "installation_photo": "Installation_Photographs",
-    "dcr_document": "DCR_Documents",
-    "subsidy_document": "Subsidy_Documents",
-    "sales_bill": "Sales_Bill",
-    "completion_document": "Completion_Document",
-}
 
 
 class FileServiceError(Exception):
@@ -64,6 +42,32 @@ class FileForbiddenError(FileServiceError):
     status_code = 403
 
 
+def ensure_file_permission(actor: CurrentSession, owner_type: str, action: str) -> None:
+    if actor.user.is_super_admin:
+        return
+    if owner_type == "finance_bill":
+        allowed = {
+            "view": {"finance.view", "finance.manage"},
+            "create": {"finance.manage"},
+            "edit": {"finance.manage"},
+        }.get(action, set())
+        if not allowed.intersection(actor.permissions):
+            raise FileForbiddenError(f"You do not have permission to {action} this bill attachment")
+        return
+    is_poster = owner_type == "poster"
+    allowed = {
+        (True, "view"): {"posters.view", "posters.edit"},
+        (True, "create"): {"posters.create"},
+        (True, "edit"): {"posters.edit"},
+        (False, "view"): {"documents.view", "documents.manage"},
+        (False, "create"): {"documents.create", "documents.manage"},
+        (False, "edit"): {"documents.edit", "documents.manage"},
+    }.get((is_poster, action), set())
+    if not allowed.intersection(actor.permissions):
+        label = "poster" if is_poster else "document"
+        raise FileForbiddenError(f"You do not have permission to {action} this {label}")
+
+
 def _summary(row: StoredFile) -> StoredFileSummary:
     return StoredFileSummary(
         id=row.id,
@@ -75,7 +79,6 @@ def _summary(row: StoredFile) -> StoredFileSummary:
         mime_type=row.mime_type,
         size_bytes=row.size_bytes,
         checksum=row.checksum,
-        status=row.status,
         created_at=row.created_at,
     )
 
@@ -127,43 +130,63 @@ def list_document_customers(db: Session, actor: CurrentSession) -> list[Document
     ]
 
 
-def _clean_name(value: str) -> str:
-    name = Path(value or "document").name.replace("\x00", "").strip()
-    return name[:240] or "document"
+def validate_file_owner(
+    db: Session,
+    actor: CurrentSession,
+    *,
+    owner_type: str,
+    owner_id: str,
+    project_id: str | None,
+    customer_id: str | None,
+) -> tuple[str | None, str | None]:
+    if owner_type == "poster":
+        if owner_id != actor.membership.company_id or project_id or customer_id:
+            raise FileForbiddenError("Poster files must belong to the current company library")
+        return None, None
 
+    if owner_type == "finance_bill":
+        bill = db.scalar(select(Bill).where(
+            Bill.id == owner_id,
+            Bill.company_id == actor.membership.company_id,
+        ))
+        if not bill:
+            raise FileNotFoundError("Bill not found")
+        if bill.file_id:
+            raise FileServiceError("This bill already has an attachment")
+        if project_id and project_id != bill.project_id:
+            raise FileServiceError("The attachment project does not match the bill")
+        if customer_id and customer_id != bill.customer_id:
+            raise FileServiceError("The attachment customer does not match the bill")
+        return bill.project_id, bill.customer_id
 
-def _typed_customer_document_name(name: str, owner_type: str) -> str:
-    if not owner_type.startswith("customer_document:"):
-        return name
-    document_type = owner_type.partition(":")[2]
-    suffix = CUSTOMER_DOCUMENT_FILE_SUFFIXES.get(document_type)
-    if not suffix:
-        return name
+    if owner_type == "customer_document" or owner_type.startswith("customer_document:"):
+        if owner_type.startswith("customer_document:") and owner_type.partition(":")[2] not in CUSTOMER_DOCUMENT_FILE_SUFFIXES:
+            raise FileServiceError("Unknown customer document type")
+        if not customer_id or owner_id != customer_id:
+            raise FileServiceError("Customer documents require a matching customer owner")
+        if project_id:
+            project = get_project(db, actor, project_id)
+            if project.customer_id != customer_id:
+                raise FileServiceError("The project does not belong to the selected customer")
+        else:
+            get_customer(db, actor, customer_id)
+        return project_id, customer_id
 
-    path = Path(name)
-    extension = path.suffix
-    stem = path.stem or "document"
-    normalized_stem = stem.lower().replace(" ", "_").replace("-", "_")
-    if normalized_stem.endswith(f"_{suffix.lower()}"):
-        return name
-    max_stem_length = max(1, 240 - len(extension) - len(suffix) - 1)
-    return f"{stem[:max_stem_length]}_{suffix}{extension}"
+    if owner_type == "generated_document_pack":
+        pack = db.scalar(select(GeneratedDocumentPack).where(
+            GeneratedDocumentPack.id == owner_id,
+            GeneratedDocumentPack.company_id == actor.membership.company_id,
+        ))
+        if not pack:
+            raise FileNotFoundError("Document pack not found")
+        get_customer(db, actor, pack.customer_id)
+        if customer_id and customer_id != pack.customer_id:
+            raise FileServiceError("The document pack does not belong to the selected customer")
+        if project_id and project_id != pack.project_id:
+            raise FileServiceError("The document pack does not belong to the selected project")
+        return pack.project_id, pack.customer_id
 
-
-def _signature_mime(header: bytes, extension: str) -> str | None:
-    if header.startswith(b"%PDF-"):
-        return "application/pdf"
-    if header.startswith(b"\xff\xd8\xff"):
-        return "image/jpeg"
-    if header.startswith(b"\x89PNG\r\n\x1a\n"):
-        return "image/png"
-    if header.startswith(b"RIFF") and header[8:12] == b"WEBP":
-        return "image/webp"
-    if header.startswith(b"PK\x03\x04") and extension in {".docx", ".xlsx"}:
-        return "application/vnd.openxmlformats-officedocument.wordprocessingml.document" if extension == ".docx" else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    if extension in {".csv", ".json", ".txt"}:
-        return {".csv": "text/csv", ".json": "application/json", ".txt": "text/plain"}[extension]
-    return None
+    raise FileServiceError("Unsupported file owner type")
 
 
 async def save_file(
@@ -176,31 +199,36 @@ async def save_file(
     project_id: str | None,
     customer_id: str | None,
 ) -> StoredFileSummary:
-    if project_id:
-        project = get_project(db, actor, project_id)
-        customer_id = project.customer_id
-    elif customer_id:
-        get_customer(db, actor, customer_id)
+    ensure_file_permission(actor, owner_type, "create")
+    project_id, customer_id = validate_file_owner(
+        db, actor, owner_type=owner_type, owner_id=owner_id, project_id=project_id, customer_id=customer_id
+    )
 
-    name = _clean_name(upload.filename or "document")
+    try:
+        name = clean_name(upload.filename or "document")
+    except FileValidationError as exc:
+        raise FileServiceError(str(exc)) from exc
     extension = Path(name).suffix.lower()
     if extension not in ALLOWED_EXTENSIONS:
         raise FileServiceError("This file type is not allowed")
 
-    header = await upload.read(32)
-    await upload.seek(0)
-    detected_mime = _signature_mime(header, extension)
-    declared_mime = (upload.content_type or mimetypes.guess_type(name)[0] or "application/octet-stream").lower()
-    if not detected_mime or detected_mime not in ALLOWED_MIME:
-        raise FileServiceError("The file content does not match an allowed document type")
-    if declared_mime not in ALLOWED_MIME and not declared_mime.startswith("text/"):
-        raise FileServiceError("The file MIME type is not allowed")
-    name = _typed_customer_document_name(name, owner_type)
+    declared_mime = declared_mime_type(name, upload.content_type)
+    accepted_mimes = accepted_mime_types(extension)
+    if declared_mime and declared_mime not in accepted_mimes:
+        raise FileServiceError("The file MIME type does not match its extension")
+    name = typed_customer_document_name(name, owner_type)
 
     relative = f"active/{actor.membership.company_id}/{uuid4().hex}{extension}"
     try:
         size_bytes, checksum = await storage.save_upload(upload, relative, settings.max_upload_bytes)
-    except StorageError as exc:
+        if size_bytes <= 0:
+            raise FileServiceError("Empty files are not allowed")
+        detected_mime = validate_saved_content(storage.path(relative), extension)
+        storage.scan(relative)
+    except (StorageError, FileServiceError, FileValidationError) as exc:
+        storage.delete(relative)
+        if isinstance(exc, FileServiceError):
+            raise
         raise FileServiceError(str(exc)) from exc
 
     row = StoredFile(
@@ -214,23 +242,35 @@ async def save_file(
         mime_type=detected_mime,
         size_bytes=size_bytes,
         checksum=checksum,
-        status="active",
         uploaded_by=actor.membership.id,
     )
-    db.add(row)
-    db.flush()
-    write_event(
-        db,
-        company_id=row.company_id,
-        event="document.uploaded",
-        entity="stored_file",
-        entity_id=row.id,
-        actor=actor,
-        project_id=row.project_id,
-        customer_id=row.customer_id,
-        changes={"name": row.name, "size_bytes": row.size_bytes, "owner_type": row.owner_type},
-    )
-    db.commit()
+    try:
+        db.add(row)
+        db.flush()
+        if owner_type == "finance_bill":
+            bill = db.scalar(select(Bill).where(
+                Bill.id == owner_id,
+                Bill.company_id == row.company_id,
+            ))
+            if not bill:
+                raise FileNotFoundError("Bill not found")
+            bill.file_id = row.id
+        write_event(
+            db,
+            company_id=row.company_id,
+            event="bill.attachment_uploaded" if owner_type == "finance_bill" else "document.uploaded",
+            entity="stored_file",
+            entity_id=row.id,
+            actor=actor,
+            project_id=row.project_id,
+            customer_id=row.customer_id,
+            changes={"name": row.name, "size_bytes": row.size_bytes, "owner_type": row.owner_type, "checksum": row.checksum},
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        storage.delete(relative)
+        raise
     return _summary(row)
 
 
@@ -242,10 +282,10 @@ def list_files(
     owner_id: str | None,
     project_id: str | None,
     customer_id: str | None,
-    status: str | None,
     page: int,
     page_size: int,
 ) -> StoredFileList:
+    ensure_file_permission(actor, owner_type or "document", "view")
     if project_id:
         get_project(db, actor, project_id)
     if customer_id:
@@ -253,8 +293,6 @@ def list_files(
 
     filters = [StoredFile.company_id == actor.membership.company_id]
     if owner_type:
-        # Customer checklist uploads encode their document slot after a colon.
-        # Keep the base owner type query backwards compatible with legacy rows.
         if owner_type == "customer_document":
             filters.append(or_(
                 StoredFile.owner_type == owner_type,
@@ -268,10 +306,8 @@ def list_files(
         filters.append(StoredFile.project_id == project_id)
     if customer_id:
         filters.append(StoredFile.customer_id == customer_id)
-    if status:
-        filters.append(StoredFile.status == status)
 
-    if not is_admin(actor) and "agents.view_all" not in actor.permissions and "agents.manage" not in actor.permissions:
+    if owner_type != "finance_bill" and not is_admin(actor) and "agents.view_all" not in actor.permissions and "agents.manage" not in actor.permissions:
         customer_ids = select(AgentCustomer.id).where(
             AgentCustomer.company_id == actor.membership.company_id,
             _customer_filter(actor),
@@ -296,15 +332,24 @@ def get_file(db: Session, actor: CurrentSession, file_id: str) -> StoredFile:
     row = db.scalar(select(StoredFile).where(
         StoredFile.id == file_id,
         StoredFile.company_id == actor.membership.company_id,
-        StoredFile.status != "deleted",
     ))
     if not row:
         raise FileNotFoundError("File not found")
     try:
-        if row.project_id:
+        if row.owner_type == "finance_bill":
+            bill = db.scalar(select(Bill).where(
+                Bill.id == row.owner_id,
+                Bill.company_id == actor.membership.company_id,
+                Bill.file_id == row.id,
+            ))
+            if not bill:
+                raise FileNotFoundError("Bill attachment not found")
+        elif row.project_id:
             get_project(db, actor, row.project_id)
         elif row.customer_id:
             get_customer(db, actor, row.customer_id)
+        elif row.owner_type == "poster":
+            pass
         elif not is_admin(actor) and row.uploaded_by != actor.membership.id:
             raise FileForbiddenError("You can only access files assigned to you")
     except AccessError as exc:
@@ -312,21 +357,79 @@ def get_file(db: Session, actor: CurrentSession, file_id: str) -> StoredFile:
     return row
 
 
-def set_file_status(db: Session, actor: CurrentSession, file_id: str, status: str) -> StoredFileSummary:
-    row = get_file(db, actor, file_id)
-    row.status = status
-    row.deleted_at = datetime.now(UTC)
-    event = "document.deleted"
-    write_event(
-        db,
-        company_id=row.company_id,
-        event=event,
-        entity="stored_file",
-        entity_id=row.id,
-        actor=actor,
-        project_id=row.project_id,
-        customer_id=row.customer_id,
-        changes={"status": status},
+def delete_file(db: Session, actor: CurrentSession, file_id: str) -> None:
+    row = db.scalar(select(StoredFile).where(
+        StoredFile.id == file_id,
+        StoredFile.company_id == actor.membership.company_id,
+    ))
+    if not row:
+        return
+    can_remove_own_unlinked_poster = (
+        row.owner_type == "poster"
+        and row.uploaded_by == actor.membership.id
+        and "posters.create" in actor.permissions
+        and not db.scalar(select(Poster.id).where(
+            Poster.company_id == row.company_id,
+            or_(Poster.file_id == row.id, Poster.thumbnail_file_id == row.id),
+        ).limit(1))
     )
-    db.commit()
-    return _summary(row)
+    if not can_remove_own_unlinked_poster:
+        ensure_file_permission(actor, row.owner_type, "edit")
+    # Apply the same resource-level authorization as download and view.
+    row = get_file(db, actor, file_id)
+    staged = storage.stage_delete(row.storage_path)
+    try:
+        posters = list(db.scalars(select(Poster).where(
+            Poster.company_id == row.company_id,
+            or_(Poster.file_id == row.id, Poster.thumbnail_file_id == row.id),
+        )).all())
+        for poster in posters:
+            if poster.file_id == row.id:
+                write_event(
+                    db,
+                    company_id=row.company_id,
+                    event="poster.deleted",
+                    entity="poster",
+                    entity_id=poster.id,
+                    actor=actor,
+                    changes={"title": poster.title, "file_id": row.id},
+                )
+                db.delete(poster)
+            else:
+                poster.thumbnail_file_id = None
+
+        if row.owner_type == "finance_bill":
+            bill = db.scalar(select(Bill).where(
+                Bill.id == row.owner_id,
+                Bill.company_id == row.company_id,
+                Bill.file_id == row.id,
+            ))
+            if bill:
+                bill.file_id = None
+
+        write_event(
+            db,
+            company_id=row.company_id,
+            event="poster.file_deleted" if row.owner_type == "poster" else ("bill.attachment_deleted" if row.owner_type == "finance_bill" else "document.deleted"),
+            entity="stored_file",
+            entity_id=row.id,
+            actor=actor,
+            project_id=row.project_id,
+            customer_id=row.customer_id,
+            changes={
+                "name": row.name,
+                "owner_type": row.owner_type,
+                "owner_id": row.owner_id,
+                "checksum": row.checksum,
+                "size_bytes": row.size_bytes,
+            },
+        )
+        db.delete(row)
+        db.commit()
+    except Exception:
+        db.rollback()
+        if staged:
+            storage.restore_staged_delete(staged, row.storage_path)
+        raise
+    if staged:
+        storage.finalize_staged_delete(staged)

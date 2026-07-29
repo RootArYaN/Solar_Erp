@@ -236,8 +236,8 @@ def _timeline(db: Session, project: CustomerProject | None) -> list[FlowTimeline
 
 
 def _documents(db: Session, customer_id: str) -> list[FlowDocument]:
-    rows = db.scalars(select(StoredFile).where(StoredFile.customer_id == customer_id, StoredFile.status != 'deleted').order_by(StoredFile.created_at.desc()).limit(100)).all()
-    return [FlowDocument(id=row.id, name=row.name, owner_type=row.owner_type, status=row.status, project_id=row.project_id, created_at=row.created_at) for row in rows]
+    rows = db.scalars(select(StoredFile).where(StoredFile.customer_id == customer_id).order_by(StoredFile.created_at.desc()).limit(100)).all()
+    return [FlowDocument(id=row.id, name=row.name, owner_type=row.owner_type, project_id=row.project_id, created_at=row.created_at) for row in rows]
 
 
 def _payments(db: Session, customer_id: str) -> list[FlowPayment]:

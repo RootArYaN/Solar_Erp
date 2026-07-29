@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 import hashlib
+import re
+import shlex
 import shutil
+import subprocess
 from pathlib import Path, PurePosixPath
 from typing import BinaryIO
+from uuid import uuid4
 
 from fastapi import UploadFile
 
@@ -15,7 +19,10 @@ class StorageError(Exception):
 
 
 def safe_relative_path(value: str) -> str:
-    raw = value.replace("\\", "/").strip("/")
+    supplied = value.strip()
+    if supplied.startswith(("/", "\\")) or re.match(r"^[A-Za-z]:[\\/]", supplied):
+        raise StorageError("Unsafe storage path")
+    raw = supplied.replace("\\", "/").strip("/")
     path = PurePosixPath(raw)
     if not raw or path.is_absolute() or any(part in {"", ".", ".."} for part in path.parts):
         raise StorageError("Unsafe storage path")
@@ -69,6 +76,56 @@ class LocalStorage:
         target = self.path(relative_path)
         if target.exists() and target.is_dir():
             shutil.rmtree(target)
+
+    def stage_delete(self, relative_path: str) -> str | None:
+        source = self.path(relative_path)
+        if not source.exists():
+            return None
+        staged_relative = f"temp/delete-{uuid4().hex}/{source.name}"
+        staged = self.path(staged_relative)
+        staged.parent.mkdir(parents=True, exist_ok=True)
+        source.replace(staged)
+        return staged_relative
+
+    def restore_staged_delete(self, staged_relative: str, original_relative: str) -> None:
+        staged = self.path(staged_relative)
+        if not staged.exists():
+            return
+        original = self.path(original_relative)
+        original.parent.mkdir(parents=True, exist_ok=True)
+        staged.replace(original)
+        self._remove_empty_parent(staged.parent)
+
+    def finalize_staged_delete(self, staged_relative: str) -> None:
+        staged = self.path(staged_relative)
+        staged.unlink(missing_ok=True)
+        self._remove_empty_parent(staged.parent)
+
+    def _remove_empty_parent(self, path: Path) -> None:
+        if path != self.temp_root and path.exists():
+            try:
+                path.rmdir()
+            except OSError:
+                pass
+
+    def scan(self, relative_path: str) -> None:
+        command = settings.malware_scan_command.strip()
+        if not command:
+            if settings.require_malware_scan:
+                raise StorageError("Malware scanning is required but not configured")
+            return
+        target = str(self.path(relative_path))
+        arguments = shlex.split(command)
+        if any("{path}" in item for item in arguments):
+            arguments = [item.replace("{path}", target) for item in arguments]
+        else:
+            arguments.append(target)
+        try:
+            result = subprocess.run(arguments, capture_output=True, text=True, timeout=120, check=False)
+        except (OSError, subprocess.SubprocessError) as exc:
+            raise StorageError("The malware scanner could not inspect the upload") from exc
+        if result.returncode != 0:
+            raise StorageError("The uploaded file failed malware scanning")
 
     async def save_upload(self, upload: UploadFile, relative_path: str, max_bytes: int) -> tuple[int, str]:
         target = self.path(relative_path)

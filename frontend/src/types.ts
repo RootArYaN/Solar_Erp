@@ -1,8 +1,5 @@
 export type Session = {
-  access_token: string
-  token_type: 'bearer'
-  expires_at: string
-  membership_id?: string
+  membership_id: string
   user: {
     id: string
     username: string
@@ -18,6 +15,13 @@ export type Session = {
   role: string
   permissions: string[]
 }
+
+export type AuthSessionResponse = Session & {
+  access_token: string
+  token_type: 'bearer'
+  expires_at: string
+}
+
 
 export type ManagedUser = {
   id: string
@@ -352,7 +356,6 @@ export type StoredFile = {
   mime_type: string
   size_bytes: number
   checksum: string
-  status: 'active' | 'deleted'
   created_at: string
 }
 export type StoredFileList = { data: StoredFile[]; page: number; page_size: number; total: number }

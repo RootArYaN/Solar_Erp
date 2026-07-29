@@ -48,7 +48,7 @@ export function ActiveDevicesPage({ session }: { session: Session }) {
   }
 
   return <WorkspacePage className="security-page">
-    <WorkspaceHeader className="security-header"><div><span>Account security</span><h1>Active devices</h1><p>Refresh tokens are expected in Secure, HttpOnly, SameSite cookies. The browser stores only the short-lived access session.</p></div><button className="secondary-button" onClick={() => void load()}><RefreshCw size={14} /> Refresh</button></WorkspaceHeader>
+    <WorkspaceHeader className="security-header"><div><span>Account security</span><h1>Active devices</h1><p>Refresh tokens stay in Secure, HttpOnly, SameSite cookies. The access token is held only in memory and is cleared when this tab closes.</p></div><button className="secondary-button" onClick={() => void load()}><RefreshCw size={14} /> Refresh</button></WorkspaceHeader>
     {access.readOnly && <ReadOnlyNotice />}
     <ScrollSurface className="security-device-surface">
     {loading ? <LoadingSkeleton rows={5} /> : error ? <ErrorState message={error} requestId={requestId} onRetry={() => void load()} /> : devices.length === 0 ? <EmptyState title="No active devices" message="The backend has not returned any sessions." /> : <div className="device-list">

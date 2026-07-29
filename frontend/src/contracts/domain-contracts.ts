@@ -165,7 +165,6 @@ export type CustomerDocument = {
   id: UUID
   name: string
   owner_type: string
-  status: string
   project_id: UUID | null
   created_at: UTCTimestamp
 }

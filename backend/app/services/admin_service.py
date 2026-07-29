@@ -1,9 +1,12 @@
-from sqlalchemy import func, or_, select
+from datetime import UTC, datetime
+
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.orm import Session, selectinload
 
 from app.api.deps import CurrentSession
 from app.core.security import hash_password
 from app.models.auth import Membership, Permission, Role, User
+from app.models.system import AuthSession
 from app.schemas.admin import (
     CreateRoleRequest,
     CreateUserRequest,
@@ -334,6 +337,11 @@ def reset_user_password(
     membership = _get_membership(db, actor.membership.company_id, membership_id)
     _assert_target_editable(actor, membership)
     membership.user.hashed_password = hash_password(payload.new_password)
+    db.execute(
+        update(AuthSession)
+        .where(AuthSession.user_id == membership.user_id, AuthSession.revoked_at.is_(None))
+        .values(revoked_at=datetime.now(UTC))
+    )
     write_event(
         db,
         company_id=membership.company_id,

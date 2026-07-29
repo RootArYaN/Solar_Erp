@@ -3,14 +3,22 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "packageManager": "npm@10.9.2",
+  "engines": {
+    "node": ">=22.13.0 <23",
+    "npm": ">=10.0.0"
+  },
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "typecheck": "tsc -b --pretty false",
+    "build": "npm run typecheck && vite build",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "check": "npm run typecheck && npm run test && npm run build"
   },
   "dependencies": {
     "@capacitor/android": "^8.4.2",
@@ -20,7 +28,7 @@
     "motion": "11.15.0",
     "react": "18.3.1",
     "react-dom": "18.3.1",
-    "react-router-dom": "6.28.0"
+    "react-router-dom": "^6.30.4"
   },
   "devDependencies": {
     "@capacitor/cli": "^8.4.2",
@@ -28,14 +36,15 @@
     "@testing-library/jest-dom": "^6.8.0",
     "@testing-library/react": "^16.3.0",
     "@testing-library/user-event": "^14.6.1",
+    "@types/node": "26.1.1",
     "@types/react": "18.3.18",
     "@types/react-dom": "18.3.5",
     "@vitejs/plugin-react": "4.3.4",
-    "@vitest/coverage-v8": "^3.2.4",
+    "@vitest/coverage-v8": "^4.1.10",
     "jsdom": "^26.1.0",
     "msw": "^2.10.4",
     "typescript": "5.7.3",
-    "vite": "5.4.14",
+    "vite": "^5.4.21",
     "vitest": "^3.2.4"
   }
 }

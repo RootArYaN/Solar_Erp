@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import CurrentSession, get_current_session, require_permissions
 from app.core.config import settings
 from app.core.rate_limit import check_login_limit, clear_login_limit
+from app.core.security import create_csrf_token
 from app.db.session import get_db
 from app.schemas.auth import ActiveDeviceSummary, CompanySummary, LoginRequest, MeResponse, SessionResponse, UserSummary
 from app.services import auth_service
@@ -15,7 +16,11 @@ router = APIRouter(prefix="/auth", tags=["authentication"])
 
 
 def _ip_hint(request: Request) -> str:
-    forwarded = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+    forwarded = (
+        request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+        if settings.trust_proxy_headers
+        else ""
+    )
     address = forwarded or (request.client.host if request.client else "")
     if not address:
         return ""
@@ -33,8 +38,13 @@ def _set_refresh_cookie(response: Response, token: str, persistent: bool) -> Non
         secure=settings.session_cookie_secure,
         samesite=settings.session_cookie_samesite,
         path="/api/v1/auth",
+        domain=settings.session_cookie_domain,
         max_age=int(timedelta(days=settings.refresh_token_days).total_seconds()) if persistent else None,
     )
+
+
+def _set_csrf_header(response: Response, auth_session_id: str) -> None:
+    response.headers[settings.csrf_header_name] = create_csrf_token(auth_session_id)
 
 
 @router.post("/login", response_model=SessionResponse)
@@ -53,6 +63,7 @@ def login(payload: LoginRequest, request: Request, response: Response, db: Sessi
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)) from exc
     clear_login_limit(limit_key)
     _set_refresh_cookie(response, refresh_token, auth_session.persistent)
+    _set_csrf_header(response, auth_session.id)
     return session
 
 
@@ -67,9 +78,10 @@ def refresh(
     try:
         session, next_token, auth_session = auth_service.refresh_session(db, refresh_token)
     except AuthenticationError as exc:
-        response.delete_cookie(settings.session_cookie_name, path="/api/v1/auth")
+        response.delete_cookie(settings.session_cookie_name, path="/api/v1/auth", domain=settings.session_cookie_domain)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)) from exc
     _set_refresh_cookie(response, next_token, auth_session.persistent)
+    _set_csrf_header(response, auth_session.id)
     return session
 
 
@@ -80,7 +92,7 @@ def logout(
     db: Session = Depends(get_db),
 ) -> Response:
     auth_service.revoke_session(db, session.auth_session_id)
-    response.delete_cookie(settings.session_cookie_name, path="/api/v1/auth")
+    response.delete_cookie(settings.session_cookie_name, path="/api/v1/auth", domain=settings.session_cookie_domain)
     response.status_code = status.HTTP_204_NO_CONTENT
     return response
 

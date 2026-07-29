@@ -1,14 +1,14 @@
-/* Authenticated workspace contract. Login and authentication visuals intentionally remain in styles.css. */
+/* Authenticated workspace contract. Login and authentication visuals intentionally remain in styles/base.css. */
 :root {
   --workspace-inset: 12px;
   --workspace-gap: 8px;
   --workspace-control-height: 32px;
   --workspace-touch-height: 38px;
   --workspace-radius: 10px;
-  --workspace-title-size: 20px;
+  --workspace-title-size: 21px;
   --workspace-section-title-size: 13px;
-  --workspace-body-size: 10px;
-  --workspace-label-size: 8px;
+  --workspace-body-size: 12px;
+  --workspace-label-size: 10px;
   --workspace-border: rgba(35, 46, 61, 0.12);
   --workspace-surface: #fff;
   --workspace-background: #f5f3ef;
@@ -139,7 +139,7 @@ body,
   max-width: 720px;
   margin: 3px 0 0;
   color: var(--muted);
-  font-size: 9px;
+  font-size: 11px;
   line-height: 1.4;
 }
 
@@ -363,6 +363,7 @@ body,
 }
 
 .inventory-workspace-body {
+  height: 100%;
   display: block;
   overflow: hidden;
 }
@@ -382,7 +383,10 @@ body,
 
 .inventory-stock-grid > .erp-panel,
 .inventory-workspace-body > .erp-panel {
+  height: 100%;
+  max-height: 100%;
   min-height: 0;
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -431,7 +435,7 @@ body,
   padding-inline: 11px;
   margin-top: 0;
   border-radius: 8px;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .workspace-page :is(button.icon-button, button.danger-icon-button),
@@ -882,7 +886,7 @@ body,
   max-height: calc(100dvh - 24px);
   min-height: 0;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
   overflow: hidden;
   border-radius: var(--workspace-radius);
 }
@@ -907,7 +911,7 @@ body,
 
 .modal-card__header p {
   margin-top: 2px;
-  font-size: 9px;
+  font-size: 11px;
 }
 
 .modal-card__body {
@@ -1335,7 +1339,16 @@ body,
 .movement-line__remove{align-self:center;display:grid;place-items:center;width:28px;height:28px;border:1px solid #efd2cf;border-radius:7px;color:#a94842;background:#fff8f7;cursor:pointer}
 .movement-details{min-width:0;margin:0;padding:10px;border:1px solid #e0e5e9;border-radius:10px}
 .movement-details legend{padding:0 6px;color:#667383;font-size:8px;font-weight:850;letter-spacing:.45px;text-transform:uppercase}
-.inventory-history-tabs{margin-left:auto}
+.inventory-history-panel>header{flex:0 0 auto;min-width:0}
+.inventory-history-panel>header>div:first-child{min-width:0}
+.inventory-history-tabs{
+  width:auto;
+  max-width:100%;
+  min-width:0;
+  flex:0 0 auto;
+  margin-left:auto;
+}
+.inventory-history-tabs button{min-width:68px}
 .inventory-action--inward{color:#2e7147!important;border-color:#cbe3d2!important;background:#f1faf4!important}
 .inventory-action--outward{color:#956111!important;border-color:#ead8b7!important;background:#fff8e9!important}
 .agent-transaction-actions{display:flex;align-items:center;gap:5px;white-space:nowrap}

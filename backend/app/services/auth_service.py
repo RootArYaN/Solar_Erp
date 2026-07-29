@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import select, update
+from sqlalchemy import and_, or_, select, update
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.config import settings
-from app.core.security import create_access_token, hash_refresh_token, new_refresh_token, verify_password
+from app.core.security import create_access_token, hash_password, hash_refresh_token, new_refresh_token, password_hash_needs_rehash, verify_password
 from app.core.time import as_utc
 from app.models.auth import Membership, Role, User
 from app.models.system import AuthSession
@@ -16,6 +16,11 @@ from app.services.audit_service import write_event
 
 class AuthenticationError(Exception):
     pass
+
+
+# Always perform one Argon2 verification for a rejected login, including an
+# unknown username, so account existence is not exposed through timing.
+DUMMY_PASSWORD_HASH = hash_password("solar-erp-login-timing-placeholder")
 
 
 def _parse_device(user_agent: str) -> tuple[str, str, str]:
@@ -85,8 +90,12 @@ def authenticate(
             selectinload(User.memberships).selectinload(Membership.company),
         )
     )
-    if not user or not user.is_active or not verify_password(payload.password, user.hashed_password):
+    password_hash = user.hashed_password if user else DUMMY_PASSWORD_HASH
+    password_valid = verify_password(payload.password, password_hash)
+    if not user or not user.is_active or not password_valid:
         raise AuthenticationError("Invalid username or password")
+    if password_hash_needs_rehash(user.hashed_password):
+        user.hashed_password = hash_password(payload.password)
 
     memberships = [item for item in user.memberships if item.is_active and item.company.is_active]
     if not memberships:
@@ -144,8 +153,18 @@ def record_login_failure(db: Session, username: str, ip_hint: str) -> None:
 
 def refresh_session(db: Session, refresh_token: str) -> tuple[SessionResponse, str, AuthSession]:
     now = datetime.now(UTC)
+    incoming_hash = hash_refresh_token(refresh_token)
     auth_session = db.scalar(
-        select(AuthSession).where(AuthSession.refresh_hash == hash_refresh_token(refresh_token))
+        select(AuthSession)
+        .where(or_(
+            AuthSession.refresh_hash == incoming_hash,
+            and_(
+                AuthSession.previous_refresh_hash == incoming_hash,
+                AuthSession.previous_refresh_valid_until.is_not(None),
+                AuthSession.previous_refresh_valid_until >= now,
+            ),
+        ))
+        .with_for_update()
     )
     if not auth_session or auth_session.revoked_at or as_utc(auth_session.expires_at) <= now:
         raise AuthenticationError("Session expired or revoked")
@@ -155,6 +174,8 @@ def refresh_session(db: Session, refresh_token: str) -> tuple[SessionResponse, s
         raise AuthenticationError("Session access is no longer active")
 
     next_token = new_refresh_token()
+    auth_session.previous_refresh_hash = auth_session.refresh_hash
+    auth_session.previous_refresh_valid_until = now + timedelta(seconds=settings.refresh_rotation_grace_seconds)
     auth_session.refresh_hash = hash_refresh_token(next_token)
     auth_session.last_seen_at = now
     response = _session_response(membership, auth_session.id)

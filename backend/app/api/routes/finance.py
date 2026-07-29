@@ -26,6 +26,8 @@ from app.schemas.finance import (
     ProfitabilitySummary,
     RecordBillPaymentRequest,
     ReverseFinanceTransactionRequest,
+    UpdateBillRequest,
+    UpdateCompanyLoanRequest,
     UpdateFinanceTransactionRequest,
     UpsertCustomerLoanRequest,
 )
@@ -149,9 +151,21 @@ def post_bill(payload: CreateBillRequest, db: Session = Depends(get_db), session
     except FinanceServiceError as exc: _raise(exc)
 
 
+@router.patch('/bills/{bill_id}', response_model=BillSummary)
+def patch_bill(bill_id: str, payload: UpdateBillRequest, db: Session = Depends(get_db), session: CurrentSession = Depends(require_any_permissions('finance.manage'))):
+    try: return finance_service.update_bill(db, session, bill_id, payload)
+    except FinanceServiceError as exc: _raise(exc)
+
+
 @router.post('/bills/{bill_id}/payments', response_model=BillSummary)
 def post_bill_payment(bill_id: str, payload: RecordBillPaymentRequest, db: Session = Depends(get_db), session: CurrentSession = Depends(require_any_permissions('finance.manage'))):
     try: return finance_service.record_bill_payment(db, session, bill_id, payload)
+    except FinanceServiceError as exc: _raise(exc)
+
+
+@router.delete('/bills/{bill_id}', status_code=204)
+def delete_bill(bill_id: str, db: Session = Depends(get_db), session: CurrentSession = Depends(require_any_permissions('finance.manage'))):
+    try: return finance_service.delete_bill(db, session, bill_id)
     except FinanceServiceError as exc: _raise(exc)
 
 
@@ -178,9 +192,21 @@ def post_company_loan(payload: CreateCompanyLoanRequest, db: Session = Depends(g
     except FinanceServiceError as exc: _raise(exc)
 
 
+@router.patch('/company-loans/{loan_id}', response_model=CompanyLoanSummary)
+def patch_company_loan(loan_id: str, payload: UpdateCompanyLoanRequest, db: Session = Depends(get_db), session: CurrentSession = Depends(require_any_permissions('finance.manage'))):
+    try: return finance_service.update_company_loan(db, session, loan_id, payload)
+    except FinanceServiceError as exc: _raise(exc)
+
+
 @router.post('/company-loans/{loan_id}/payments', response_model=CompanyLoanSummary)
 def post_company_loan_payment(loan_id: str, payload: CompanyLoanPaymentRequest, db: Session = Depends(get_db), session: CurrentSession = Depends(require_any_permissions('finance.manage'))):
     try: return finance_service.pay_company_loan(db, session, loan_id, payload)
+    except FinanceServiceError as exc: _raise(exc)
+
+
+@router.delete('/company-loans/{loan_id}', status_code=204)
+def delete_company_loan(loan_id: str, db: Session = Depends(get_db), session: CurrentSession = Depends(require_any_permissions('finance.manage'))):
+    try: return finance_service.delete_company_loan(db, session, loan_id)
     except FinanceServiceError as exc: _raise(exc)
 
 

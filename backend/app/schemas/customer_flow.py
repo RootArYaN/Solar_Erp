@@ -189,7 +189,6 @@ class FlowDocument(BaseModel):
     id: str
     name: str
     owner_type: str
-    status: str
     project_id: str | None = None
     created_at: datetime
 

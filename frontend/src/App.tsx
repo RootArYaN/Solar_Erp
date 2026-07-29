@@ -4,8 +4,8 @@ import { AppShell } from './components/AppShell'
 import { LoginPage } from './components/LoginPage'
 import { ProtectedRoute } from './components/routing/ProtectedRoute'
 import { useToast } from './components/ui/ToastProvider'
-import { ApiError, getCurrentSession, logout, refreshCurrentSession } from './lib/api'
-import { AUTH_SESSION_EVENT, loadSession, replaceSession, type SessionEndReason } from './lib/auth-storage'
+import { getCurrentSession, isConfirmedSessionEnd, logout, refreshCurrentSession } from './lib/api'
+import { AUTH_SESSION_EVENT, clearSession, loadSession, replaceSession, type SessionEndReason } from './lib/auth-storage'
 import { PERMISSIONS } from './lib/permissions'
 import type { Session } from './types'
 
@@ -25,25 +25,20 @@ const ProjectTimelinePage = lazy(() => import('./components/workflow/ProjectTime
 const sessionMessages: Partial<Record<SessionEndReason, string>> = {
   expired: 'Your session expired. Sign in again to continue.',
   revoked: 'This session was revoked from another device.',
-  refresh_failed: 'Your secure session could not be renewed. Please sign in again.',
   invalid: 'The saved session was invalid and has been cleared.',
 }
 
 export default function App() {
-  const [session, setSession] = useState<Session | null>(() => loadSession())
+  const [session, setSession] = useState<Session | null>(null)
   const [initializing, setInitializing] = useState(true)
   const [authNotice, setAuthNotice] = useState('')
+  const [initializationError, setInitializationError] = useState('')
   const navigate = useNavigate()
   const { toast } = useToast()
 
   const syncCurrentSession = useCallback(async (): Promise<Session | null> => {
-    const current = loadSession()
-    if (!current) return null
-    const profile = await getCurrentSession(current.access_token)
-    const latest = loadSession() ?? current
-    const nextSession = { ...latest, ...profile } as Session
-    replaceSession(nextSession)
-    return nextSession
+    const profile = await getCurrentSession()
+    return replaceSession(profile)
   }, [])
 
   useEffect(() => {
@@ -56,23 +51,34 @@ export default function App() {
     return () => window.removeEventListener(AUTH_SESSION_EVENT, onSessionChanged)
   }, [])
 
-  useEffect(() => {
-    let active = true
-    const stored = loadSession()
-    const task = stored ? syncCurrentSession() : refreshCurrentSession()
+  const initializeSession = useCallback(async () => {
+    setInitializing(true)
+    setInitializationError('')
+    const storedProfile = loadSession()
+    try {
+      const next = await refreshCurrentSession()
+      setSession(next)
+    } catch (reason) {
+      if (isConfirmedSessionEnd(reason)) {
+        clearSession(storedProfile ? 'expired' : 'signed_out', false)
+        setSession(null)
+        return
+      }
+      // A network outage or timeout is not proof that the refresh session is
+      // invalid. Keep the token-free profile and user-scoped drafts intact.
+      setSession(storedProfile)
+      setInitializationError(reason instanceof Error ? reason.message : 'Could not reach the secure session service.')
+    } finally {
+      setInitializing(false)
+    }
+  }, [])
 
-    void task
-      .then((next) => { if (active && next) setSession(next) })
-      .catch((reason) => {
-        if (!active) return
-        if (stored && !(reason instanceof ApiError && reason.status === 401)) {
-          toast({ message: reason instanceof Error ? `${reason.message}. Using the saved session until connectivity returns.` : 'Could not validate the saved session.', variant: 'warning' })
-          setSession(stored)
-        }
-      })
-      .finally(() => { if (active) setInitializing(false) })
-    return () => { active = false }
-  }, [syncCurrentSession, toast])
+  useEffect(() => {
+    void initializeSession()
+    const retryWhenOnline = () => { void initializeSession() }
+    window.addEventListener('online', retryWhenOnline)
+    return () => window.removeEventListener('online', retryWhenOnline)
+  }, [initializeSession])
 
   useEffect(() => {
     if (!session) return
@@ -104,6 +110,8 @@ export default function App() {
   }
 
   if (initializing) return <main className="app-boot-screen"><div className="app-boot-spinner" /><strong>Validating session…</strong></main>
+
+  if (initializationError) return <main className="app-boot-screen app-boot-screen--error"><strong>Secure session service is unavailable</strong><p>{initializationError}</p><button type="button" className="primary-button" onClick={() => void initializeSession()}>Retry connection</button></main>
 
   return (
     <Suspense fallback={<main className="app-boot-screen"><div className="app-boot-spinner" /><strong>Loading page…</strong></main>}>

@@ -10,8 +10,6 @@ import {
   Mail,
   MapPin,
   Phone,
-  Plus,
-  RefreshCw,
   Search,
   Trash2,
   UsersRound,
@@ -48,7 +46,8 @@ import { AgentCustomerDialog } from './AgentCustomerDialog'
 import { AgentProfileDialog } from './AgentProfileDialog'
 import { AgentTransactionDialog } from './AgentTransactionDialog'
 import { QuotationRequestDialog } from './QuotationRequestDialog'
-import { KpiGrid, WorkspacePage, WorkspaceToolbar } from '../workspace'
+import { KpiGrid, WorkspacePage } from '../workspace'
+import { AgentWorkspaceControls } from './AgentWorkspaceControls'
 
 const currency = new Intl.NumberFormat('en-IN', {
   style: 'currency',
@@ -105,7 +104,7 @@ export function AgentOverviewPage({ session }: { session: Session }) {
   async function loadAgentList() {
     setLoading(true)
     try {
-      const nextAgents = await getAgents(session.access_token)
+      const nextAgents = await getAgents()
       setAgents(nextAgents)
       setSelectedMembershipId((current) => {
         if (nextAgents.some((agent) => agent.membership_id === current)) return current
@@ -123,7 +122,7 @@ export function AgentOverviewPage({ session }: { session: Session }) {
     if (!membershipId) return
     setLoading(true)
     try {
-      setOverview(await getAgentOverview(session.access_token, membershipId))
+      setOverview(await getAgentOverview(membershipId))
     } catch (reason) {
       toast({ message: reason instanceof Error ? reason.message : 'Could not load agent overview', variant: 'error' })
     } finally {
@@ -134,12 +133,12 @@ export function AgentOverviewPage({ session }: { session: Session }) {
   async function refreshPage() {
     setLoading(true)
     try {
-      const nextAgents = await getAgents(session.access_token)
+      const nextAgents = await getAgents()
       const nextMembershipId = nextAgents.some((agent) => agent.membership_id === selectedMembershipId)
         ? selectedMembershipId
         : nextAgents[0]?.membership_id ?? ''
       const nextOverview = nextMembershipId
-        ? await getAgentOverview(session.access_token, nextMembershipId)
+        ? await getAgentOverview(nextMembershipId)
         : null
       setAgents(nextAgents)
       setSelectedMembershipId(nextMembershipId)
@@ -198,7 +197,6 @@ export function AgentOverviewPage({ session }: { session: Session }) {
     setBusy(true)
     try {
       const nextOverview = await updateAgentProfile(
-        session.access_token,
         overview.profile.membership_id,
         value,
       )
@@ -217,7 +215,7 @@ export function AgentOverviewPage({ session }: { session: Session }) {
     if (!overview) return
     setBusy(true)
     try {
-      const transaction = await createAgentTransaction(session.access_token, overview.profile.membership_id, value)
+      const transaction = await createAgentTransaction(overview.profile.membership_id, value)
       setPostingTransaction(false)
       await Promise.all([loadOverview(overview.profile.membership_id), loadAgentList()])
       toast({ message: transaction.approval_status === 'pending' ? 'Transaction submitted for admin approval' : 'Transaction approved and posted', variant: 'success' })
@@ -233,7 +231,6 @@ export function AgentOverviewPage({ session }: { session: Session }) {
     setBusy(true)
     try {
       await updateAgentTransaction(
-        session.access_token,
         overview.profile.membership_id,
         editingTransaction.id,
         value,
@@ -253,7 +250,6 @@ export function AgentOverviewPage({ session }: { session: Session }) {
     setBusy(true)
     try {
       await deleteAgentTransaction(
-        session.access_token,
         overview.profile.membership_id,
         transactionToDelete.id,
       )
@@ -271,7 +267,7 @@ export function AgentOverviewPage({ session }: { session: Session }) {
     if (!overview) return
     setBusy(true)
     try {
-      const next = await createAgentCustomer(session.access_token, overview.profile.membership_id, value)
+      const next = await createAgentCustomer(overview.profile.membership_id, value)
       setOverview(next)
       setRegisteringCustomer(false)
       await loadAgentList()
@@ -288,7 +284,6 @@ export function AgentOverviewPage({ session }: { session: Session }) {
     setBusy(true)
     try {
       const next = await updateAgentCustomer(
-        session.access_token,
         overview.profile.membership_id,
         editingCustomer.id,
         value,
@@ -307,7 +302,7 @@ export function AgentOverviewPage({ session }: { session: Session }) {
     if (!quotationCustomer || !overview) return
     setBusy(true)
     try {
-      await createQuotationRequest(session.access_token, quotationCustomer.id, value)
+      await createQuotationRequest(quotationCustomer.id, value)
       setQuotationCustomer(null)
       await loadOverview(overview.profile.membership_id)
       toast({ message: 'Quotation request forwarded to admin and super admin', variant: 'success' })
@@ -334,112 +329,34 @@ export function AgentOverviewPage({ session }: { session: Session }) {
 
   return (
     <WorkspacePage className="agent-page">
-      <WorkspaceToolbar className="agent-workspace-toolbar">
-        <div className="agent-global-search">
-          <Search size={17} />
-          <input
-            value={workspaceSearch}
-            onChange={(event) => setWorkspaceSearch(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Escape') setWorkspaceSearch('')
-            }}
-            placeholder="Search agents or customers"
-            aria-label="Search agents or customers"
-          />
-          <select
-            value={searchScope}
-            onChange={(event) => setSearchScope(event.target.value as 'all' | 'agents' | 'customers')}
-            aria-label="Search scope"
-          >
-            <option value="all">All</option>
-            <option value="agents">Agents</option>
-            <option value="customers">Customers</option>
-          </select>
-
-          {workspaceSearch.trim() && (
-            <div className="agent-search-results">
-              {workspaceResults.agents.length > 0 && (
-                <section>
-                  <span>Agents</span>
-                  {workspaceResults.agents.map((agent) => (
-                    <button
-                      type="button"
-                      key={agent.membership_id}
-                      onClick={() => {
-                        setSelectedMembershipId(agent.membership_id)
-                        setCustomerSearch('')
-                        setTransactionSearch('')
-                        setWorkspaceSearch('')
-                      }}
-                    >
-                      <div className="avatar avatar--small">{agent.full_name.slice(0, 1).toUpperCase()}</div>
-                      <span><strong>{agent.full_name}</strong><small>{agent.email} · {agent.customer_count} customers</small></span>
-                    </button>
-                  ))}
-                </section>
-              )}
-              {workspaceResults.customers.length > 0 && (
-                <section>
-                  <span>Customers</span>
-                  {workspaceResults.customers.map((customer) => (
-                    <button
-                      type="button"
-                      key={customer.id}
-                      onClick={() => {
-                        setCustomerSearch(customer.customer_name)
-                        setWorkspaceSearch('')
-                      }}
-                    >
-                      <div className="customer-avatar">{customer.customer_name.slice(0, 1).toUpperCase()}</div>
-                      <span><strong>{customer.customer_name}</strong><small>{customer.consumer_number || customer.project_name || customer.customer_type}</small></span>
-                    </button>
-                  ))}
-                </section>
-              )}
-              {workspaceResults.agents.length === 0 && workspaceResults.customers.length === 0 && (
-                <div className="agent-search-results__empty">No matching agents or customers</div>
-              )}
-            </div>
-          )}
-        </div>
-
-        {agents.length > 1 && (
-          <label className="agent-toolbar-picker">
-            <span>Agent</span>
-            <select
-              value={selectedMembershipId}
-              onChange={(event) => {
-                setSelectedMembershipId(event.target.value)
-                setCustomerSearch('')
-                setTransactionSearch('')
-              }}
-            >
-              {agents.map((agent) => <option key={agent.membership_id} value={agent.membership_id}>{agent.full_name} · {agent.customer_count} customers</option>)}
-            </select>
-          </label>
-        )}
-
-        <div className="agent-page__actions">
-          <button type="button" className="secondary-button secondary-button--icon" onClick={() => void refreshPage()} disabled={loading} aria-label="Refresh agent overview">
-            <RefreshCw className={loading ? 'spin' : ''} size={16} /> Refresh
-          </button>
-          {overview && canEditSelectedProfile && (
-            <button className="secondary-button secondary-button--icon" onClick={() => setEditingProfile(true)}>
-              <Edit3 size={16} /> Edit profile
-            </button>
-          )}
-          {overview && canRegisterCustomers && (
-            <button className="secondary-button secondary-button--icon" onClick={() => setRegisteringCustomer(true)}>
-              <Plus size={16} /> Register customer
-            </button>
-          )}
-          {overview && canPostTransactions && (
-            <button className="primary-button primary-button--compact" onClick={() => setPostingTransaction(true)}>
-              <Plus size={17} /> Add transaction
-            </button>
-          )}
-        </div>
-      </WorkspaceToolbar>
+      <AgentWorkspaceControls
+        agents={agents}
+        overview={overview}
+        selectedMembershipId={selectedMembershipId}
+        workspaceSearch={workspaceSearch}
+        searchScope={searchScope}
+        searchResults={workspaceResults}
+        loading={loading}
+        canEditProfile={canEditSelectedProfile}
+        canRegisterCustomers={canRegisterCustomers}
+        canPostTransactions={canPostTransactions}
+        onWorkspaceSearchChange={setWorkspaceSearch}
+        onSearchScopeChange={setSearchScope}
+        onSelectAgent={(membershipId) => {
+          setSelectedMembershipId(membershipId)
+          setCustomerSearch('')
+          setTransactionSearch('')
+          setWorkspaceSearch('')
+        }}
+        onSelectCustomer={(customer) => {
+          setCustomerSearch(customer.customer_name)
+          setWorkspaceSearch('')
+        }}
+        onRefresh={() => void refreshPage()}
+        onEditProfile={() => setEditingProfile(true)}
+        onRegisterCustomer={() => setRegisteringCustomer(true)}
+        onAddTransaction={() => setPostingTransaction(true)}
+      />
 
       <div className="agent-page__body">
       {loading && !overview ? (

@@ -1,0 +1,176 @@
+/* Unified feedback ------------------------------------------------------- */
+.toast-viewport {
+  position: fixed;
+  top: 18px;
+  right: 18px;
+  z-index: 160;
+  width: min(380px, calc(100vw - 28px));
+  display: grid;
+  gap: 10px;
+  pointer-events: none;
+}
+
+.toast {
+  --toast-accent: #315f85;
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 11px;
+  min-height: 62px;
+  padding: 11px 12px;
+  overflow: hidden;
+  border: 1px solid rgba(20, 38, 53, .12);
+  border-radius: 14px;
+  color: #17202d;
+  background: rgba(255, 255, 255, .96);
+  box-shadow: 0 18px 42px rgba(12, 27, 40, .18);
+  backdrop-filter: blur(18px);
+  pointer-events: auto;
+  animation: toast-in .24s cubic-bezier(.22, 1, .36, 1) both;
+}
+.toast--success { --toast-accent: #25845d; }
+.toast--success .toast__icon { background: rgba(37, 132, 93, .10); }
+.toast--error { --toast-accent: #c34743; }
+.toast--error .toast__icon { background: rgba(195, 71, 67, .10); }
+.toast--warning { --toast-accent: #c88618; }
+.toast--warning .toast__icon { background: rgba(200, 134, 24, .11); }
+.toast--info { --toast-accent: #3976a3; }
+.toast__icon {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  color: var(--toast-accent);
+  background: rgba(57, 118, 163, .10);
+}
+.toast__content { min-width: 0; display: grid; gap: 2px; }
+.toast__content strong { font-size: 13px; }
+.toast__content span { color: #555f6b; font-size: 12px; line-height: 1.4; overflow-wrap: anywhere; }
+.toast > button {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 9px;
+  color: #75808a;
+  background: transparent;
+  cursor: pointer;
+}
+.toast > button:hover { color: #26313d; background: #f2f3f3; }
+.toast__progress {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: 2px;
+  background: var(--toast-accent);
+  transform-origin: left;
+  animation: toast-progress linear forwards;
+}
+
+.alert-dialog-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  isolation: isolate;
+  background: rgba(8, 20, 30, .58);
+  backdrop-filter: blur(9px);
+  animation: dialog-fade-in .16s ease-out both;
+}
+.alert-dialog {
+  position: relative;
+  z-index: 1;
+  width: min(430px, 100%);
+  padding: 18px;
+  border: 1px solid rgba(255, 255, 255, .55);
+  border-radius: 18px;
+  background: #fffdfa;
+  box-shadow: 0 28px 74px rgba(5, 15, 24, .28);
+  animation: dialog-pop-in .22s cubic-bezier(.22, 1, .36, 1) both;
+}
+.alert-dialog__content { display: grid; grid-template-columns: 42px minmax(0, 1fr) 34px; align-items: start; gap: 12px; }
+.alert-dialog__icon {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 13px;
+  color: #b63e3a;
+  background: rgba(195, 71, 67, .10);
+}
+.alert-dialog--warning .alert-dialog__icon { color: #a96f12; background: rgba(200, 134, 24, .12); }
+.alert-dialog__close {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 10px;
+  color: #6f7882;
+  background: transparent;
+  cursor: pointer;
+}
+.alert-dialog__close:hover { background: #f2f0ec; }
+.alert-dialog__body { min-width: 0; padding: 2px 0 16px; }
+.alert-dialog__body h2 { margin: 0; color: #202b38; font-size: 18px; letter-spacing: -.35px; }
+.alert-dialog__body p { margin: 6px 0 0; color: #68717c; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.alert-dialog footer { display: flex; justify-content: flex-end; gap: 9px; margin-top: 2px; padding-top: 13px; border-top: 1px solid var(--line); }
+.danger-button {
+  min-height: 40px;
+  padding: 0 15px;
+  border: 0;
+  border-radius: 10px;
+  color: white;
+  background: linear-gradient(135deg, #c94f4a, #a92f2c);
+  box-shadow: 0 8px 20px rgba(169, 47, 44, .18);
+  font-size: 13px;
+  font-weight: 750;
+  cursor: pointer;
+}
+.danger-button:hover { transform: translateY(-1px); box-shadow: 0 10px 24px rgba(169, 47, 44, .24); }
+.danger-button:disabled, .alert-dialog button:disabled { cursor: wait; opacity: .64; transform: none; }
+
+/* Compact, cleaner content ---------------------------------------------- */
+button, a, input, select, textarea { transition: border-color .18s ease, background-color .18s ease, color .18s ease, box-shadow .18s ease, transform .18s ease; }
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: 3px solid rgba(211, 148, 27, .23);
+  outline-offset: 2px;
+}
+.login-form { margin-top: 20px; }
+.auth-hero__copy { margin-top: clamp(52px, 11vh, 92px); }
+.module-card { display: flex; min-height: 170px; flex-direction: column; }
+.module-card h2 { margin: 18px 0 16px; }
+.module-card > span, .module-card > a { margin-top: auto; }
+.page-heading h1 { margin-bottom: 0; }
+.poster-toolbar > div:first-child strong, .customer-doc-form-header strong { font-size: 16px; }
+.poster-drop-zone { min-height: 76px; }
+.poster-empty-card { min-height: 180px; }
+.modal-card__header h2 { margin-bottom: 0; }
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translate3d(18px, -6px, 0) scale(.98); }
+  to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+}
+@keyframes toast-progress { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+@keyframes dialog-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes dialog-pop-in { from { opacity: 0; transform: translateY(10px) scale(.97); } to { opacity: 1; transform: translateY(0) scale(1); } }
+
+@media (max-width: 600px) {
+  .toast-viewport { top: auto; right: 12px; bottom: 12px; width: calc(100vw - 24px); }
+  .toast { min-height: 58px; border-radius: 13px; }
+  .alert-dialog-layer { place-items: end center; padding: 0; }
+  .alert-dialog { width: 100%; border-radius: 20px 20px 0 0; padding: 18px 16px calc(18px + env(safe-area-inset-bottom)); }
+  .alert-dialog footer { display: grid; grid-template-columns: 1fr 1fr; }
+  .alert-dialog footer button { width: 100%; }
+  .module-card { min-height: 138px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toast, .toast__progress, .alert-dialog-layer, .alert-dialog { animation: none; }
+}

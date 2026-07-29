@@ -8,9 +8,12 @@ from sqlalchemy import bindparam, inspect, text
 
 from app.db.base import Base
 from app.db.session import engine
+from app.services.storage import storage
 import app.models  # noqa: F401 - registers model metadata
 
-MIGRATION_ID = "005_remove_archive_concept_postgresql"
+MIGRATION_005 = "005_remove_archive_concept_postgresql"
+MIGRATION_006 = "006_remove_file_soft_delete"
+CURRENT_MIGRATION_ID = MIGRATION_006
 
 MIGRATED_PERMISSIONS = {
     "documents.view": ("Show Customer data tab", "View customer and project documents."),
@@ -50,12 +53,16 @@ REMOVED_PERMISSIONS = (
 )
 
 COLUMN_DEFINITIONS = {
+    "auth_sessions": {
+        "previous_refresh_hash": "VARCHAR(64)",
+        "previous_refresh_valid_until": "TIMESTAMPTZ",
+    },
     "audit_events": {"updated_at": "TIMESTAMPTZ"},
     "company_loans": {"version": "INTEGER NOT NULL DEFAULT 1"},
     "customer_loans": {"version": "INTEGER NOT NULL DEFAULT 1"},
     "bills": {"version": "INTEGER NOT NULL DEFAULT 1"},
     "financial_accounts": {"version": "INTEGER NOT NULL DEFAULT 1"},
-    "stored_files": {"version": "INTEGER NOT NULL DEFAULT 1", "updated_at": "TIMESTAMPTZ"},
+    "stored_files": {"version": "INTEGER NOT NULL DEFAULT 1"},
     "posters": {"version": "INTEGER NOT NULL DEFAULT 1"},
     "inventory_locations": {"version": "INTEGER NOT NULL DEFAULT 1"},
     "inventory_items": {"version": "INTEGER NOT NULL DEFAULT 1"},
@@ -97,6 +104,7 @@ COLUMN_DEFINITIONS = {
 }
 
 INDEXES = [
+    ("ix_auth_sessions_previous_refresh_hash", "auth_sessions", "previous_refresh_hash"),
     ("ix_agent_transactions_project_id", "agent_transactions", "project_id"),
     ("ix_agent_customers_consumer_number", "agent_customers", "consumer_number"),
     ("ix_agent_customers_customer_type", "agent_customers", "customer_type"),
@@ -104,6 +112,12 @@ INDEXES = [
     ("ix_inventory_movements_group_id", "inventory_movements", "movement_group_id"),
 ]
 
+
+
+def _column_names(inspector, table: str) -> set[str]:
+    if not inspector.has_table(table):
+        return set()
+    return {str(column["name"]) for column in inspector.get_columns(table)}
 
 def _migrate_permissions(connection, inspector) -> None:
     required_tables = {"permissions", "roles", "role_permissions"}
@@ -168,7 +182,7 @@ def _remove_archive_schema(connection, inspector) -> None:
         connection.execute(text("UPDATE customer_projects SET status = 'active' WHERE status = 'archived'"))
     if inspector.has_table("posters"):
         connection.execute(text("UPDATE posters SET status = 'active' WHERE status = 'archived'"))
-    if inspector.has_table("stored_files"):
+    if "status" in _column_names(inspector, "stored_files"):
         connection.execute(text("UPDATE stored_files SET status = 'active' WHERE status = 'archived'"))
 
     for index_name in (
@@ -214,45 +228,131 @@ def _remove_archive_schema(connection, inspector) -> None:
         connection.execute(permission_delete, {"codes": REMOVED_PERMISSIONS})
 
 
+
+def _remove_file_soft_delete(connection, inspector) -> list[tuple[str, str]]:
+    """Permanently remove legacy deleted files and drop soft-delete columns.
+
+    Physical files are staged while the database transaction is open. The
+    caller finalizes them only after commit; any error restores staged files.
+    """
+    if not inspector.has_table("stored_files"):
+        return []
+
+    columns = _column_names(inspector, "stored_files")
+    staged: list[tuple[str, str]] = []
+    try:
+        deleted_ids: list[str] = []
+        if "status" in columns:
+            rows = connection.execute(text(
+                "SELECT id, storage_path FROM stored_files WHERE status = 'deleted'"
+            )).all()
+            deleted_ids = [str(row.id) for row in rows]
+            for row in rows:
+                original = str(row.storage_path)
+                staged_path = storage.stage_delete(original)
+                if staged_path:
+                    staged.append((staged_path, original))
+
+        if deleted_ids:
+            def expanded(statement: str):
+                return text(statement).bindparams(bindparam("ids", expanding=True))
+
+            if inspector.has_table("posters"):
+                connection.execute(expanded("DELETE FROM posters WHERE file_id IN :ids"), {"ids": deleted_ids})
+                connection.execute(
+                    expanded("UPDATE posters SET thumbnail_file_id = NULL WHERE thumbnail_file_id IN :ids"),
+                    {"ids": deleted_ids},
+                )
+            if inspector.has_table("finance_transactions"):
+                connection.execute(
+                    expanded("UPDATE finance_transactions SET receipt_file_id = NULL WHERE receipt_file_id IN :ids"),
+                    {"ids": deleted_ids},
+                )
+            if inspector.has_table("bills"):
+                connection.execute(
+                    expanded("UPDATE bills SET file_id = NULL WHERE file_id IN :ids"),
+                    {"ids": deleted_ids},
+                )
+            connection.execute(expanded("DELETE FROM stored_files WHERE id IN :ids"), {"ids": deleted_ids})
+
+        for index_name in (
+            "ix_stored_files_project_status",
+            "ix_stored_files_customer_status",
+        ):
+            connection.execute(text(f'DROP INDEX IF EXISTS "{index_name}"'))
+
+        for column in ("status", "deleted_at"):
+            if column in columns:
+                connection.execute(text(f'ALTER TABLE "stored_files" DROP COLUMN IF EXISTS "{column}" CASCADE'))
+
+        connection.execute(text(
+            'CREATE INDEX IF NOT EXISTS "ix_stored_files_project_created" '
+            'ON "stored_files" ("project_id", "created_at")'
+        ))
+        connection.execute(text(
+            'CREATE INDEX IF NOT EXISTS "ix_stored_files_customer_created" '
+            'ON "stored_files" ("customer_id", "created_at")'
+        ))
+        return staged
+    except Exception:
+        for staged_path, original_path in reversed(staged):
+            storage.restore_staged_delete(staged_path, original_path)
+        raise
+
+
 def run_migrations() -> None:
     if engine.dialect.name != "postgresql":
         raise RuntimeError("Solar ERP migrations support PostgreSQL only")
 
     Base.metadata.create_all(bind=engine)
-    with engine.begin() as connection:
-        connection.execute(text(
-            "CREATE TABLE IF NOT EXISTS schema_migrations ("
-            "id VARCHAR(80) PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL)"
-        ))
-        applied = connection.execute(
-            text("SELECT id FROM schema_migrations WHERE id = :id"), {"id": MIGRATION_ID}
-        ).scalar_one_or_none()
-        inspector = inspect(connection)
+    staged_deletes: list[tuple[str, str]] = []
+    try:
+        with engine.begin() as connection:
+            connection.execute(text(
+                "CREATE TABLE IF NOT EXISTS schema_migrations ("
+                "id VARCHAR(80) PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL)"
+            ))
+            applied = set(connection.execute(text("SELECT id FROM schema_migrations")).scalars().all())
+            inspector = inspect(connection)
 
-        for table, columns in COLUMN_DEFINITIONS.items():
-            if not inspector.has_table(table):
-                continue
-            existing = {column["name"] for column in inspector.get_columns(table)}
-            for name, definition in columns.items():
-                if name not in existing:
+            for table, columns in COLUMN_DEFINITIONS.items():
+                if not inspector.has_table(table):
+                    continue
+                existing = _column_names(inspector, table)
+                for name, definition in columns.items():
+                    if name not in existing:
+                        connection.execute(text(
+                            f'ALTER TABLE "{table}" ADD COLUMN "{name}" {definition}'
+                        ))
+
+            for index_name, table, columns in INDEXES:
+                if inspector.has_table(table):
+                    column_sql = ", ".join(f'"{item.strip()}"' for item in columns.split(","))
                     connection.execute(text(
-                        f'ALTER TABLE "{table}" ADD COLUMN "{name}" {definition}'
+                        f'CREATE INDEX IF NOT EXISTS "{index_name}" ON "{table}" ({column_sql})'
                     ))
 
-        for index_name, table, columns in INDEXES:
-            if inspector.has_table(table):
-                column_sql = ", ".join(f'"{item.strip()}"' for item in columns.split(","))
-                connection.execute(text(
-                    f'CREATE INDEX IF NOT EXISTS "{index_name}" ON "{table}" ({column_sql})'
-                ))
+            if MIGRATION_005 not in applied:
+                _remove_archive_schema(connection, inspect(connection))
+                _migrate_permissions(connection, inspect(connection))
+                connection.execute(
+                    text("INSERT INTO schema_migrations (id, applied_at) VALUES (:id, :applied_at)"),
+                    {"id": MIGRATION_005, "applied_at": datetime.now(UTC)},
+                )
 
-        if not applied:
-            _remove_archive_schema(connection, inspector)
-            _migrate_permissions(connection, inspector)
-            connection.execute(
-                text("INSERT INTO schema_migrations (id, applied_at) VALUES (:id, :applied_at)"),
-                {"id": MIGRATION_ID, "applied_at": datetime.now(UTC)},
-            )
+            if MIGRATION_006 not in applied:
+                staged_deletes = _remove_file_soft_delete(connection, inspect(connection))
+                connection.execute(
+                    text("INSERT INTO schema_migrations (id, applied_at) VALUES (:id, :applied_at)"),
+                    {"id": MIGRATION_006, "applied_at": datetime.now(UTC)},
+                )
+    except Exception:
+        for staged_path, original_path in reversed(staged_deletes):
+            storage.restore_staged_delete(staged_path, original_path)
+        raise
+    else:
+        for staged_path, _original_path in staged_deletes:
+            storage.finalize_staged_delete(staged_path)
 
 
 def main() -> None:
@@ -261,7 +361,7 @@ def main() -> None:
     args = parser.parse_args()
     if args.command == "upgrade":
         run_migrations()
-        print(f"Applied migration {MIGRATION_ID}")
+        print(f"Applied migrations through {CURRENT_MIGRATION_ID}")
         return
     with engine.connect() as connection:
         if not inspect(connection).has_table("schema_migrations"):

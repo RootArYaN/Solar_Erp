@@ -1,7 +1,7 @@
 export { DataTableSurface } from './DataTableSurface'
 export { KpiGrid } from './KpiGrid'
 export { ScrollSurface } from './ScrollSurface'
-export { TabStrip } from './TabStrip'
+export { TabButton, TabPanel, TabStrip } from './TabStrip'
 export { WorkspaceHeader } from './WorkspaceHeader'
 export { WorkspacePage } from './WorkspacePage'
 export { WorkspaceToolbar } from './WorkspaceToolbar'

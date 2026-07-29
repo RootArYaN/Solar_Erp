@@ -199,7 +199,7 @@ export function GeneratedDocumentPackPanel({
     ? 'Complete document pack'
     : documentTabs.find((tab) => tab.key === activeTab)?.label || 'Document preview'
 
-  const storedPackFile = packFiles.find((file) => file.status === 'active' && file.mime_type === 'application/pdf')
+  const storedPackFile = packFiles.find((file) => file.mime_type === 'application/pdf')
 
   async function downloadStoredPack() {
     if (!storedPackFile || exportingPdf) return

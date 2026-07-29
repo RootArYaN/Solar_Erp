@@ -4,14 +4,12 @@ import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
 import { API_URL } from '../../api/client'
 import { server } from '../../test/server'
-import type { ProjectTimeline, ProjectTimelineListItem, Session } from '../../types'
+import type { AuthSessionResponse, ProjectTimeline, ProjectTimelineListItem, Session } from '../../types'
+import { saveSession } from '../../lib/auth-storage'
 import { ToastProvider } from '../ui/ToastProvider'
 import { ProjectTimelinePage } from './ProjectTimelinePage'
 
 const session: Session = {
-  access_token: 'access-token',
-  token_type: 'bearer',
-  expires_at: '2026-08-01T00:00:00Z',
   membership_id: 'membership-1',
   user: { id: 'user-1', username: 'viewer', email: 'viewer@example.com', full_name: 'Project Viewer', is_super_admin: false },
   company: { id: 'company-1', name: 'Solar ERP', code: 'SOLAR' },
@@ -73,6 +71,7 @@ describe('ProjectTimelinePage refresh', () => {
       }),
     )
 
+    saveSession({ ...session, access_token: 'access-token', token_type: 'bearer', expires_at: '2099-08-01T00:00:00Z' } satisfies AuthSessionResponse, false)
     render(<ToastProvider><ProjectTimelinePage session={session} /></ToastProvider>)
 
     expect(await screen.findByRole('heading', { name: 'Asha Patel' })).toBeInTheDocument()

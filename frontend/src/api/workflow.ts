@@ -1,13 +1,13 @@
 import type { ApprovalCenter, ApprovalDecisionInput, CreateQuotationRequestInput, GenerateQuotationInput, ProjectTimeline, ProjectTimelineListItem, ProjectTimelineStepInput } from '../types'
 import { createClientId } from '../lib/client-id'
-import { apiRequest } from './client'
+import { apiRequest, apiSegment } from './client'
 
-export const createQuotationRequest = (token: string, customerId: string, input: CreateQuotationRequestInput) => apiRequest(`/workflow/customers/${customerId}/quotation-requests`, { method: 'POST', token, body: input, idempotencyKey: createClientId() })
-export const getApprovalCenter = (token: string): Promise<ApprovalCenter> => apiRequest('/workflow/approvals', { token })
-export const generateQuotation = (token: string, id: string, input: GenerateQuotationInput) => apiRequest(`/workflow/quotation-requests/${id}/quotation`, { method: 'POST', token, body: input, idempotencyKey: createClientId() })
-export const decideQuotation = (token: string, id: string, input: ApprovalDecisionInput) => apiRequest(`/workflow/quotations/${id}/decision`, { method: 'POST', token, body: input, idempotencyKey: createClientId() })
-export const decideTransaction = (token: string, id: string, input: ApprovalDecisionInput) => apiRequest(`/workflow/transactions/${id}/decision`, { method: 'POST', token, body: input, idempotencyKey: createClientId() })
-export const getProjectTimelines = (token: string): Promise<ProjectTimelineListItem[]> => apiRequest('/workflow/projects/timelines', { token, cache: 'no-store' })
-export const getProjectTimeline = (token: string, id: string): Promise<ProjectTimeline> => apiRequest(`/workflow/projects/${id}/timeline`, { token, cache: 'no-store' })
-export const setProjectPaymentMode = (token: string, id: string, mode: 'cash' | 'loan'): Promise<ProjectTimeline> => apiRequest(`/workflow/projects/${id}/payment-mode`, { method: 'PATCH', token, body: { payment_mode: mode } })
-export const updateProjectTimelineStep = (token: string, id: string, step: string, input: ProjectTimelineStepInput): Promise<ProjectTimeline> => apiRequest(`/workflow/projects/${id}/timeline/${step}`, { method: 'PATCH', token, body: input })
+export const createQuotationRequest = (customerId: string, input: CreateQuotationRequestInput) => apiRequest(`/workflow/customers/${apiSegment(customerId)}/quotation-requests`, { method: 'POST', body: input, idempotencyKey: createClientId() })
+export const getApprovalCenter = (): Promise<ApprovalCenter> => apiRequest('/workflow/approvals')
+export const generateQuotation = (id: string, input: GenerateQuotationInput) => apiRequest(`/workflow/quotation-requests/${apiSegment(id)}/quotation`, { method: 'POST', body: input, idempotencyKey: createClientId() })
+export const decideQuotation = (id: string, input: ApprovalDecisionInput) => apiRequest(`/workflow/quotations/${apiSegment(id)}/decision`, { method: 'POST', body: input, idempotencyKey: createClientId() })
+export const decideTransaction = (id: string, input: ApprovalDecisionInput) => apiRequest(`/workflow/transactions/${apiSegment(id)}/decision`, { method: 'POST', body: input, idempotencyKey: createClientId() })
+export const getProjectTimelines = (): Promise<ProjectTimelineListItem[]> => apiRequest('/workflow/projects/timelines', { cache: 'no-store' })
+export const getProjectTimeline = (id: string): Promise<ProjectTimeline> => apiRequest(`/workflow/projects/${apiSegment(id)}/timeline`, { cache: 'no-store' })
+export const setProjectPaymentMode = (id: string, mode: 'cash' | 'loan'): Promise<ProjectTimeline> => apiRequest(`/workflow/projects/${apiSegment(id)}/payment-mode`, { method: 'PATCH', body: { payment_mode: mode } })
+export const updateProjectTimelineStep = (id: string, step: string, input: ProjectTimelineStepInput): Promise<ProjectTimeline> => apiRequest(`/workflow/projects/${apiSegment(id)}/timeline/${apiSegment(step)}`, { method: 'PATCH', body: input })

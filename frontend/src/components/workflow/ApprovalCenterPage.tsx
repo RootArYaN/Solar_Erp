@@ -52,7 +52,7 @@ export function ApprovalCenterPage({ session }: { session: Session }) {
   async function load() {
     setLoading(true)
     try {
-      setData(await getApprovalCenter(session.access_token))
+      setData(await getApprovalCenter())
     } catch (reason) {
       toast({ message: reason instanceof Error ? reason.message : 'Could not load approvals', variant: 'error' })
     } finally {
@@ -66,7 +66,7 @@ export function ApprovalCenterPage({ session }: { session: Session }) {
     if (!builderRequest) return
     setBusy(true)
     try {
-      await generateQuotation(session.access_token, builderRequest.id, value)
+      await generateQuotation(builderRequest.id, value)
       setBuilderRequest(null)
       await load()
       toast({ message: 'Quotation generated and sent for approval', variant: 'success' })
@@ -84,9 +84,9 @@ export function ApprovalCenterPage({ session }: { session: Session }) {
       if (decisionTarget.kind === 'quotation') {
         const quotation = decisionTarget.item.quotation
         if (!quotation) throw new Error('Generate the quotation before making a decision')
-        await decideQuotation(session.access_token, quotation.id, value)
+        await decideQuotation(quotation.id, value)
       } else {
-        await decideTransaction(session.access_token, decisionTarget.item.approval_id, value)
+        await decideTransaction(decisionTarget.item.approval_id, value)
       }
       setDecisionTarget(null)
       await load()

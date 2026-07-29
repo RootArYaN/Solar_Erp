@@ -1,6 +1,6 @@
 import type { DocumentCustomerOption, StoredFile, StoredFileList } from '../types'
 import { createClientId } from '../lib/client-id'
-import { apiRequest, downloadRequest } from './client'
+import { apiRequest, apiSegment, blobRequest, downloadRequest } from './client'
 
 export async function uploadStoredFile(input: { file: File; ownerType: string; ownerId: string; projectId?: string; customerId?: string }): Promise<StoredFile> {
   const body = new FormData()
@@ -11,9 +11,13 @@ export async function uploadStoredFile(input: { file: File; ownerType: string; o
   if (input.customerId) body.set('customer_id', input.customerId)
   return apiRequest('/files', { method: 'POST', body, idempotencyKey: createClientId() })
 }
-export const getStoredFiles = (ownerType: string, ownerId: string): Promise<StoredFileList> => apiRequest(`/files?owner_type=${encodeURIComponent(ownerType)}&owner_id=${encodeURIComponent(ownerId)}&page_size=100`)
-export const setStoredFileStatus = (id: string, status: 'deleted'): Promise<StoredFile> => apiRequest(`/files/${id}/status`, { method: 'PATCH', body: { status } })
-export const removeStoredFile = (id: string): Promise<StoredFile> => setStoredFileStatus(id, 'deleted')
-export const downloadStoredFile = (id: string, name: string) => downloadRequest(`/files/${id}/download`, name)
 
+export const getStoredFiles = (ownerType: string, ownerId: string): Promise<StoredFileList> => {
+  const query = new URLSearchParams({ owner_type: ownerType, owner_id: ownerId, page_size: '100' })
+  return apiRequest(`/files?${query.toString()}`)
+}
+
+export const removeStoredFile = (id: string): Promise<void> => apiRequest(`/files/${apiSegment(id)}`, { method: 'DELETE', idempotencyKey: createClientId() })
+export const downloadStoredFile = (id: string, name: string) => downloadRequest(`/files/${apiSegment(id)}/download`, name)
+export const getStoredFileBlob = (id: string): Promise<Blob> => blobRequest(`/files/${apiSegment(id)}/download`)
 export const getDocumentCustomerOptions = (): Promise<DocumentCustomerOption[]> => apiRequest('/files/customer-options')

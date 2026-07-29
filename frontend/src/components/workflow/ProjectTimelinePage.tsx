@@ -100,7 +100,7 @@ export function ProjectTimelinePage({ session }: { session: Session }) {
     setListError('')
     setDetailError('')
     try {
-      const items = await getProjectTimelines(session.access_token)
+      const items = await getProjectTimelines()
       if (requestId !== requestSequence.current) return
 
       const nextSelectedId = items.some((item) => item.project_id === selectedId)
@@ -118,7 +118,7 @@ export function ProjectTimelinePage({ session }: { session: Session }) {
       }
 
       try {
-        const next = await getProjectTimeline(session.access_token, nextSelectedId)
+        const next = await getProjectTimeline(nextSelectedId)
         if (requestId !== requestSequence.current) return
         applyLoadedTimeline(next)
         if (notify) toast({ message: 'Projects and timeline refreshed', variant: 'success' })
@@ -154,7 +154,7 @@ export function ProjectTimelinePage({ session }: { session: Session }) {
     setDetailLoading(true)
     setDetailError('')
     try {
-      const next = await getProjectTimeline(session.access_token, projectId)
+      const next = await getProjectTimeline(projectId)
       if (requestId !== requestSequence.current) return
       applyLoadedTimeline(next)
     } catch (reason) {
@@ -202,8 +202,8 @@ export function ProjectTimelinePage({ session }: { session: Session }) {
     setSaving(true)
     try {
       const next = currentStep.key === 'payment_mode'
-        ? await setProjectPaymentMode(session.access_token, timeline.project_id, paymentMode)
-        : await updateProjectTimelineStep(session.access_token, timeline.project_id, currentStep.key, {
+        ? await setProjectPaymentMode(timeline.project_id, paymentMode)
+        : await updateProjectTimelineStep(timeline.project_id, currentStep.key, {
           action: 'complete',
           note,
           event_date: eventDate || null,
@@ -221,7 +221,7 @@ export function ProjectTimelinePage({ session }: { session: Session }) {
     if (!timeline || !previousStep) return
     setSaving(true)
     try {
-      const next = await updateProjectTimelineStep(session.access_token, timeline.project_id, previousStep.key, {
+      const next = await updateProjectTimelineStep(timeline.project_id, previousStep.key, {
         action: 'reopen',
         note: 'Reopened by admin',
       })

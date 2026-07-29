@@ -1,11 +1,11 @@
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Response, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
-from app.api.deps import CurrentSession, require_any_permissions
+from app.api.deps import CurrentSession, get_current_session, require_any_permissions
 from app.core.config import settings
 from app.db.session import get_db
-from app.schemas.files import DocumentCustomerOption, FileStatusRequest, StoredFileList, StoredFileSummary
+from app.schemas.files import DocumentCustomerOption, StoredFileList, StoredFileSummary
 from app.services import file_service
 from app.services.audit_service import write_event
 from app.services.file_service import FileServiceError
@@ -21,7 +21,7 @@ def _raise(exc: FileServiceError) -> None:
 @router.get("/customer-options", response_model=list[DocumentCustomerOption])
 def get_customer_options(
     db: Session = Depends(get_db),
-    session: CurrentSession = Depends(require_any_permissions("documents.view", "documents.manage", "posters.view")),
+    session: CurrentSession = Depends(require_any_permissions("documents.view", "documents.manage")),
 ) -> list[DocumentCustomerOption]:
     return file_service.list_document_customers(db, session)
 
@@ -32,11 +32,10 @@ def get_files(
     owner_id: str | None = Query(default=None, max_length=80),
     project_id: str | None = Query(default=None, max_length=36),
     customer_id: str | None = Query(default=None, max_length=36),
-    status: str | None = Query(default=None, pattern=r"^(active|deleted)$"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=settings.default_page_size, ge=1, le=settings.max_page_size),
     db: Session = Depends(get_db),
-    session: CurrentSession = Depends(require_any_permissions("documents.view", "documents.manage", "posters.view")),
+    session: CurrentSession = Depends(get_current_session),
 ) -> StoredFileList:
     try:
         return file_service.list_files(
@@ -46,7 +45,6 @@ def get_files(
             owner_id=owner_id,
             project_id=project_id,
             customer_id=customer_id,
-            status=status,
             page=page,
             page_size=page_size,
         )
@@ -62,7 +60,7 @@ async def post_file(
     project_id: str | None = Form(default=None),
     customer_id: str | None = Form(default=None),
     db: Session = Depends(get_db),
-    session: CurrentSession = Depends(require_any_permissions("documents.create", "documents.manage", "posters.create")),
+    session: CurrentSession = Depends(get_current_session),
 ) -> StoredFileSummary:
     try:
         return await file_service.save_file(
@@ -82,10 +80,11 @@ async def post_file(
 def download_file(
     file_id: str,
     db: Session = Depends(get_db),
-    session: CurrentSession = Depends(require_any_permissions("documents.view", "documents.manage", "posters.view")),
+    session: CurrentSession = Depends(get_current_session),
 ):
     try:
         row = file_service.get_file(db, session, file_id)
+        file_service.ensure_file_permission(session, row.owner_type, "view")
     except FileServiceError as exc:
         _raise(exc)
     path = storage.path(row.storage_path)
@@ -94,7 +93,7 @@ def download_file(
     write_event(
         db,
         company_id=row.company_id,
-        event="document.downloaded",
+        event="poster.downloaded" if row.owner_type == "poster" else "document.downloaded",
         entity="stored_file",
         entity_id=row.id,
         actor=session,
@@ -103,17 +102,17 @@ def download_file(
         changes={"name": row.name},
     )
     db.commit()
-    return FileResponse(path=path, media_type=row.mime_type, filename=row.name)
+    return FileResponse(path=path, media_type=row.mime_type, filename=row.name, headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"})
 
 
-@router.patch("/{file_id}/status", response_model=StoredFileSummary)
-def patch_file_status(
+@router.delete("/{file_id}", status_code=204)
+def delete_file(
     file_id: str,
-    payload: FileStatusRequest,
     db: Session = Depends(get_db),
-    session: CurrentSession = Depends(require_any_permissions("documents.edit", "documents.manage", "posters.edit")),
-) -> StoredFileSummary:
+    session: CurrentSession = Depends(get_current_session),
+) -> Response:
     try:
-        return file_service.set_file_status(db, session, file_id, payload.status)
+        file_service.delete_file(db, session, file_id)
     except FileServiceError as exc:
         _raise(exc)
+    return Response(status_code=204)

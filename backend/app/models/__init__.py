@@ -1,6 +1,6 @@
 from app.models.agent import AgentCustomer, AgentCustomerEdit, AgentProfile, AgentTransaction
 from app.models.auth import Company, Membership, Permission, Role, User
-from app.models.system import AuditEvent, AuthSession, StoredFile
+from app.models.system import AuditEvent, AuthSession, IdempotencyRecord, StoredFile
 from app.models.finance import Bill, BillPayment, CompanyLoan, CustomerLoan, FinanceCategory, FinanceTransaction, FinancialAccount
 from app.models.operations import DocumentTemplate, GeneratedDocumentPack, InventoryBalance, InventoryItem, InventoryLocation, InventoryMovement, Poster, PricingBook, PricingItem
 from app.models.workflow import CustomerProject, CustomerQuotation, MaterialRequest, ProjectTimeline, QuotationRequest, TransactionApproval
@@ -28,6 +28,7 @@ __all__ = [
     "PricingItem",
     "AuditEvent",
     "AuthSession",
+    "IdempotencyRecord",
     "Company",
     "CustomerProject",
     "CustomerQuotation",

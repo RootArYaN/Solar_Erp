@@ -11,6 +11,8 @@ engine = create_engine(
     pool_size=settings.db_pool_size,
     max_overflow=settings.db_max_overflow,
     pool_recycle=1800,
+    pool_timeout=30,
+    connect_args={"sslmode": settings.database_sslmode},
 )
 SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
 
