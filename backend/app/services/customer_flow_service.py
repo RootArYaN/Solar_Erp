@@ -88,8 +88,11 @@ def _profile(db: Session, customer: AgentCustomer) -> AgentProfile | None:
     return db.get(AgentProfile, customer.agent_profile_id)
 
 
-def _customer_summary(db: Session, customer: AgentCustomer, payment_mode: str = "") -> FlowCustomer:
-    profile = _profile(db, customer)
+def _customer_summary(
+    customer: AgentCustomer,
+    payment_mode: str = "",
+    profile: AgentProfile | None = None,
+) -> FlowCustomer:
     site_address = customer.site_address or customer.address
     billing_address = customer.billing_address or site_address
     contact = FlowContact(
@@ -266,8 +269,22 @@ def _activity(db: Session, customer_id: str) -> list[FlowActivity]:
     return result
 
 
-def list_customers(db: Session, actor: CurrentSession) -> CustomerFlowList:
-    customers = list(db.scalars(_customer_query(actor).order_by(AgentCustomer.updated_at.desc()).limit(250)).all())
+def list_customers(
+    db: Session,
+    actor: CurrentSession,
+    *,
+    page: int = 1,
+    page_size: int = 50,
+) -> CustomerFlowList:
+    offset = (page - 1) * page_size
+    customer_rows = list(db.scalars(
+        _customer_query(actor)
+        .order_by(AgentCustomer.updated_at.desc(), AgentCustomer.id.desc())
+        .offset(offset)
+        .limit(page_size + 1)
+    ).all())
+    has_more = len(customer_rows) > page_size
+    customers = customer_rows[:page_size]
     customer_ids = [customer.id for customer in customers]
     project_rows = db.execute(
         select(CustomerProject.customer_id, CustomerProject.payment_mode)
@@ -279,9 +296,22 @@ def list_customers(db: Session, actor: CurrentSession) -> CustomerFlowList:
     payment_modes: dict[str, str] = {}
     for customer_id, payment_mode in project_rows:
         payment_modes.setdefault(customer_id, payment_mode or "")
+    profile_ids = {customer.agent_profile_id for customer in customers}
+    profiles = {
+        profile.id: profile
+        for profile in db.scalars(select(AgentProfile).where(AgentProfile.id.in_(profile_ids))).all()
+    } if profile_ids else {}
     sync_cursor = max((customer.updated_at for customer in customers), default=datetime.now(UTC)).isoformat()
     return CustomerFlowList(
-        items=[_customer_summary(db, customer, payment_modes.get(customer.id, "")) for customer in customers],
+        items=[
+            _customer_summary(
+                customer,
+                payment_modes.get(customer.id, ""),
+                profiles.get(customer.agent_profile_id),
+            )
+            for customer in customers
+        ],
+        next_cursor=str(page + 1) if has_more else None,
         sync_cursor=sync_cursor,
     )
 
@@ -308,7 +338,11 @@ def get_snapshot(db: Session, actor: CurrentSession, customer_id: str) -> Custom
                 latest_project_row = project
     material = db.scalar(select(MaterialRequest).where(MaterialRequest.project_id == latest_project_row.id)) if latest_project_row else None
     return CustomerFlowSnapshot(
-        customer=_customer_summary(db, customer, latest_project_row.payment_mode if latest_project_row else ""), sites=sites, quotations=quotation_summaries, projects=projects,
+        customer=_customer_summary(
+            customer,
+            latest_project_row.payment_mode if latest_project_row else "",
+            _profile(db, customer),
+        ), sites=sites, quotations=quotation_summaries, projects=projects,
         project=projects[0] if projects else None, material_request=_material_summary(material) if material else None,
         timeline=_timeline(db, latest_project_row), documents=_documents(db, customer.id), payments=_payments(db, customer.id),
         loan=_loan(db, latest_project_row), activity=_activity(db, customer.id),

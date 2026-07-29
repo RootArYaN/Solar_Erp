@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.api.deps import CurrentSession, require_any_permissions
@@ -22,10 +22,12 @@ def _raise_service_error(exc: CustomerFlowError) -> None:
 
 @router.get("/customers", response_model=CustomerFlowList)
 def list_customers(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, ge=1, le=100),
     db: Session = Depends(get_db),
     session: CurrentSession = Depends(require_any_permissions("customers.view", "documents.view")),
 ) -> CustomerFlowList:
-    return customer_flow_service.list_customers(db, session)
+    return customer_flow_service.list_customers(db, session, page=page, page_size=page_size)
 
 
 @router.get("/customers/{customer_id}", response_model=CustomerFlowSnapshot)

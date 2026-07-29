@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from decimal import Decimal, ROUND_HALF_UP
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session, joinedload
 
 from app.api.deps import CurrentSession
 from app.models.agent import AgentCustomer, AgentProfile, AgentTransaction
@@ -328,7 +328,13 @@ def decide_transaction(
     return _transaction_summary(db, approval)
 
 
-def get_approval_center(db: Session, actor: CurrentSession) -> ApprovalCenterResponse:
+def get_approval_center(
+    db: Session,
+    actor: CurrentSession,
+    *,
+    quotation_limit: int = 50,
+    transaction_limit: int = 50,
+) -> ApprovalCenterResponse:
     if not _is_admin(actor) and not {
         "quotations.approve",
         "agents.transactions.approve",
@@ -336,34 +342,106 @@ def get_approval_center(db: Session, actor: CurrentSession) -> ApprovalCenterRes
     }.intersection(actor.permissions):
         raise WorkflowForbiddenError("You cannot view the approval center")
 
+    company_id = actor.membership.company_id
     quotation_requests = list(db.scalars(
         select(QuotationRequest)
-        .where(QuotationRequest.company_id == actor.membership.company_id)
-        .order_by(QuotationRequest.created_at.desc())
-        .limit(100)
+        .where(QuotationRequest.company_id == company_id)
+        .order_by(QuotationRequest.created_at.desc(), QuotationRequest.id.desc())
+        .limit(quotation_limit + 1)
     ).all())
+    quotation_has_more = len(quotation_requests) > quotation_limit
+    quotation_requests = quotation_requests[:quotation_limit]
+
     transaction_approvals = list(db.scalars(
         select(TransactionApproval)
         .where(
-            TransactionApproval.company_id == actor.membership.company_id,
+            TransactionApproval.company_id == company_id,
             TransactionApproval.status == "pending",
         )
-        .order_by(TransactionApproval.created_at.asc())
-        .limit(100)
+        .order_by(TransactionApproval.created_at.asc(), TransactionApproval.id.asc())
+        .limit(transaction_limit + 1)
     ).all())
+    transaction_has_more = len(transaction_approvals) > transaction_limit
+    transaction_approvals = transaction_approvals[:transaction_limit]
+
+    customer_ids = {row.customer_id for row in quotation_requests}
+    customers = {
+        row.id: row
+        for row in db.scalars(select(AgentCustomer).where(AgentCustomer.id.in_(customer_ids))).all()
+    } if customer_ids else {}
+
+    transaction_ids = {row.transaction_id for row in transaction_approvals}
+    transactions = {
+        row.id: row
+        for row in db.scalars(select(AgentTransaction).where(AgentTransaction.id.in_(transaction_ids))).all()
+    } if transaction_ids else {}
+
+    profile_ids = {
+        customer.agent_profile_id for customer in customers.values()
+    } | {
+        transaction.agent_profile_id for transaction in transactions.values()
+    }
+    profiles = {
+        row.id: row
+        for row in db.scalars(select(AgentProfile).where(AgentProfile.id.in_(profile_ids))).all()
+    } if profile_ids else {}
+
+    membership_ids = {profile.membership_id for profile in profiles.values()}
+    memberships = {
+        row.id: row
+        for row in db.scalars(
+            select(Membership)
+            .where(Membership.id.in_(membership_ids))
+            .options(joinedload(Membership.user))
+        ).all()
+    } if membership_ids else {}
+
+    request_ids = {row.id for row in quotation_requests}
+    quotations = list(db.scalars(
+        select(CustomerQuotation).where(CustomerQuotation.request_id.in_(request_ids))
+    ).all()) if request_ids else []
+    quotations_by_request = {row.request_id: row for row in quotations}
+
+    quotation_ids = {row.id for row in quotations}
+    projects = list(db.scalars(
+        select(CustomerProject).where(CustomerProject.quotation_id.in_(quotation_ids))
+    ).all()) if quotation_ids else []
+    projects_by_quotation = {row.quotation_id: row for row in projects}
+
+    quotation_summaries: list[QuotationRequestSummary] = []
+    for request in quotation_requests:
+        customer = customers.get(request.customer_id)
+        profile = profiles.get(customer.agent_profile_id) if customer else None
+        membership = memberships.get(profile.membership_id) if profile else None
+        quotation = quotations_by_request.get(request.id)
+        project = projects_by_quotation.get(quotation.id) if quotation else None
+        quotation_summaries.append(
+            _make_quotation_request_summary(request, customer, profile, membership, quotation, project)
+        )
+
+    transaction_summaries: list[TransactionApprovalSummary] = []
+    for approval in transaction_approvals:
+        transaction = transactions.get(approval.transaction_id)
+        profile = profiles.get(transaction.agent_profile_id) if transaction else None
+        membership = memberships.get(profile.membership_id) if profile else None
+        transaction_summaries.append(_make_transaction_summary(approval, transaction, profile, membership))
 
     return ApprovalCenterResponse(
-        quotation_requests=[_quotation_request_summary(db, item) for item in quotation_requests],
-        transactions=[_transaction_summary(db, item) for item in transaction_approvals],
+        quotation_requests=quotation_summaries,
+        transactions=transaction_summaries,
+        quotation_has_more=quotation_has_more,
+        transaction_has_more=transaction_has_more,
     )
 
 
-def _quotation_request_summary(db: Session, request: QuotationRequest) -> QuotationRequestSummary:
-    customer = db.get(AgentCustomer, request.customer_id)
-    profile = db.get(AgentProfile, customer.agent_profile_id) if customer else None
-    membership = db.scalar(select(Membership).where(Membership.id == (profile.membership_id if profile else "")).options(selectinload(Membership.user))) if profile else None
-    quotation = db.scalar(select(CustomerQuotation).where(CustomerQuotation.request_id == request.id))
-    project = db.scalar(select(CustomerProject).where(CustomerProject.quotation_id == quotation.id)) if quotation else None
+def _make_quotation_request_summary(
+    request: QuotationRequest,
+    customer: AgentCustomer | None,
+    profile: AgentProfile | None,
+    membership: Membership | None,
+    quotation: CustomerQuotation | None,
+    project: CustomerProject | None,
+) -> QuotationRequestSummary:
     quotation_summary = None
     if quotation:
         quotation_summary = QuotationSummary(
@@ -403,10 +481,25 @@ def _quotation_request_summary(db: Session, request: QuotationRequest) -> Quotat
     )
 
 
-def _transaction_summary(db: Session, approval: TransactionApproval) -> TransactionApprovalSummary:
-    transaction = db.get(AgentTransaction, approval.transaction_id)
-    profile = db.get(AgentProfile, transaction.agent_profile_id) if transaction else None
-    membership = db.scalar(select(Membership).where(Membership.id == (profile.membership_id if profile else "")).options(selectinload(Membership.user))) if profile else None
+def _quotation_request_summary(db: Session, request: QuotationRequest) -> QuotationRequestSummary:
+    customer = db.get(AgentCustomer, request.customer_id)
+    profile = db.get(AgentProfile, customer.agent_profile_id) if customer else None
+    membership = db.scalar(
+        select(Membership)
+        .where(Membership.id == profile.membership_id)
+        .options(joinedload(Membership.user))
+    ) if profile else None
+    quotation = db.scalar(select(CustomerQuotation).where(CustomerQuotation.request_id == request.id))
+    project = db.scalar(select(CustomerProject).where(CustomerProject.quotation_id == quotation.id)) if quotation else None
+    return _make_quotation_request_summary(request, customer, profile, membership, quotation, project)
+
+
+def _make_transaction_summary(
+    approval: TransactionApproval,
+    transaction: AgentTransaction | None,
+    profile: AgentProfile | None,
+    membership: Membership | None,
+) -> TransactionApprovalSummary:
     if not transaction:
         raise WorkflowNotFoundError("Transaction not found")
     return TransactionApprovalSummary(
@@ -424,6 +517,17 @@ def _transaction_summary(db: Session, approval: TransactionApproval) -> Transact
         decision_comment=approval.decision_comment,
         created_at=approval.created_at,
     )
+
+
+def _transaction_summary(db: Session, approval: TransactionApproval) -> TransactionApprovalSummary:
+    transaction = db.get(AgentTransaction, approval.transaction_id)
+    profile = db.get(AgentProfile, transaction.agent_profile_id) if transaction else None
+    membership = db.scalar(
+        select(Membership)
+        .where(Membership.id == profile.membership_id)
+        .options(joinedload(Membership.user))
+    ) if profile else None
+    return _make_transaction_summary(approval, transaction, profile, membership)
 
 
 # Project timeline -----------------------------------------------------------
@@ -605,7 +709,13 @@ def _timeline_list_item(project: CustomerProject, customer: AgentCustomer, timel
     )
 
 
-def list_project_timelines(db: Session, actor: CurrentSession):
+def list_project_timelines(
+    db: Session,
+    actor: CurrentSession,
+    *,
+    page: int = 1,
+    page_size: int = 100,
+):
     from app.models.workflow import ProjectTimeline
     from app.schemas.workflow import ProjectTimelineListItem
 
@@ -614,8 +724,9 @@ def list_project_timelines(db: Session, actor: CurrentSession):
         .join(AgentCustomer, AgentCustomer.id == CustomerProject.customer_id)
         .join(CustomerQuotation, CustomerQuotation.id == CustomerProject.quotation_id)
         .where(CustomerProject.company_id == actor.membership.company_id)
-        .order_by(CustomerProject.updated_at.desc())
-        .limit(200)
+        .order_by(CustomerProject.updated_at.desc(), CustomerProject.id.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
     )
     if actor.role == "customer":
         statement = statement.where(AgentCustomer.customer_membership_id == actor.membership.id)
@@ -634,6 +745,8 @@ def list_project_timelines(db: Session, actor: CurrentSession):
     for project, customer, quotation in rows:
         timeline = timelines_by_project.get(project.id)
         if not timeline:
+            # List reads must not create rows or commit transactions. The detail
+            # endpoint persists a timeline only when the workflow is managed.
             timeline = ProjectTimeline(
                 company_id=project.company_id,
                 project_id=project.id,
@@ -641,14 +754,9 @@ def list_project_timelines(db: Session, actor: CurrentSession):
                 current_step="documents_uploaded",
                 progress=0,
             )
-            db.add(timeline)
-            db.flush()
-            timelines_by_project[project.id] = timeline
         steps = _merge_timeline_steps(timeline, project, customer, quotation)
         result.append(_timeline_list_item(project, customer, timeline, steps))
 
-    if rows:
-        db.commit()
     return result
 
 

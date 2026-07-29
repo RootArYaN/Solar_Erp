@@ -53,7 +53,7 @@ class LocalStorage:
     def checksum(self, relative_path: str) -> str:
         digest = hashlib.sha256()
         with self.path(relative_path).open("rb") as handle:
-            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            for chunk in iter(lambda: handle.read(settings.upload_chunk_bytes), b""):
                 digest.update(chunk)
         return digest.hexdigest()
 
@@ -121,13 +121,20 @@ class LocalStorage:
         else:
             arguments.append(target)
         try:
-            result = subprocess.run(arguments, capture_output=True, text=True, timeout=120, check=False)
+            result = subprocess.run(
+                arguments,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=settings.malware_scan_timeout_seconds,
+                check=False,
+            )
         except (OSError, subprocess.SubprocessError) as exc:
             raise StorageError("The malware scanner could not inspect the upload") from exc
         if result.returncode != 0:
             raise StorageError("The uploaded file failed malware scanning")
 
-    async def save_upload(self, upload: UploadFile, relative_path: str, max_bytes: int) -> tuple[int, str]:
+    def save_upload(self, upload: UploadFile, relative_path: str, max_bytes: int) -> tuple[int, str]:
         target = self.path(relative_path)
         target.parent.mkdir(parents=True, exist_ok=True)
         total = 0
@@ -135,7 +142,7 @@ class LocalStorage:
         try:
             with target.open("wb") as handle:
                 while True:
-                    chunk = await upload.read(1024 * 1024)
+                    chunk = upload.file.read(settings.upload_chunk_bytes)
                     if not chunk:
                         break
                     total += len(chunk)
@@ -147,7 +154,7 @@ class LocalStorage:
             target.unlink(missing_ok=True)
             raise
         finally:
-            await upload.close()
+            upload.file.close()
         return total, digest.hexdigest()
 
 

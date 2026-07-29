@@ -53,7 +53,7 @@ def get_files(
 
 
 @router.post("", response_model=StoredFileSummary, status_code=201)
-async def post_file(
+def post_file(
     upload: UploadFile = File(...),
     owner_type: str = Form(..., max_length=40),
     owner_id: str = Form(..., max_length=80),
@@ -63,7 +63,7 @@ async def post_file(
     session: CurrentSession = Depends(get_current_session),
 ) -> StoredFileSummary:
     try:
-        return await file_service.save_file(
+        return file_service.save_file(
             db,
             session,
             upload,

@@ -4,7 +4,7 @@ import json
 from datetime import UTC, datetime
 from decimal import Decimal
 
-from sqlalchemy import or_, select
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
@@ -199,53 +199,96 @@ def _current_balance(db: Session, profile: AgentProfile, approvals: dict[str, Tr
 
 
 def list_agents(db: Session, actor: CurrentSession) -> list[AgentListItem]:
+    company_id = actor.membership.company_id
+    customer_counts = (
+        select(
+            AgentCustomer.agent_profile_id.label("profile_id"),
+            func.count(AgentCustomer.id).label("customer_count"),
+        )
+        .where(AgentCustomer.company_id == company_id)
+        .group_by(AgentCustomer.agent_profile_id)
+        .subquery()
+    )
+    balance_totals = (
+        select(
+            AgentTransaction.agent_profile_id.label("profile_id"),
+            func.coalesce(
+                func.sum(
+                    case(
+                        (
+                            or_(
+                                TransactionApproval.id.is_(None),
+                                TransactionApproval.status == "approved",
+                            ),
+                            AgentTransaction.credit - AgentTransaction.debit,
+                        ),
+                        else_=0,
+                    )
+                ),
+                0,
+            ).label("balance_delta"),
+        )
+        .outerjoin(
+            TransactionApproval,
+            TransactionApproval.transaction_id == AgentTransaction.id,
+        )
+        .where(AgentTransaction.company_id == company_id)
+        .group_by(AgentTransaction.agent_profile_id)
+        .subquery()
+    )
     statement = (
-        select(Membership)
-        .join(Membership.role)
-        .join(Membership.user)
-        .where(Membership.company_id == actor.membership.company_id, Role.code == "agent")
-        .options(selectinload(Membership.user))
+        select(
+            Membership.id.label("membership_id"),
+            Membership.is_active.label("membership_active"),
+            User.full_name,
+            User.email,
+            User.is_active.label("user_active"),
+            AgentProfile.id.label("profile_id"),
+            AgentProfile.phone,
+            AgentProfile.city,
+            AgentProfile.opening_balance,
+            func.coalesce(customer_counts.c.customer_count, 0).label("customer_count"),
+            func.coalesce(balance_totals.c.balance_delta, 0).label("balance_delta"),
+        )
+        .join(Role, Role.id == Membership.role_id)
+        .join(User, User.id == Membership.user_id)
+        .outerjoin(AgentProfile, AgentProfile.membership_id == Membership.id)
+        .outerjoin(customer_counts, customer_counts.c.profile_id == AgentProfile.id)
+        .outerjoin(balance_totals, balance_totals.c.profile_id == AgentProfile.id)
+        .where(Membership.company_id == company_id, Role.code == "agent")
         .order_by(User.full_name.asc())
     )
     if not _can_view_all(actor):
         statement = statement.where(Membership.id == actor.membership.id)
 
-    memberships = list(db.scalars(statement).unique().all())
-    if not memberships:
+    rows = db.execute(statement).all()
+    if not rows:
         return []
 
-    profiles = list(
-        db.scalars(
-            select(AgentProfile)
-            .where(AgentProfile.membership_id.in_([membership.id for membership in memberships]))
-            .options(selectinload(AgentProfile.customers), selectinload(AgentProfile.transactions))
-        ).all()
-    )
-    profile_by_membership = {profile.membership_id: profile for profile in profiles}
-
-    result: list[AgentListItem] = []
-    created_profile = False
-    for membership in memberships:
-        profile = profile_by_membership.get(membership.id)
-        if not profile:
-            profile = ensure_agent_profile(db, membership)
-            created_profile = True
-        approvals = _approval_map(db, list(profile.transactions))
-        result.append(
-            AgentListItem(
-                membership_id=membership.id,
-                full_name=membership.user.full_name,
-                email=membership.user.email,
-                phone=profile.phone,
-                city=profile.city,
-                is_active=membership.is_active and membership.user.is_active,
-                customer_count=len(profile.customers),
-                current_balance=_money(_current_balance(db, profile, approvals)),
-            )
-        )
-    if created_profile:
+    missing_membership_ids = [row.membership_id for row in rows if row.profile_id is None]
+    if missing_membership_ids:
+        for membership in db.scalars(
+            select(Membership).where(Membership.id.in_(missing_membership_ids))
+        ).all():
+            ensure_agent_profile(db, membership)
         db.commit()
-    return result
+        return list_agents(db, actor)
+
+    return [
+        AgentListItem(
+            membership_id=row.membership_id,
+            full_name=row.full_name,
+            email=row.email,
+            phone=row.phone or "",
+            city=row.city or "",
+            is_active=bool(row.membership_active and row.user_active),
+            customer_count=int(row.customer_count or 0),
+            current_balance=_money(
+                Decimal(row.opening_balance or 0) + Decimal(row.balance_delta or 0)
+            ),
+        )
+        for row in rows
+    ]
 
 
 def _customer_workflow_maps(

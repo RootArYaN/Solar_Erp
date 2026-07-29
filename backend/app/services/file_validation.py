@@ -6,7 +6,6 @@ import warnings
 import zipfile
 from pathlib import Path
 
-from PIL import Image, UnidentifiedImageError
 
 EXTENSION_MIME = {
     ".pdf": "application/pdf",
@@ -122,6 +121,8 @@ def _validate_ooxml(path: Path, extension: str) -> None:
 
 
 def _validate_image(path: Path, extension: str) -> None:
+    from PIL import Image, UnidentifiedImageError
+
     expected = "JPEG" if extension in {".jpg", ".jpeg"} else extension[1:].upper()
     try:
         with warnings.catch_warnings():

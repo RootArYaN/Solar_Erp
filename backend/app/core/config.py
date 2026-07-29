@@ -27,12 +27,25 @@ class Settings(BaseSettings):
     frontend_origins: str = "http://172.20.10.12:5173,http://127.0.0.1:5173,http://localhost:5173"
     trusted_hosts: str = "127.0.0.1,localhost,172.20.10.12,testserver"
     trust_proxy_headers: bool = False
+
+    # Use local for one API process. Use gateway when a reverse proxy/API gateway
+    # is the shared source of truth for multiple API instances.
     rate_limit_mode: str = "local"
+    rate_limit_login_per_minute: int = 20
+    rate_limit_read_per_minute: int = 180
+    rate_limit_write_per_minute: int = 60
+    rate_limit_search_per_minute: int = 45
+    rate_limit_upload_per_minute: int = 10
+    rate_limit_refresh_per_minute: int = 20
+    rate_limit_max_keys: int = 5_000
 
     storage_type: str = "local"
     storage_path: str = "./storage"
     max_upload_mb: int = 20
+    upload_chunk_kb: int = 512
+    max_request_body_mb: int = 2
     malware_scan_command: str = ""
+    malware_scan_timeout_seconds: int = 60
     require_malware_scan: bool = False
 
     default_page_size: int = 25
@@ -41,8 +54,20 @@ class Settings(BaseSettings):
     login_window_seconds: int = 300
     idempotency_ttl_hours: int = 24
     idempotency_processing_timeout_seconds: int = 180
-    db_pool_size: int = 5
-    db_max_overflow: int = 10
+    idempotency_cleanup_interval_seconds: int = 300
+
+    # Small-instance defaults: one API worker, a small PostgreSQL pool and a
+    # bounded sync thread pool. Increase only after load-test evidence.
+    db_pool_size: int = 3
+    db_max_overflow: int = 2
+    db_pool_timeout_seconds: int = 10
+    db_pool_recycle_seconds: int = 1_200
+    db_connect_timeout_seconds: int = 5
+    db_statement_timeout_ms: int = 15_000
+    db_idle_transaction_timeout_ms: int = 30_000
+    thread_pool_workers: int = 8
+    max_concurrent_requests: int = 5
+    slow_request_ms: int = 750
 
     seed_company_name: str = "Shree Enterprise"
     seed_company_code: str = "SHREE"
@@ -73,6 +98,14 @@ class Settings(BaseSettings):
     def max_upload_bytes(self) -> int:
         return self.max_upload_mb * 1024 * 1024
 
+    @property
+    def upload_chunk_bytes(self) -> int:
+        return self.upload_chunk_kb * 1024
+
+    @property
+    def max_request_body_bytes(self) -> int:
+        return self.max_request_body_mb * 1024 * 1024
+
     @model_validator(mode="after")
     def validate_security(self):
         if len(self.jwt_secret) < 32:
@@ -95,8 +128,26 @@ class Settings(BaseSettings):
             raise ValueError("RATE_LIMIT_MODE must be local or gateway")
         if self.max_upload_mb < 1 or self.max_upload_mb > 100:
             raise ValueError("MAX_UPLOAD_MB must be between 1 and 100")
+        if self.max_request_body_mb < 1 or self.max_request_body_mb > 20:
+            raise ValueError("MAX_REQUEST_BODY_MB must be between 1 and 20")
+        if self.upload_chunk_kb < 64 or self.upload_chunk_kb > 2048:
+            raise ValueError("UPLOAD_CHUNK_KB must be between 64 and 2048")
         if self.require_malware_scan and not self.malware_scan_command.strip():
             raise ValueError("MALWARE_SCAN_COMMAND is required when REQUIRE_MALWARE_SCAN=true")
+        if self.db_pool_size < 1 or self.db_pool_size > 20:
+            raise ValueError("DB_POOL_SIZE must be between 1 and 20")
+        if self.db_max_overflow < 0 or self.db_max_overflow > 20:
+            raise ValueError("DB_MAX_OVERFLOW must be between 0 and 20")
+        if self.thread_pool_workers < 2 or self.thread_pool_workers > 64:
+            raise ValueError("THREAD_POOL_WORKERS must be between 2 and 64")
+        if self.max_concurrent_requests < 1 or self.max_concurrent_requests > 100:
+            raise ValueError("MAX_CONCURRENT_REQUESTS must be between 1 and 100")
+        if self.max_concurrent_requests > self.db_pool_size + self.db_max_overflow:
+            raise ValueError(
+                "MAX_CONCURRENT_REQUESTS cannot exceed DB_POOL_SIZE + DB_MAX_OVERFLOW"
+            )
+        if self.rate_limit_max_keys < 100 or self.rate_limit_max_keys > 100_000:
+            raise ValueError("RATE_LIMIT_MAX_KEYS must be between 100 and 100000")
         if self.is_production:
             if not self.csrf_enabled:
                 raise ValueError("CSRF_ENABLED must be true in production")

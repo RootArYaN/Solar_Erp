@@ -13,7 +13,9 @@ import app.models  # noqa: F401 - registers model metadata
 
 MIGRATION_005 = "005_remove_archive_concept_postgresql"
 MIGRATION_006 = "006_remove_file_soft_delete"
-CURRENT_MIGRATION_ID = MIGRATION_006
+MIGRATION_007 = "007_backend_performance_indexes"
+MIGRATION_008 = "008_measured_read_path_indexes"
+CURRENT_MIGRATION_ID = MIGRATION_008
 
 MIGRATED_PERMISSIONS = {
     "documents.view": ("Show Customer data tab", "View customer and project documents."),
@@ -110,6 +112,28 @@ INDEXES = [
     ("ix_agent_customers_customer_type", "agent_customers", "customer_type"),
     ("ix_customer_projects_payment_mode", "customer_projects", "payment_mode"),
     ("ix_inventory_movements_group_id", "inventory_movements", "movement_group_id"),
+    # Read-path indexes chosen from the actual list, approval, finance and audit queries.
+    ("ix_agent_customers_company_updated", "agent_customers", "company_id,updated_at"),
+    ("ix_agent_customers_company_status_updated", "agent_customers", "company_id,status,updated_at"),
+    ("ix_agent_transactions_agent_date", "agent_transactions", "agent_profile_id,transaction_date"),
+    ("ix_quotation_requests_company_created", "quotation_requests", "company_id,created_at"),
+    ("ix_quotation_requests_customer_status", "quotation_requests", "customer_id,status"),
+    ("ix_transaction_approvals_company_status_created", "transaction_approvals", "company_id,status,created_at"),
+    ("ix_customer_projects_company_created", "customer_projects", "company_id,created_at"),
+    ("ix_customer_projects_customer_created", "customer_projects", "customer_id,created_at"),
+    ("ix_finance_transactions_company_date_created", "finance_transactions", "company_id,transaction_date,created_at"),
+    ("ix_bills_company_date_created", "bills", "company_id,bill_date,created_at"),
+    ("ix_bills_company_payment_due", "bills", "company_id,payment_status,due_date"),
+    ("ix_audit_events_company_created", "audit_events", "company_id,created_at"),
+    ("ix_stored_files_company_created", "stored_files", "company_id,created_at"),
+    ("ix_stored_files_company_owner", "stored_files", "company_id,owner_type,owner_id"),
+    ("ix_posters_company_status_created", "posters", "company_id,status,created_at"),
+    # Phase 3 indexes selected from the first constrained PostgreSQL load report.
+    ("ix_customer_projects_company_status_updated", "customer_projects", "company_id,status,updated_at"),
+    ("ix_project_timelines_company_step", "project_timelines", "company_id,current_step"),
+    ("ix_finance_transactions_company_status_date", "finance_transactions", "company_id,status,transaction_date"),
+    ("ix_bills_company_type_status", "bills", "company_id,bill_type,status"),
+    ("ix_inventory_balances_company_item", "inventory_balances", "company_id,item_id"),
 ]
 
 
@@ -345,6 +369,18 @@ def run_migrations() -> None:
                 connection.execute(
                     text("INSERT INTO schema_migrations (id, applied_at) VALUES (:id, :applied_at)"),
                     {"id": MIGRATION_006, "applied_at": datetime.now(UTC)},
+                )
+
+            if MIGRATION_007 not in applied:
+                connection.execute(
+                    text("INSERT INTO schema_migrations (id, applied_at) VALUES (:id, :applied_at)"),
+                    {"id": MIGRATION_007, "applied_at": datetime.now(UTC)},
+                )
+
+            if MIGRATION_008 not in applied:
+                connection.execute(
+                    text("INSERT INTO schema_migrations (id, applied_at) VALUES (:id, :applied_at)"),
+                    {"id": MIGRATION_008, "applied_at": datetime.now(UTC)},
                 )
     except Exception:
         for staged_path, original_path in reversed(staged_deletes):

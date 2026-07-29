@@ -38,6 +38,15 @@ htmlcov/
 tmp/
 temp/
 
+# Repository-local test and performance output
+backend/storage-test/
+backend/reports/
+frontend/playwright-report/
+frontend/test-results/
+frontend/blob-report/
+frontend/screenshots/
+frontend/videos/
+
 # Editor and IDE metadata
 .idea/
 .vscode/
@@ -69,6 +78,12 @@ $RECYCLE.BIN/
 *.backup
 *.dump
 *.sql.gz
+
+# PostgreSQL bootstrap SQL is source code, not a local database export.
+!backend/infra/
+!backend/infra/postgres/
+!backend/infra/postgres/init/
+!backend/infra/postgres/init/*.sql
 
 # Patch/reject files and local tooling output
 *.orig

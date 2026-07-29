@@ -71,6 +71,9 @@ class InventorySummary(BaseModel):
     low_stock_items: int
     stock_value: float
     total_quantity: float
+    item_page: int = 1
+    item_page_size: int = 100
+    items_has_more: bool = False
 
 
 class CreateInventoryItemRequest(BaseModel):

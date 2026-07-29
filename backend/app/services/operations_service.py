@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from uuid import uuid4
 from decimal import Decimal
 
-from sqlalchemy import or_, select
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -184,10 +184,68 @@ def _location_summary(row: InventoryLocation) -> InventoryLocationSummary:
     return InventoryLocationSummary(id=row.id, version=row.version, name=row.name, location_type=row.location_type, address=row.address, is_active=row.is_active)
 
 
-def _inventory_maps(db: Session, company_id: str):
-    items = list(db.scalars(select(InventoryItem).where(InventoryItem.company_id == company_id, InventoryItem.is_active.is_(True)).order_by(InventoryItem.category, InventoryItem.name)).all())
-    locations = list(db.scalars(select(InventoryLocation).where(InventoryLocation.company_id == company_id, InventoryLocation.is_active.is_(True)).order_by(InventoryLocation.name)).all())
-    balances = list(db.scalars(select(InventoryBalance).where(InventoryBalance.company_id == company_id)).all())
+def _inventory_balance_totals(db: Session, company_id: str):
+    return (
+        select(
+            InventoryBalance.item_id.label("item_id"),
+            func.coalesce(func.sum(InventoryBalance.quantity_on_hand), 0).label("on_hand"),
+            func.coalesce(func.sum(InventoryBalance.reserved_quantity), 0).label("reserved"),
+        )
+        .where(InventoryBalance.company_id == company_id)
+        .group_by(InventoryBalance.item_id)
+        .subquery()
+    )
+
+
+def _inventory_totals(db: Session, company_id: str) -> tuple[int, int, Decimal, Decimal]:
+    balances = _inventory_balance_totals(db, company_id)
+    on_hand = func.coalesce(balances.c.on_hand, 0)
+    available = on_hand - func.coalesce(balances.c.reserved, 0)
+    row = db.execute(
+        select(
+            func.count(InventoryItem.id),
+            func.coalesce(func.sum(case((available <= InventoryItem.reorder_level, 1), else_=0)), 0),
+            func.coalesce(func.sum(on_hand * InventoryItem.unit_cost), 0),
+            func.coalesce(func.sum(on_hand), 0),
+        )
+        .select_from(InventoryItem)
+        .outerjoin(balances, balances.c.item_id == InventoryItem.id)
+        .where(
+            InventoryItem.company_id == company_id,
+            InventoryItem.is_active.is_(True),
+        )
+    ).one()
+    return int(row[0] or 0), int(row[1] or 0), Decimal(row[2] or 0), Decimal(row[3] or 0)
+
+
+def _inventory_maps(
+    db: Session,
+    company_id: str,
+    *,
+    item_offset: int = 0,
+    item_limit: int | None = None,
+):
+    item_statement = (
+        select(InventoryItem)
+        .where(InventoryItem.company_id == company_id, InventoryItem.is_active.is_(True))
+        .order_by(InventoryItem.category, InventoryItem.name, InventoryItem.id)
+        .offset(item_offset)
+    )
+    if item_limit is not None:
+        item_statement = item_statement.limit(item_limit)
+    items = list(db.scalars(item_statement).all())
+    locations = list(db.scalars(
+        select(InventoryLocation)
+        .where(InventoryLocation.company_id == company_id, InventoryLocation.is_active.is_(True))
+        .order_by(InventoryLocation.name)
+    ).all())
+    item_ids = [item.id for item in items]
+    balances = list(db.scalars(
+        select(InventoryBalance).where(
+            InventoryBalance.company_id == company_id,
+            InventoryBalance.item_id.in_(item_ids),
+        )
+    ).all()) if item_ids else []
     return items, locations, balances
 
 
@@ -201,46 +259,86 @@ def _available_by_item(balances: list[InventoryBalance]) -> dict[str, Decimal]:
 
 
 def low_stock_item_count(db: Session, company_id: str) -> int:
-    items, _, balances = _inventory_maps(db, company_id)
-    available = _available_by_item(balances)
-    return sum(
-        available.get(item.id, Decimal('0')) <= Decimal(item.reorder_level or 0)
-        for item in items
+    _total, low_stock, _value, _quantity = _inventory_totals(db, company_id)
+    return low_stock
+
+
+def _inventory_item_summary_from_related(
+    item: InventoryItem,
+    item_balances: list[InventoryBalance],
+    location_by_id: dict[str, InventoryLocation],
+) -> InventoryItemSummary:
+    on_hand = sum((Decimal(row.quantity_on_hand or 0) for row in item_balances), Decimal('0'))
+    reserved = sum((Decimal(row.reserved_quantity or 0) for row in item_balances), Decimal('0'))
+    available = on_hand - reserved
+    primary = max(item_balances, key=lambda row: row.quantity_on_hand, default=None)
+    return InventoryItemSummary(
+        id=item.id, version=item.version, sku=item.sku, name=item.name, category=item.category, unit=item.unit,
+        supplier_name=item.supplier_name, unit_cost=_f(item.unit_cost), reorder_level=_f(item.reorder_level),
+        quantity_on_hand=_f(on_hand), reserved_quantity=_f(reserved), available_quantity=_f(available),
+        location_id=primary.location_id if primary else None,
+        location_name=location_by_id[primary.location_id].name if primary and primary.location_id in location_by_id else '',
+        low_stock=available <= Decimal(item.reorder_level or 0), is_active=item.is_active, updated_at=item.updated_at,
     )
 
 
-def inventory_summary(db: Session, actor: CurrentSession) -> InventorySummary:
+def _inventory_item_summary(db: Session, item: InventoryItem) -> InventoryItemSummary:
+    balances = list(db.scalars(select(InventoryBalance).where(
+        InventoryBalance.company_id == item.company_id,
+        InventoryBalance.item_id == item.id,
+    )).all())
+    location_ids = {row.location_id for row in balances}
+    locations = {
+        row.id: row
+        for row in db.scalars(select(InventoryLocation).where(InventoryLocation.id.in_(location_ids))).all()
+    } if location_ids else {}
+    return _inventory_item_summary_from_related(item, balances, locations)
+
+
+def inventory_summary(
+    db: Session,
+    actor: CurrentSession,
+    *,
+    item_page: int = 1,
+    item_page_size: int = 100,
+    movement_limit: int = 30,
+) -> InventorySummary:
     company_id = actor.membership.company_id
-    items, locations, balances = _inventory_maps(db, company_id)
+    total_items, low_stock, stock_value, total_quantity = _inventory_totals(db, company_id)
+    item_offset = (item_page - 1) * item_page_size
+    items, locations, balances = _inventory_maps(
+        db,
+        company_id,
+        item_offset=item_offset,
+        item_limit=item_page_size,
+    )
     location_by_id = {row.id: row for row in locations}
     balance_by_item: dict[str, list[InventoryBalance]] = {}
     for balance in balances:
         balance_by_item.setdefault(balance.item_id, []).append(balance)
-    item_summaries: list[InventoryItemSummary] = []
-    stock_value = Decimal('0')
-    total_quantity = Decimal('0')
-    low_stock = 0
-    for item in items:
-        item_balances = balance_by_item.get(item.id, [])
-        on_hand = sum((Decimal(row.quantity_on_hand or 0) for row in item_balances), Decimal('0'))
-        reserved = sum((Decimal(row.reserved_quantity or 0) for row in item_balances), Decimal('0'))
-        available = on_hand - reserved
-        primary = max(item_balances, key=lambda row: row.quantity_on_hand, default=None)
-        is_low = available <= Decimal(item.reorder_level or 0)
-        low_stock += int(is_low)
-        stock_value += on_hand * Decimal(item.unit_cost or 0)
-        total_quantity += on_hand
-        item_summaries.append(InventoryItemSummary(
-            id=item.id, version=item.version, sku=item.sku, name=item.name, category=item.category, unit=item.unit,
-            supplier_name=item.supplier_name, unit_cost=_f(item.unit_cost), reorder_level=_f(item.reorder_level),
-            quantity_on_hand=_f(on_hand), reserved_quantity=_f(reserved), available_quantity=_f(available),
-            location_id=primary.location_id if primary else None,
-            location_name=location_by_id[primary.location_id].name if primary and primary.location_id in location_by_id else '',
-            low_stock=is_low, is_active=item.is_active, updated_at=item.updated_at,
-        ))
-    movement_rows = list(db.scalars(select(InventoryMovement).where(InventoryMovement.company_id == company_id).order_by(InventoryMovement.created_at.desc()).limit(60)).all())
+    item_summaries = [
+        _inventory_item_summary_from_related(item, balance_by_item.get(item.id, []), location_by_id)
+        for item in items
+    ]
+    movement_rows = list(db.scalars(
+        select(InventoryMovement)
+        .where(InventoryMovement.company_id == company_id)
+        .order_by(InventoryMovement.created_at.desc(), InventoryMovement.id.desc())
+        .limit(movement_limit)
+    ).all()) if movement_limit else []
     movement_summaries = _movement_summaries(db, movement_rows)
-    return InventorySummary(items=item_summaries, locations=[_location_summary(row) for row in locations], movements=movement_summaries, total_items=len(items), low_stock_items=low_stock, stock_value=_f(stock_value), total_quantity=_f(total_quantity))
+    return InventorySummary(
+        items=item_summaries,
+        locations=[_location_summary(row) for row in locations],
+        movements=movement_summaries,
+        total_items=total_items,
+        low_stock_items=low_stock,
+        stock_value=_f(stock_value),
+        total_quantity=_f(total_quantity),
+        item_page=item_page,
+        item_page_size=item_page_size,
+        items_has_more=item_offset + len(item_summaries) < total_items,
+    )
 
 
 def create_location(db: Session, actor: CurrentSession, payload: CreateInventoryLocationRequest) -> InventoryLocationSummary:
@@ -267,7 +365,7 @@ def create_item(db: Session, actor: CurrentSession, payload: CreateInventoryItem
         db.add(InventoryMovement(company_id=row.company_id, item_id=row.id, movement_type='inward', quantity=_d(payload.opening_quantity), destination_location_id=location.id, reference_number=f'OPEN-{row.sku}', note='Opening stock', status='completed', created_by=actor.membership.id))
     write_event(db, company_id=row.company_id, event='inventory.item_created', entity='inventory_item', entity_id=row.id, actor=actor, changes={'sku': row.sku, 'name': row.name, 'opening_quantity': str(payload.opening_quantity)})
     db.commit()
-    return next(item for item in inventory_summary(db, actor).items if item.id == row.id)
+    return _inventory_item_summary(db, row)
 
 
 def _balance(db: Session, company_id: str, item_id: str, location_id: str, create: bool = False) -> InventoryBalance | None:
@@ -484,16 +582,17 @@ def save_pricing(db: Session, actor: CurrentSession, payload: SavePricingBookReq
     db.commit(); return get_pricing(db,actor)
 
 
-def _poster_summary(db: Session,row: Poster)->PosterSummary:
-    file=db.get(StoredFile,row.file_id)
+def _poster_summary(row: Poster, file: StoredFile | None)->PosterSummary:
     return PosterSummary(id=row.id,version=row.version,title=row.title,description=row.description,file_id=row.file_id,file_name=file.name if file else '',mime_type=file.mime_type if file else '',category=row.category,status=row.status,created_at=row.created_at,updated_at=row.updated_at)
 
 
 def list_posters(db: Session, actor: CurrentSession, status: str | None=None)->list[PosterSummary]:
     filters=[Poster.company_id==actor.membership.company_id]
     if status: filters.append(Poster.status==status)
-    rows=list(db.scalars(select(Poster).where(*filters).order_by(Poster.created_at.desc())).all())
-    return [_poster_summary(db,row) for row in rows]
+    rows=list(db.scalars(select(Poster).where(*filters).order_by(Poster.created_at.desc()).limit(250)).all())
+    file_ids={row.file_id for row in rows}
+    files={row.id: row for row in db.scalars(select(StoredFile).where(StoredFile.id.in_(file_ids))).all()} if file_ids else {}
+    return [_poster_summary(row,files.get(row.file_id)) for row in rows]
 
 
 def create_poster(db: Session, actor: CurrentSession, payload: CreatePosterRequest)->PosterSummary:
@@ -503,13 +602,13 @@ def create_poster(db: Session, actor: CurrentSession, payload: CreatePosterReque
         raise OperationsConflictError('Use a poster file uploaded by your current session')
     if file.mime_type not in {'image/jpeg','image/png','image/webp','application/pdf'}: raise OperationsConflictError('Poster must be JPEG, PNG, WebP or PDF')
     row=Poster(company_id=actor.membership.company_id,title=payload.title,description=payload.description,file_id=file.id,category=payload.category,status='active',created_by=actor.membership.id)
-    db.add(row); db.flush(); write_event(db,company_id=row.company_id,event='poster.uploaded',entity='poster',entity_id=row.id,actor=actor,changes={'title':row.title,'file_id':row.file_id}); db.commit(); return _poster_summary(db,row)
+    db.add(row); db.flush(); write_event(db,company_id=row.company_id,event='poster.uploaded',entity='poster',entity_id=row.id,actor=actor,changes={'title':row.title,'file_id':row.file_id}); db.commit(); return _poster_summary(row,file)
 
 
 def set_poster_status(db: Session, actor: CurrentSession, poster_id: str, status: str)->PosterSummary:
     row=db.scalar(select(Poster).where(Poster.id==poster_id,Poster.company_id==actor.membership.company_id))
     if not row: raise OperationsNotFoundError('Poster not found')
-    row.status=status; write_event(db,company_id=row.company_id,event='poster.status_changed',entity='poster',entity_id=row.id,actor=actor,changes={'status':status}); db.commit(); return _poster_summary(db,row)
+    row.status=status; write_event(db,company_id=row.company_id,event='poster.status_changed',entity='poster',entity_id=row.id,actor=actor,changes={'status':status}); db.commit(); return _poster_summary(row,db.get(StoredFile,row.file_id))
 
 
 def _default_document_template_settings(actor: CurrentSession, template_type: str) -> dict[str, str]:
@@ -722,8 +821,7 @@ def update_inventory_item(db: Session, actor: CurrentSession, item_id: str, payl
     changes = {key: {'old': before[key], 'new': getattr(row,key)} for key in before if before[key] != getattr(row,key)}
     write_event(db, company_id=row.company_id, event='inventory.item_updated', entity='inventory_item', entity_id=row.id, actor=actor, changes=changes)
     db.commit(); db.refresh(row)
-    summary = inventory_summary(db, actor)
-    return next(item for item in summary.items if item.id == row.id)
+    return _inventory_item_summary(db, row)
 
 
 def update_inventory_location(db: Session, actor: CurrentSession, location_id: str, payload):
@@ -760,4 +858,4 @@ def update_poster(db: Session, actor: CurrentSession, poster_id: str, payload):
     changes = {key: {'old': before[key], 'new': getattr(row,key)} for key in before if before[key] != getattr(row,key)}
     write_event(db, company_id=row.company_id, event='poster.updated', entity='poster', entity_id=row.id, actor=actor, changes=changes)
     db.commit(); db.refresh(row)
-    return _poster_summary(db,row)
+    return _poster_summary(row,db.get(StoredFile,row.file_id))

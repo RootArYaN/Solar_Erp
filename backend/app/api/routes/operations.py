@@ -38,8 +38,20 @@ def _raise(exc: OperationsServiceError) -> None:
 
 
 @router.get('/inventory/summary', response_model=InventorySummary)
-def get_inventory(db: Session = Depends(get_db), session: CurrentSession = Depends(require_any_permissions('inventory.view', 'inventory.manage'))):
-    return operations_service.inventory_summary(db, session)
+def get_inventory(
+    item_page: int = Query(default=1, ge=1),
+    item_page_size: int = Query(default=100, ge=1, le=200),
+    movement_limit: int = Query(default=30, ge=0, le=100),
+    db: Session = Depends(get_db),
+    session: CurrentSession = Depends(require_any_permissions('inventory.view', 'inventory.manage')),
+):
+    return operations_service.inventory_summary(
+        db,
+        session,
+        item_page=item_page,
+        item_page_size=item_page_size,
+        movement_limit=movement_limit,
+    )
 
 
 @router.post('/inventory/locations', response_model=InventoryLocationSummary, status_code=201)

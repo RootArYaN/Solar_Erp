@@ -189,7 +189,7 @@ def validate_file_owner(
     raise FileServiceError("Unsupported file owner type")
 
 
-async def save_file(
+def save_file(
     db: Session,
     actor: CurrentSession,
     upload: UploadFile,
@@ -220,7 +220,7 @@ async def save_file(
 
     relative = f"active/{actor.membership.company_id}/{uuid4().hex}{extension}"
     try:
-        size_bytes, checksum = await storage.save_upload(upload, relative, settings.max_upload_bytes)
+        size_bytes, checksum = storage.save_upload(upload, relative, settings.max_upload_bytes)
         if size_bytes <= 0:
             raise FileServiceError("Empty files are not allowed")
         detected_mime = validate_saved_content(storage.path(relative), extension)

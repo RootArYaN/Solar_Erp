@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.api.deps import CurrentSession, require_any_permissions
@@ -27,13 +27,20 @@ def _raise_service_error(exc: WorkflowServiceError) -> None:
 
 @router.get("/approvals", response_model=ApprovalCenterResponse)
 def get_approval_center(
+    quotation_limit: int = Query(default=50, ge=1, le=100),
+    transaction_limit: int = Query(default=50, ge=1, le=100),
     db: Session = Depends(get_db),
     session: CurrentSession = Depends(require_any_permissions(
         "quotations.approve", "agents.transactions.approve", "finance.manage"
     )),
 ) -> ApprovalCenterResponse:
     try:
-        return workflow_service.get_approval_center(db, session)
+        return workflow_service.get_approval_center(
+            db,
+            session,
+            quotation_limit=quotation_limit,
+            transaction_limit=transaction_limit,
+        )
     except WorkflowServiceError as exc:
         _raise_service_error(exc)
 
@@ -92,11 +99,13 @@ def decide_transaction(
 
 @router.get("/projects/timelines", response_model=list[ProjectTimelineListItem])
 def list_project_timelines(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=100, ge=1, le=200),
     db: Session = Depends(get_db),
     session: CurrentSession = Depends(require_any_permissions("projects.view")),
 ) -> list[ProjectTimelineListItem]:
     try:
-        return workflow_service.list_project_timelines(db, session)
+        return workflow_service.list_project_timelines(db, session, page=page, page_size=page_size)
     except WorkflowServiceError as exc:
         _raise_service_error(exc)
 

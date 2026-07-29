@@ -94,37 +94,47 @@ def _month_bounds(on_date: date | None = None) -> tuple[date, date]:
 
 def finance_kpis(db: Session, company_id: str, *, on_date: date | None = None) -> FinanceKpis:
     start, end = _month_bounds(on_date)
-    monthly = db.execute(select(
+    receivables = (
+        select(func.coalesce(func.sum(Bill.balance_amount), 0))
+        .where(
+            Bill.company_id == company_id,
+            Bill.bill_type == 'sales',
+            Bill.status != 'cancelled',
+            Bill.balance_amount > 0,
+        )
+        .scalar_subquery()
+    )
+    payables = (
+        select(func.coalesce(func.sum(Bill.balance_amount), 0))
+        .where(
+            Bill.company_id == company_id,
+            Bill.bill_type == 'purchase',
+            Bill.status != 'cancelled',
+            Bill.balance_amount > 0,
+        )
+        .scalar_subquery()
+    )
+    row = db.execute(select(
         func.coalesce(func.sum(case((FinanceTransaction.direction == 'credit', FinanceTransaction.amount), else_=0)), 0),
         func.coalesce(func.sum(case((FinanceTransaction.direction == 'debit', FinanceTransaction.amount), else_=0)), 0),
         func.coalesce(func.sum(case((
             (FinanceTransaction.direction == 'debit') & (FinanceTransaction.source_type == 'expense'),
             FinanceTransaction.amount,
         ), else_=0)), 0),
-    ).where(
+        receivables,
+        payables,
+    ).select_from(FinanceTransaction).where(
         FinanceTransaction.company_id == company_id,
         FinanceTransaction.status == 'posted',
         FinanceTransaction.transaction_date >= start,
         FinanceTransaction.transaction_date < end,
     )).one()
-    receivables = db.scalar(select(func.coalesce(func.sum(Bill.balance_amount), 0)).where(
-        Bill.company_id == company_id,
-        Bill.bill_type == 'sales',
-        Bill.status != 'cancelled',
-        Bill.balance_amount > 0,
-    )) or 0
-    payables = db.scalar(select(func.coalesce(func.sum(Bill.balance_amount), 0)).where(
-        Bill.company_id == company_id,
-        Bill.bill_type == 'purchase',
-        Bill.status != 'cancelled',
-        Bill.balance_amount > 0,
-    )) or 0
     return FinanceKpis(
-        money_in_month=_float(monthly[0]),
-        money_out_month=_float(monthly[1]),
-        expenses_month=_float(monthly[2]),
-        customer_receivables=_float(receivables),
-        supplier_payables=_float(payables),
+        money_in_month=_float(row[0]),
+        money_out_month=_float(row[1]),
+        expenses_month=_float(row[2]),
+        customer_receivables=_float(row[3]),
+        supplier_payables=_float(row[4]),
     )
 
 
@@ -606,10 +616,18 @@ def transfer_accounts(db: Session, actor: CurrentSession, payload: AccountTransf
     return _transaction_summaries(db, rows)
 
 
+def _bill_summary_from_related(
+    row: Bill,
+    customer: AgentCustomer | None,
+    project: CustomerProject | None,
+) -> BillSummary:
+    return BillSummary(id=row.id, bill_type=row.bill_type, bill_number=row.bill_number, bill_date=row.bill_date, customer_id=row.customer_id, customer_name=customer.customer_name if customer else '', project_id=row.project_id, project_number=project.project_number if project else '', supplier_name=row.supplier_name, subtotal=_float(row.subtotal), tax_amount=_float(row.tax_amount), total_amount=_float(row.total_amount), due_date=row.due_date, paid_amount=_float(row.paid_amount), balance_amount=_float(row.balance_amount), payment_status=row.payment_status, status=row.status, file_id=row.file_id, note=row.note, created_at=row.created_at)
+
+
 def _bill_summary(db: Session, row: Bill) -> BillSummary:
     customer = db.get(AgentCustomer, row.customer_id) if row.customer_id else None
     project = db.get(CustomerProject, row.project_id) if row.project_id else None
-    return BillSummary(id=row.id, bill_type=row.bill_type, bill_number=row.bill_number, bill_date=row.bill_date, customer_id=row.customer_id, customer_name=customer.customer_name if customer else '', project_id=row.project_id, project_number=project.project_number if project else '', supplier_name=row.supplier_name, subtotal=_float(row.subtotal), tax_amount=_float(row.tax_amount), total_amount=_float(row.total_amount), due_date=row.due_date, paid_amount=_float(row.paid_amount), balance_amount=_float(row.balance_amount), payment_status=row.payment_status, status=row.status, file_id=row.file_id, note=row.note, created_at=row.created_at)
+    return _bill_summary_from_related(row, customer, project)
 
 
 def list_bills(db: Session, actor: CurrentSession, *, bill_type: str | None = None, payment_status: str | None = None, customer_id: str | None = None, project_id: str | None = None, page: int = 1, page_size: int = 50) -> BillList:
@@ -620,7 +638,16 @@ def list_bills(db: Session, actor: CurrentSession, *, bill_type: str | None = No
     if project_id: filters.append(Bill.project_id == project_id)
     total = db.scalar(select(func.count()).select_from(Bill).where(*filters)) or 0
     rows = list(db.scalars(select(Bill).where(*filters).order_by(Bill.bill_date.desc(), Bill.created_at.desc()).offset((page - 1) * page_size).limit(page_size)).all())
-    return BillList(data=[_bill_summary(db, row) for row in rows], page=page, page_size=page_size, total=int(total))
+    customer_ids = {row.customer_id for row in rows if row.customer_id}
+    project_ids = {row.project_id for row in rows if row.project_id}
+    customers = {row.id: row for row in db.scalars(select(AgentCustomer).where(AgentCustomer.id.in_(customer_ids))).all()} if customer_ids else {}
+    projects = {row.id: row for row in db.scalars(select(CustomerProject).where(CustomerProject.id.in_(project_ids))).all()} if project_ids else {}
+    return BillList(
+        data=[_bill_summary_from_related(row, customers.get(row.customer_id), projects.get(row.project_id)) for row in rows],
+        page=page,
+        page_size=page_size,
+        total=int(total),
+    )
 
 
 def list_bill_customers(db: Session, actor: CurrentSession) -> list[BillCustomerOption]:

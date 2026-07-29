@@ -1,0 +1,49 @@
+services:
+  postgres-performance:
+    image: postgres:16-alpine
+    container_name: solar-erp-postgres-performance
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: solar_erp_test
+      POSTGRES_USER: solar_erp
+      POSTGRES_PASSWORD: solar_erp_test_password
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "5433:5432"
+    volumes:
+      - solar_erp_postgres_performance:/var/lib/postgresql/data
+      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
+    command:
+      - postgres
+      - -c
+      - shared_preload_libraries=pg_stat_statements
+      - -c
+      - pg_stat_statements.track=all
+      - -c
+      - max_connections=50
+      - -c
+      - shared_buffers=128MB
+      - -c
+      - effective_cache_size=384MB
+      - -c
+      - work_mem=2MB
+      - -c
+      - maintenance_work_mem=32MB
+      - -c
+      - jit=off
+      - -c
+      - log_min_duration_statement=500
+      - -c
+      - idle_in_transaction_session_timeout=30000
+      - -c
+      - statement_timeout=15000
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U solar_erp -d solar_erp_test"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    mem_limit: 512m
+    cpus: 1.0
+
+volumes:
+  solar_erp_postgres_performance:

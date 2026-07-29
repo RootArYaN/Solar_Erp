@@ -34,3 +34,13 @@ def test_production_security_configuration_is_accepted():
 def test_invalid_rate_limit_mode_is_rejected():
     with pytest.raises(ValidationError, match="RATE_LIMIT_MODE must be local or gateway"):
         Settings(_env_file=None, rate_limit_mode="memory")
+
+
+def test_request_concurrency_cannot_exceed_database_capacity():
+    with pytest.raises(ValidationError, match="MAX_CONCURRENT_REQUESTS cannot exceed"):
+        Settings(
+            _env_file=None,
+            db_pool_size=2,
+            db_max_overflow=1,
+            max_concurrent_requests=4,
+        )

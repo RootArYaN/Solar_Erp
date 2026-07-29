@@ -1,6 +1,15 @@
 from __future__ import annotations
 
+import anyio.to_thread
 from fastapi import status
+
+from app.core.config import settings
+
+
+async def configure_thread_pool() -> None:
+    """Bound sync route/database concurrency for small cloud instances."""
+    limiter = anyio.to_thread.current_default_thread_limiter()
+    limiter.total_tokens = settings.thread_pool_workers
 
 
 class RecordConflictError(Exception):

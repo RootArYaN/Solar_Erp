@@ -50,6 +50,12 @@ pip-wheel-metadata/
 celerybeat-schedule*
 gunicorn.pid
 
+# Keep versioned PostgreSQL bootstrap scripts used by Docker test infrastructure.
+!infra/
+!infra/postgres/
+!infra/postgres/init/
+!infra/postgres/init/*.sql
+
 # User-uploaded/runtime files. Preserve only the required directory skeleton.
 storage/*
 !storage/active/
@@ -59,3 +65,6 @@ storage/temp/*
 !storage/active/.gitkeep
 !storage/temp/.gitkeep
 
+# Isolated integration/performance test state and generated diagnostics.
+storage-test/
+reports/

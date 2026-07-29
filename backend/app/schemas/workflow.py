@@ -125,6 +125,8 @@ class TransactionApprovalSummary(BaseModel):
 class ApprovalCenterResponse(BaseModel):
     quotation_requests: list[QuotationRequestSummary]
     transactions: list[TransactionApprovalSummary]
+    quotation_has_more: bool = False
+    transaction_has_more: bool = False
 
 
 class ProjectTimelineStep(BaseModel):
