@@ -30,17 +30,20 @@
 - [x] Production Vite source maps disabled
 - [x] Development seed blocked in production
 - [x] Insecure production cookie configuration rejected at startup
+- [x] Production supports private encrypted Cloudflare R2 storage without unsupported AWS headers
+- [x] Transactional migrations use a deployment lock and checksummed history
+- [x] Existing production databases require a verified backup reference before migration
 
 ## Before public cloud deployment
 
-- [ ] Move `JWT_SECRET`, database password and future storage keys into a secret manager
+- [ ] Move `JWT_SECRET`, database password and R2 token into a secret manager
 - [ ] Use HTTPS end to end
 - [ ] Put API and frontend behind one trusted reverse proxy/domain
 - [ ] Add proxy/API-gateway rate limiting for multi-instance deployment
 - [ ] Add managed malware scanning for uploads
-- [ ] Add encrypted private object storage and an `S3Storage` adapter
+- [x] Add encrypted private object storage and an `S3Storage` adapter
 - [ ] Enable database backups and test restoration
-- [ ] Enable object-storage versioning/lifecycle policy
+- [ ] Configure an independent R2 backup bucket, retention lock and lifecycle policy
 - [ ] Add centralized structured logs with secret redaction
 - [ ] Run dependency and container vulnerability scans
 - [ ] Run the full frontend build and application test suite from the complete repository

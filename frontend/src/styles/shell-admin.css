@@ -37,25 +37,12 @@
 .sidebar-backdrop { display: none; }
 .app-main { min-width: 0; height: 100vh; height: 100dvh; overflow: hidden; }
 .app-topbar { display: none; }
-.app-topbar__context { display: flex; align-items: center; gap: 8px; color: #69727c; font-size: 12px; }
-.app-topbar__context svg { color: #b77814; }
+
 .app-menu-button { display: none; }
-.dashboard-content, .admin-page, .agent-page { width: min(1360px, calc(100% - 48px)); margin: 0 auto; padding: 34px 0 48px; }
-.dashboard-content, .admin-page, .agent-page { height: 100%; min-height: 0; overflow: hidden; }
-.dashboard-content { display: flex; flex-direction: column; }
+.admin-page, .agent-page{ width: min(1360px, calc(100% - 48px)); margin: 0 auto; padding: 34px 0 48px; }
+.admin-page, .agent-page{ height: 100%; min-height: 0; overflow: hidden; }
+
 .admin-page, .agent-page { display: flex; flex-direction: column; }
-.dashboard-hero { flex: 0 0 auto; }
-.dashboard-hero h1 { font-size: clamp(30px, 3.2vw, 42px); letter-spacing: -1.5px; }
-.dashboard-hero p { font-size: 14px; line-height: 1.55; }
-.module-grid { gap: 12px; margin-top: 28px; }
-.module-grid--dashboard { grid-template-columns: repeat(5, minmax(0, 1fr)); flex: 1 1 auto; min-height: 0; align-content: start; overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
-.module-card { padding: 17px; border-radius: 14px; box-shadow: 0 8px 24px rgba(28, 35, 43, .05); }
-.module-card__icon { width: 36px; height: 36px; border-radius: 10px; }
-.module-card h2 { margin: 15px 0 7px; font-size: 16px; }
-.module-card p { min-height: 62px; margin-bottom: 14px; font-size: 12px; line-height: 1.5; }
-.access-card { flex: 0 0 auto; gap: 12px; margin-top: 12px; padding: 16px 18px; border-radius: 13px; }
-.module-card--active { border-color: rgba(212, 148, 27, .31); background: linear-gradient(160deg, #fff, #fffaf0); }
-.module-card a { display: inline-flex; align-items: center; gap: 5px; color: #9a650f; font-size: 12px; font-weight: 800; text-decoration: none; text-transform: uppercase; letter-spacing: .8px; }
 
 /* Administration */
 .page-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; }
@@ -72,7 +59,7 @@
 .segmented-tabs { width: max-content; display: flex; gap: 3px; margin: 20px 0 12px; padding: 3px; border: 1px solid var(--line); border-radius: 10px; background: rgba(255,255,255,.65); }
 .segmented-tabs button { min-height: 33px; padding: 0 13px; border: 0; border-radius: 7px; color: #69727c; background: transparent; font-size: 12px; font-weight: 700; cursor: pointer; }
 .segmented-tabs button.active { color: #17202d; background: white; box-shadow: 0 4px 12px rgba(25,35,45,.08); }
-.admin-alert { margin-bottom: 14px; padding: 12px 14px; border: 1px solid rgba(185, 57, 52, .22); border-radius: 11px; color: #9c322e; background: rgba(185, 57, 52, .07); font-size: 13px; }
+
 .data-panel { min-height: 0; display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 13px; background: white; box-shadow: 0 10px 30px rgba(28,35,43,.045); overflow: hidden; }
 .admin-page > .data-panel { flex: 1 1 auto; }
 .data-panel__toolbar { min-height: 56px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 9px 13px; border-bottom: 1px solid var(--line); }

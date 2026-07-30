@@ -7,7 +7,7 @@ A clean, responsive authentication foundation for a Solar EPC ERP.
 - React + Vite + TypeScript frontend
 - Responsive desktop and mobile login UI
 - FastAPI backend
-- SQLite for local development
+- PostgreSQL for development and production
 - JWT authentication
 - Argon2 password hashing
 - Company-aware memberships
@@ -58,36 +58,21 @@ npm run dev
 
 Open `http://localhost:5173`.
 
-## Google Drive customer documents
+## Customer document storage
 
-Customer document uploads can be stored in a company Google Drive. Copy the
-Google Drive variables from `backend/.env.example` into `backend/.env`, enable
-the Google Drive API in Google Cloud, and create a Web application OAuth client
-with this authorized redirect URI:
-
-```text
-http://localhost:8000/api/v1/documents/google-drive/callback
-```
-
-Sign in as a company administrator, open **Customer data**, and select
-**Connect** beside Google Drive. The app creates this structure automatically:
-
-```text
-Solar ERP Customers/
-└── <customer number> - <customer name>/
-    └── uploaded documents
-```
-
-The integration requests the limited `drive.file` scope and encrypts the saved
-refresh token with `GOOGLE_DRIVE_TOKEN_KEY`.
+Local development uses the private `backend/storage` directory. Production
+uses a private Cloudflare R2 bucket through its S3-compatible API. R2 encrypts
+objects automatically; the application deliberately omits unsupported AWS SSE
+headers. Use `backend/.env.production.example` and
+`backend/docs/R2_SETUP.md` as the configuration checklist.
 
 ## Production migration path
 
-- Replace `DATABASE_URL` with PostgreSQL, for example `postgresql+psycopg://...`.
-- Replace the development JWT secret.
-- Add Alembic migrations before the first shared environment.
-- Move access tokens to secure HttpOnly cookies if the frontend and API share a controlled domain.
-- Add audit events, password reset, invitation flows, MFA, session revocation, and rate limiting.
+- Inject the production environment through the cloud secret manager.
+- Create verified database and object-storage recovery points.
+- Rehearse the migration against a restored database copy.
+- Run the migration release command with the backup reference.
+- Serve the frontend and API through one HTTPS reverse-proxy origin.
 
 ## ERP expansion sequence
 

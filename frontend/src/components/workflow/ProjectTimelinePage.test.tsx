@@ -72,7 +72,7 @@ describe('ProjectTimelinePage refresh', () => {
     )
 
     saveSession({ ...session, access_token: 'access-token', token_type: 'bearer', expires_at: '2099-08-01T00:00:00Z' } satisfies AuthSessionResponse, false)
-    render(<ToastProvider><ProjectTimelinePage session={session} /></ToastProvider>)
+    render(<ToastProvider><ProjectTimelinePage /></ToastProvider>)
 
     expect(await screen.findByRole('heading', { name: 'Asha Patel' })).toBeInTheDocument()
     expect(screen.getAllByText('Documents uploaded').length).toBeGreaterThan(0)

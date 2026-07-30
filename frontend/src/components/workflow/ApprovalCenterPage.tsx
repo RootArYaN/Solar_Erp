@@ -20,7 +20,6 @@ import type {
   ApprovalDecisionInput,
   GenerateQuotationInput,
   QuotationRequestSummary,
-  Session,
   TransactionApprovalSummary,
 } from '../../types'
 import { useToast } from '../ui/ToastProvider'
@@ -40,7 +39,7 @@ function prettyStatus(status: string) {
   return status.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase())
 }
 
-export function ApprovalCenterPage({ session }: { session: Session }) {
+export function ApprovalCenterPage() {
   const [data, setData] = useState<ApprovalCenter>({ quotation_requests: [], transactions: [] })
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)

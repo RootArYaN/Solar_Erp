@@ -1,8 +1,8 @@
 from fastapi import APIRouter, HTTPException
 from sqlalchemy import text
 
-from app.core.config import settings
 from app.db.session import session_scope
+from app.services.storage import storage
 
 router = APIRouter(tags=["system"])
 
@@ -17,10 +17,7 @@ def ready() -> dict[str, str]:
     try:
         with session_scope() as db:
             db.execute(text("SELECT 1"))
-        settings.storage_root.mkdir(parents=True, exist_ok=True)
-        probe = settings.storage_root / ".ready"
-        probe.write_text("ok", encoding="utf-8")
-        probe.unlink(missing_ok=True)
+        storage.check_ready()
     except Exception as exc:
         raise HTTPException(status_code=503, detail="Database or storage is not ready") from exc
     return {"status": "ready"}

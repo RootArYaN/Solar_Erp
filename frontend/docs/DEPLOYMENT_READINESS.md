@@ -19,6 +19,10 @@
 - Production source maps disabled
 - Production API docs disabled
 - Request IDs, safe errors and security headers
+- Non-root backend and frontend container definitions
+- Exact Python production dependency lock
+- Separate production migration entrypoint
+- Clamd streaming client and release smoke test
 
 ## Recommended local commands
 
@@ -58,7 +62,7 @@ Reverse proxy
 7. Keep database and storage private from the public internet.
 8. Configure backups and test one restore.
 9. Add gateway rate limiting and upload malware scanning.
-10. Replace local storage with an S3-compatible adapter before using ephemeral containers.
+10. Configure the private R2 bucket, scoped token and independent recovery bucket.
 
 ## Container notes
 
@@ -69,10 +73,13 @@ Reverse proxy
 - Execute migrations as a release command, not in every production API process.
 - Do not use temporary container disk as the permanent archive store.
 
-## Frontend build limitation in this delivery
+## Production packaging
 
-The frontend baseline ZIP provided only source files and did not include `package.json`, a lockfile or installed modules. Compiler syntax transpilation passed for all 61 TypeScript/TSX files, but the final Vite bundle must be built from the complete repository before deployment.
+The frontend has a committed npm lockfile and a multi-stage non-root Nginx
+image. The backend has an exact production dependency lock, a non-root image,
+separate API/migration entrypoints and a release smoke test. See
+`deploy/README.md` and `compose.production.yml`.
 
-## Backend packaging limitation in this delivery
-
-The backend source ZIP also does not include a dependency lockfile or container definition. Python imports and targeted workflows passed in the available runtime. Build the production image from the complete repository with pinned dependencies.
+The Compose topology validates service wiring but does not implement the cloud
+control plane. Deploy immutable image digests through provider-specific
+infrastructure.

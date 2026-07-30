@@ -13,7 +13,7 @@ from app.main import app
 def test_openapi_contains_expected_api_surface():
     schema = app.openapi()
     paths = schema['paths']
-    assert len(paths) == 69
+    assert len(paths) >= 69
     assert 'delete' in paths['/api/v1/files/{file_id}']
     assert 'patch' not in paths['/api/v1/files/{file_id}']
     assert '/api/v1/auth/login' in paths

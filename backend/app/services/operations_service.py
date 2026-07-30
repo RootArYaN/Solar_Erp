@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import re
 import tempfile
+from contextlib import ExitStack
 from io import BytesIO
 from pathlib import Path
 from datetime import UTC, datetime
@@ -131,37 +132,36 @@ def merged_document_pack(
         from PIL import Image, ImageOps
         from pypdf import PdfReader, PdfWriter
 
-        writer = PdfWriter()
-        writer.append(str(storage.path(generated.storage_path)))
-        image_buffers: list[BytesIO] = []
-        for attachment in attachments:
-            path = storage.path(attachment.storage_path)
-            if attachment.mime_type == "application/pdf":
-                writer.append(str(path))
-                continue
-            if attachment.mime_type.startswith("image/"):
-                with Image.open(path) as source:
-                    image = ImageOps.exif_transpose(source).convert("RGB")
-                    image_pdf = BytesIO()
-                    image.save(image_pdf, format="PDF", resolution=150)
-                    image_pdf.seek(0)
-                    image_buffers.append(image_pdf)
-                    writer.append(PdfReader(image_pdf))
-                continue
-            raise OperationsConflictError(
-                f"{attachment.name} cannot be merged. Upload customer attachments as PDF, JPG, PNG, or WebP."
-            )
+        with ExitStack() as resources:
+            writer = PdfWriter()
+            generated_path = resources.enter_context(storage.materialize(generated.storage_path))
+            writer.append(str(generated_path))
+            for attachment in attachments:
+                path = resources.enter_context(storage.materialize(attachment.storage_path))
+                if attachment.mime_type == "application/pdf":
+                    writer.append(str(path))
+                    continue
+                if attachment.mime_type.startswith("image/"):
+                    with Image.open(path) as source:
+                        image = ImageOps.exif_transpose(source).convert("RGB")
+                        image_pdf = BytesIO()
+                        resources.callback(image_pdf.close)
+                        image.save(image_pdf, format="PDF", resolution=150)
+                        image_pdf.seek(0)
+                        writer.append(PdfReader(image_pdf))
+                    continue
+                raise OperationsConflictError(
+                    f"{attachment.name} cannot be merged. Upload customer attachments as PDF, JPG, PNG, or WebP."
+                )
 
-        with tempfile.NamedTemporaryFile(
-            prefix=f"document-pack-v{row.version}-",
-            suffix=".pdf",
-            dir=storage.temp_root,
-            delete=False,
-        ) as output:
-            writer.write(output)
-            output_path = Path(output.name)
-        for buffer in image_buffers:
-            buffer.close()
+            with tempfile.NamedTemporaryFile(
+                prefix=f"document-pack-v{row.version}-",
+                suffix=".pdf",
+                dir=storage.temp_root,
+                delete=False,
+            ) as output:
+                writer.write(output)
+                output_path = Path(output.name)
     except OperationsServiceError:
         raise
     except Exception as exc:

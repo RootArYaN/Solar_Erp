@@ -1,12 +1,13 @@
 import { BadgeIndianRupee, Boxes, Building2, ClipboardCheck, ContactRound, FileUp, ImageUp, LayoutDashboard, ListChecks, LogOut, Menu, PanelLeftClose, PanelLeftOpen, ShieldCheck, Users, UsersRound, WalletCards, X } from 'lucide-react'
-import { useState } from 'react'
-import { NavLink, Outlet } from 'react-router-dom'
+import { Suspense, useState } from 'react'
+import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { hasAnyPermission, hasPermission, PERMISSIONS } from '../lib/permissions'
 import type { Session } from '../types'
 import { BrandMark } from './BrandMark'
 
 export function AppShell({ session, onLogout }: { session: Session; onLogout: () => void | Promise<void> }) {
   const [mobileOpen, setMobileOpen] = useState(false)
+  const location = useLocation()
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const canViewAdministration = hasAnyPermission(session, [PERMISSIONS.users.view, PERMISSIONS.roles.view])
 
@@ -47,7 +48,31 @@ export function AppShell({ session, onLogout }: { session: Session; onLogout: ()
       </aside>
 
       {mobileOpen && <button className="sidebar-backdrop" onClick={() => setMobileOpen(false)} aria-label="Close navigation" />}
-      <section className="app-main"><header className="app-topbar"><button className="icon-button app-menu-button" onClick={() => setMobileOpen(true)} aria-label="Open menu"><Menu size={20} /></button></header><div className="app-viewport"><Outlet /></div></section>
+      <section className="app-main">
+        <header className="app-topbar">
+          <button className="icon-button app-menu-button" onClick={() => setMobileOpen(true)} aria-label="Open menu"><Menu size={20} /></button>
+        </header>
+        <div className="app-viewport">
+          <Suspense fallback={<RouteLoadingState />}>
+            <div key={location.pathname} className="route-transition">
+              <Outlet />
+            </div>
+          </Suspense>
+        </div>
+      </section>
     </main>
+  )
+}
+
+
+function RouteLoadingState() {
+  return (
+    <div className="route-loading" role="status" aria-live="polite" aria-label="Loading workspace page">
+      <div className="route-loading__progress" aria-hidden="true" />
+      <div className="route-loading__content">
+        <span className="route-loading__spinner" aria-hidden="true"><i /><i /></span>
+        <span>Preparing workspace…</span>
+      </div>
+    </div>
   )
 }

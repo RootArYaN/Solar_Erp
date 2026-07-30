@@ -33,8 +33,10 @@ def _production_settings(**overrides):
         "trusted_hosts": "api.example.com",
         "require_malware_scan": True,
         "malware_scan_command": "clamdscan --no-summary {path}",
-        "database_sslmode": "require",
+        "database_sslmode": "verify-full",
         "rate_limit_mode": "gateway",
+        "storage_type": "s3",
+        "s3_bucket": "private-solar-erp-test",
     }
     values.update(overrides)
     return Settings(_env_file=None, **values)
@@ -92,22 +94,22 @@ def test_unknown_username_still_runs_argon2_verification(monkeypatch):
 
 
 def test_gateway_mode_does_not_retain_local_login_keys(monkeypatch):
-    rate_limit._attempts.clear()
+    rate_limit._login_attempts.clear()
     monkeypatch.setattr(rate_limit.settings, "rate_limit_mode", "gateway")
     for index in range(100):
         rate_limit.check_login_limit(f"ip:user-{index}")
-    assert not rate_limit._attempts
+    assert not rate_limit._login_attempts
 
 
 def test_local_login_key_cache_is_bounded(monkeypatch):
-    rate_limit._attempts.clear()
+    rate_limit._login_attempts.clear()
     monkeypatch.setattr(rate_limit.settings, "rate_limit_mode", "local")
     monkeypatch.setattr(rate_limit.settings, "login_limit", 100)
-    monkeypatch.setattr(rate_limit, "MAX_TRACKED_LOGIN_KEYS", 3)
+    monkeypatch.setattr(rate_limit.settings, "rate_limit_max_keys", 3)
     for index in range(10):
         rate_limit.check_login_limit(f"ip:user-{index}")
-    assert len(rate_limit._attempts) <= 3
-    rate_limit._attempts.clear()
+    assert len(rate_limit._login_attempts) <= 3
+    rate_limit._login_attempts.clear()
 
 
 def test_password_reset_revokes_all_sessions_for_target_user(monkeypatch):

@@ -143,14 +143,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   outline-offset: 2px;
 }
 .login-form { margin-top: 20px; }
-.auth-hero__copy { margin-top: clamp(52px, 11vh, 92px); }
-.module-card { display: flex; min-height: 170px; flex-direction: column; }
-.module-card h2 { margin: 18px 0 16px; }
-.module-card > span, .module-card > a { margin-top: auto; }
+
 .page-heading h1 { margin-bottom: 0; }
-.poster-toolbar > div:first-child strong, .customer-doc-form-header strong { font-size: 16px; }
-.poster-drop-zone { min-height: 76px; }
-.poster-empty-card { min-height: 180px; }
+
 .modal-card__header h2 { margin-bottom: 0; }
 
 @keyframes toast-in {
@@ -168,7 +163,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .alert-dialog { width: 100%; border-radius: 20px 20px 0 0; padding: 18px 16px calc(18px + env(safe-area-inset-bottom)); }
   .alert-dialog footer { display: grid; grid-template-columns: 1fr 1fr; }
   .alert-dialog footer button { width: 100%; }
-  .module-card { min-height: 138px; }
+
 }
 
 @media (prefers-reduced-motion: reduce) {

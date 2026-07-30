@@ -1,5 +1,7 @@
+from urllib.parse import quote
+
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Response, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.api.deps import CurrentSession, get_current_session, require_any_permissions
@@ -87,8 +89,7 @@ def download_file(
         file_service.ensure_file_permission(session, row.owner_type, "view")
     except FileServiceError as exc:
         _raise(exc)
-    path = storage.path(row.storage_path)
-    if not path.is_file():
+    if not storage.exists(row.storage_path):
         raise HTTPException(status_code=404, detail="Stored file is missing")
     write_event(
         db,
@@ -102,7 +103,17 @@ def download_file(
         changes={"name": row.name},
     )
     db.commit()
-    return FileResponse(path=path, media_type=row.mime_type, filename=row.name, headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"})
+    encoded_name = quote(row.name, safe="")
+    return StreamingResponse(
+        storage.iter_bytes(row.storage_path),
+        media_type=row.mime_type,
+        headers={
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+            "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_name}",
+            "Content-Length": str(row.size_bytes),
+        },
+    )
 
 
 @router.delete("/{file_id}", status_code=204)

@@ -1,78 +1,59 @@
 # Deployment readiness
 
-## Ready before cloud integration
+## Implemented application safeguards
 
-- Central `/api/v1` frontend client
-- Same-origin Vite proxy for local work
-- Strict configurable CORS
-- Environment validation
-- Secure refresh cookie
-- Revocable sessions
-- Database migrations separated from production startup
-- Health and readiness endpoints
-- Private local storage root
-- Streaming uploads/downloads
-- Database-backed archive jobs
-- Standalone worker command
-- Pagination and archive/event indexes
-- Route-based frontend code splitting
-- Production source maps disabled
-- Production API docs disabled
-- Request IDs, safe errors and security headers
+- Production settings fail closed.
+- Secure refresh cookie, CSRF/origin checks and revocable sessions.
+- Explicit CORS/trusted-host configuration and API security headers.
+- PostgreSQL health and readiness checks.
+- Transactional, locked and checksummed migration history.
+- Production backup confirmation before changing an existing database.
+- Private Cloudflare R2 storage with automatic provider-managed encryption.
+- R2-compatible uploads, copies and readiness probes omit unsupported AWS SSE
+  and optional checksum headers.
+- Validated uploads use one `PutObject` request within the 100 MB application
+  limit, avoiding unnecessary multipart Class A operations.
+- Readiness checks verify bucket access on every request and cache the R2
+  write/delete probe for a configurable interval.
+- Local upload staging, signature validation and required malware scanning before
+  an object is persisted.
+- Authenticated streaming downloads; bucket objects are never exposed publicly.
+- Request limits, concurrency bounds, idempotency and gateway rate-limit mode.
+- Production API documentation and frontend source maps disabled.
 
-## Recommended local commands
-
-```bash
-python -m app.db.migrate upgrade
-python -m app.db.maintenance
-uvicorn app.main:app --host 127.0.0.1 --port 8000
-python -m app.workers.archive_worker
-```
-
-Frontend development continues through the existing Vite project. The supplied `vite.config.ts` proxies `/api` to `127.0.0.1:8000`.
-
-## Cloud target later
+## Required cloud services
 
 ```text
 Static frontend/CDN
-        ↓ same public origin
-Reverse proxy
+        ↓ one HTTPS origin
+Trusted reverse proxy / API gateway
         ├── /        → React assets
         └── /api/v1  → FastAPI
-                         ↓
-                    Managed PostgreSQL
-                         ↓
-                    Private object storage
-                         ↑
-                    Archive worker
+                         ├── Managed PostgreSQL
+                         ├── Private Cloudflare R2 bucket
+                         └── Malware scanner
 ```
 
-## Before the first public release
+The gateway must provide distributed rate limiting and must be the only network
+path to the API when `TRUST_PROXY_HEADERS=true`.
 
-1. Put the patched source into the complete repository.
-2. Install from the lockfile and run the production frontend build.
-3. Run the migration against a database copy.
-4. Verify archive creation and restore with representative documents.
-5. Configure HTTPS and secure cookies.
-6. Configure a non-default private secret.
-7. Keep database and storage private from the public internet.
-8. Configure backups and test one restore.
-9. Add gateway rate limiting and upload malware scanning.
-10. Replace local storage with an S3-compatible adapter before using ephemeral containers.
+## Release order
 
-## Container notes
+1. Build the non-root images from the committed lockfiles and scan them.
+2. Create and verify database and object-storage recovery points.
+3. Rehearse migrations on a restored database copy.
+4. Run the API image once with `scripts/run_production_migrations.sh` and a
+   verified `BACKUP_REFERENCE`.
+5. Start one API worker, verify `/api/v1/health` and `/api/v1/ready`, then scale.
+6. Deploy the frontend, run `scripts/smoke_test.py`, and complete authenticated
+   upload/download smoke tests.
 
-- Run as a non-root user.
-- Keep application files read-only.
-- Mount only `STORAGE_PATH` and a small temp directory as writable.
-- Run API and worker as separate process types from the same image.
-- Execute migrations as a release command, not in every production API process.
-- Do not use temporary container disk as the permanent archive store.
+Use `backend/.env.production.example` and
+`frontend/.env.production.example` as the configuration checklists. Store real
+secrets in the cloud secret manager, never in these files.
 
-## Frontend build limitation in this delivery
-
-The frontend baseline ZIP provided only source files and did not include `package.json`, a lockfile or installed modules. Compiler syntax transpilation passed for all 61 TypeScript/TSX files, but the final Vite bundle must be built from the complete repository before deployment.
-
-## Backend packaging limitation in this delivery
-
-The backend source ZIP also does not include a dependency lockfile or container definition. Python imports and targeted workflows passed in the available runtime. Build the production image from the complete repository with pinned dependencies.
+Container definitions, service wiring, release order and rollback boundaries
+are documented in `deploy/README.md`. `compose.production.yml` is a
+production-like validation topology; cloud IAM, networking, WAF/rate limiting,
+observability and recovery resources still require provider-specific
+infrastructure.

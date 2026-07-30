@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 from datetime import UTC, datetime
 from uuid import uuid4
 
 from sqlalchemy import bindparam, inspect, text
 
 from app.db.base import Base
+from app.core.config import settings
 from app.db.session import engine
 from app.services.storage import storage
 import app.models  # noqa: F401 - registers model metadata
@@ -15,7 +17,37 @@ MIGRATION_005 = "005_remove_archive_concept_postgresql"
 MIGRATION_006 = "006_remove_file_soft_delete"
 MIGRATION_007 = "007_backend_performance_indexes"
 MIGRATION_008 = "008_measured_read_path_indexes"
-CURRENT_MIGRATION_ID = MIGRATION_008
+MIGRATION_009 = "009_transactional_migration_framework"
+CURRENT_MIGRATION_ID = MIGRATION_009
+MIGRATION_LOCK_KEY = 7_336_526_977_082_001
+
+# These IDs were written by earlier released versions whose migration logic was
+# consolidated into the current PostgreSQL baseline. They remain trusted
+# history entries but must never be treated as pending work on a fresh database.
+HISTORICAL_MIGRATION_IDS = (
+    "002_b2c_finance_operations",
+    "003_editable_record_versions",
+    "004_generated_document_packs",
+    "006_inventory_challan_batches_postgresql",
+)
+ACTIVE_MIGRATION_IDS = (
+    MIGRATION_005,
+    MIGRATION_006,
+    MIGRATION_007,
+    MIGRATION_008,
+    MIGRATION_009,
+)
+MIGRATION_IDS = HISTORICAL_MIGRATION_IDS + ACTIVE_MIGRATION_IDS
+MIGRATION_CHECKSUMS = {
+    migration_id: hashlib.sha256(f"solar-erp:{migration_id}:v1".encode("utf-8")).hexdigest()
+    for migration_id in MIGRATION_IDS
+}
+BACKUP_REQUIRED_MIGRATIONS = {
+    MIGRATION_005,
+    MIGRATION_006,
+    MIGRATION_007,
+    MIGRATION_008,
+}
 
 MIGRATED_PERMISSIONS = {
     "documents.view": ("Show Customer data tab", "View customer and project documents."),
@@ -142,6 +174,82 @@ def _column_names(inspector, table: str) -> set[str]:
     if not inspector.has_table(table):
         return set()
     return {str(column["name"]) for column in inspector.get_columns(table)}
+
+
+def _ensure_migration_history(connection) -> None:
+    connection.execute(text(
+        "CREATE TABLE IF NOT EXISTS schema_migrations ("
+        "id VARCHAR(80) PRIMARY KEY, "
+        "checksum VARCHAR(64), "
+        "applied_at TIMESTAMPTZ NOT NULL)"
+    ))
+    connection.execute(text(
+        "ALTER TABLE schema_migrations "
+        "ADD COLUMN IF NOT EXISTS checksum VARCHAR(64)"
+    ))
+
+
+def _load_and_verify_history(connection) -> set[str]:
+    rows = connection.execute(text(
+        "SELECT id, checksum FROM schema_migrations ORDER BY applied_at, id"
+    )).all()
+    applied = {str(row.id) for row in rows}
+    unknown = sorted(applied - set(MIGRATION_IDS))
+    if unknown:
+        raise RuntimeError(
+            "Database migration history is newer than this application: "
+            + ", ".join(unknown)
+        )
+    for row in rows:
+        migration_id = str(row.id)
+        expected = MIGRATION_CHECKSUMS[migration_id]
+        checksum = str(row.checksum or "")
+        if checksum and checksum != expected:
+            raise RuntimeError(
+                f"Migration checksum mismatch for {migration_id}; "
+                "never edit an applied migration"
+            )
+        if not checksum:
+            connection.execute(
+                text("UPDATE schema_migrations SET checksum = :checksum WHERE id = :id"),
+                {"id": migration_id, "checksum": expected},
+            )
+    return applied
+
+
+def _record_migration(connection, migration_id: str) -> None:
+    connection.execute(
+        text(
+            "INSERT INTO schema_migrations (id, checksum, applied_at) "
+            "VALUES (:id, :checksum, :applied_at)"
+        ),
+        {
+            "id": migration_id,
+            "checksum": MIGRATION_CHECKSUMS[migration_id],
+            "applied_at": datetime.now(UTC),
+        },
+    )
+
+
+def _apply_columns_and_indexes(connection) -> None:
+    inspector = inspect(connection)
+    for table, columns in COLUMN_DEFINITIONS.items():
+        if not inspector.has_table(table):
+            continue
+        existing = _column_names(inspector, table)
+        for name, definition in columns.items():
+            if name not in existing:
+                connection.execute(text(
+                    f'ALTER TABLE "{table}" ADD COLUMN "{name}" {definition}'
+                ))
+
+    inspector = inspect(connection)
+    for index_name, table, columns in INDEXES:
+        if inspector.has_table(table):
+            column_sql = ", ".join(f'"{item.strip()}"' for item in columns.split(","))
+            connection.execute(text(
+                f'CREATE INDEX IF NOT EXISTS "{index_name}" ON "{table}" ({column_sql})'
+            ))
 
 def _migrate_permissions(connection, inspector) -> None:
     required_tables = {"permissions", "roles", "role_permissions"}
@@ -324,64 +432,69 @@ def _remove_file_soft_delete(connection, inspector) -> list[tuple[str, str]]:
         raise
 
 
-def run_migrations() -> None:
+def run_migrations(*, backup_reference: str | None = None) -> None:
     if engine.dialect.name != "postgresql":
         raise RuntimeError("Solar ERP migrations support PostgreSQL only")
 
-    Base.metadata.create_all(bind=engine)
     staged_deletes: list[tuple[str, str]] = []
     try:
         with engine.begin() as connection:
-            connection.execute(text(
-                "CREATE TABLE IF NOT EXISTS schema_migrations ("
-                "id VARCHAR(80) PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL)"
-            ))
-            applied = set(connection.execute(text("SELECT id FROM schema_migrations")).scalars().all())
-            inspector = inspect(connection)
+            acquired = connection.execute(
+                text("SELECT pg_try_advisory_xact_lock(:key)"),
+                {"key": MIGRATION_LOCK_KEY},
+            ).scalar_one()
+            if not acquired:
+                raise RuntimeError(
+                    "Another migration process holds the Solar ERP deployment lock"
+                )
 
-            for table, columns in COLUMN_DEFINITIONS.items():
-                if not inspector.has_table(table):
-                    continue
-                existing = _column_names(inspector, table)
-                for name, definition in columns.items():
-                    if name not in existing:
-                        connection.execute(text(
-                            f'ALTER TABLE "{table}" ADD COLUMN "{name}" {definition}'
-                        ))
+            tables_before = set(inspect(connection).get_table_names())
+            history_existed = "schema_migrations" in tables_before
+            application_tables = tables_before - {"schema_migrations", "alembic_version"}
 
-            for index_name, table, columns in INDEXES:
-                if inspector.has_table(table):
-                    column_sql = ", ".join(f'"{item.strip()}"' for item in columns.split(","))
-                    connection.execute(text(
-                        f'CREATE INDEX IF NOT EXISTS "{index_name}" ON "{table}" ({column_sql})'
-                    ))
+            _ensure_migration_history(connection)
+            applied = _load_and_verify_history(connection)
+            pending = [
+                migration_id
+                for migration_id in ACTIVE_MIGRATION_IDS
+                if migration_id not in applied
+            ]
+            backup_required = bool(application_tables) and (
+                not history_existed
+                or bool(BACKUP_REQUIRED_MIGRATIONS.intersection(pending))
+            )
+            if settings.is_production and backup_required:
+                reference = (backup_reference or "").strip()
+                if len(reference) < 8:
+                    raise RuntimeError(
+                        "Production migration requires --backup-reference with the "
+                        "verified database/storage backup identifier"
+                    )
+
+            # create_all is a baseline operation only. Once migration history
+            # exists, every schema change must be represented by a new migration.
+            if not application_tables or not history_existed:
+                Base.metadata.create_all(bind=connection)
 
             if MIGRATION_005 not in applied:
                 _remove_archive_schema(connection, inspect(connection))
                 _migrate_permissions(connection, inspect(connection))
-                connection.execute(
-                    text("INSERT INTO schema_migrations (id, applied_at) VALUES (:id, :applied_at)"),
-                    {"id": MIGRATION_005, "applied_at": datetime.now(UTC)},
-                )
+                _record_migration(connection, MIGRATION_005)
 
             if MIGRATION_006 not in applied:
                 staged_deletes = _remove_file_soft_delete(connection, inspect(connection))
-                connection.execute(
-                    text("INSERT INTO schema_migrations (id, applied_at) VALUES (:id, :applied_at)"),
-                    {"id": MIGRATION_006, "applied_at": datetime.now(UTC)},
-                )
+                _record_migration(connection, MIGRATION_006)
 
             if MIGRATION_007 not in applied:
-                connection.execute(
-                    text("INSERT INTO schema_migrations (id, applied_at) VALUES (:id, :applied_at)"),
-                    {"id": MIGRATION_007, "applied_at": datetime.now(UTC)},
-                )
+                _apply_columns_and_indexes(connection)
+                _record_migration(connection, MIGRATION_007)
 
             if MIGRATION_008 not in applied:
-                connection.execute(
-                    text("INSERT INTO schema_migrations (id, applied_at) VALUES (:id, :applied_at)"),
-                    {"id": MIGRATION_008, "applied_at": datetime.now(UTC)},
-                )
+                _apply_columns_and_indexes(connection)
+                _record_migration(connection, MIGRATION_008)
+
+            if MIGRATION_009 not in applied:
+                _record_migration(connection, MIGRATION_009)
     except Exception:
         for staged_path, original_path in reversed(staged_deletes):
             storage.restore_staged_delete(staged_path, original_path)
@@ -394,18 +507,34 @@ def run_migrations() -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Solar ERP PostgreSQL migrations")
     parser.add_argument("command", choices=["upgrade", "status"], default="upgrade", nargs="?")
+    parser.add_argument(
+        "--backup-reference",
+        help="Verified backup/snapshot identifier required for changes to an existing production database",
+    )
     args = parser.parse_args()
     if args.command == "upgrade":
-        run_migrations()
+        run_migrations(backup_reference=args.backup_reference)
         print(f"Applied migrations through {CURRENT_MIGRATION_ID}")
         return
     with engine.connect() as connection:
         if not inspect(connection).has_table("schema_migrations"):
             print("No migrations applied")
             return
-        rows = connection.execute(text("SELECT id, applied_at FROM schema_migrations ORDER BY applied_at")).all()
-        for migration_id, applied_at in rows:
-            print(f"{migration_id}: {applied_at}")
+        checksum_column = "checksum" in _column_names(inspect(connection), "schema_migrations")
+        checksum_sql = "checksum" if checksum_column else "NULL AS checksum"
+        rows = connection.execute(text(
+            f"SELECT id, {checksum_sql}, applied_at "
+            "FROM schema_migrations ORDER BY applied_at, id"
+        )).all()
+        applied = {str(row.id) for row in rows}
+        for migration_id, checksum, applied_at in rows:
+            print(f"{migration_id}: {applied_at} checksum={checksum or 'legacy-unverified'}")
+        pending = [
+            migration_id
+            for migration_id in ACTIVE_MIGRATION_IDS
+            if migration_id not in applied
+        ]
+        print("Pending: " + (", ".join(pending) if pending else "none"))
 
 
 if __name__ == "__main__":

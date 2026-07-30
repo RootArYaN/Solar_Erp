@@ -1,9 +1,74 @@
 from pathlib import Path
+from io import BytesIO
 
 import pytest
 
-from app.services.storage import LocalStorage, StorageError, safe_relative_path
+from app.services.storage import LocalStorage, S3Storage, StorageError, safe_relative_path
 
+
+class FakeS3Error(Exception):
+    def __init__(self, code: str = "404"):
+        super().__init__(code)
+        self.response = {
+            "Error": {"Code": code},
+            "ResponseMetadata": {"HTTPStatusCode": int(code) if code.isdigit() else 500},
+        }
+
+
+class FakeStreamingBody(BytesIO):
+    def iter_chunks(self, chunk_size: int):
+        while chunk := self.read(chunk_size):
+            yield chunk
+
+
+class FakeS3Client:
+    def __init__(self):
+        self.objects: dict[str, tuple[bytes, dict[str, str]]] = {}
+        self.copy_args: list[dict] = []
+        self.put_args: list[dict] = []
+        self.delete_args: list[dict] = []
+        self.head_bucket_calls = 0
+
+    def head_object(self, *, Bucket, Key):
+        del Bucket
+        if Key not in self.objects:
+            raise FakeS3Error()
+        data, metadata = self.objects[Key]
+        return {"ContentLength": len(data), "Metadata": metadata}
+
+    def download_file(self, _bucket, key, filename):
+        if key not in self.objects:
+            raise FakeS3Error()
+        Path(filename).write_bytes(self.objects[key][0])
+
+    def get_object(self, *, Bucket, Key):
+        del Bucket
+        if Key not in self.objects:
+            raise FakeS3Error()
+        return {"Body": FakeStreamingBody(self.objects[Key][0])}
+
+    def copy_object(self, *, Bucket, Key, CopySource, **kwargs):
+        del Bucket
+        self.copy_args.append(dict(kwargs))
+        source = str(CopySource["Key"])
+        if source not in self.objects:
+            raise FakeS3Error()
+        self.objects[Key] = self.objects[source]
+
+    def delete_object(self, *, Bucket, Key):
+        self.delete_args.append({"Bucket": Bucket, "Key": Key})
+        self.objects.pop(Key, None)
+
+    def head_bucket(self, *, Bucket):
+        assert Bucket
+        self.head_bucket_calls += 1
+
+    def put_object(self, *, Bucket, Key, Body, Metadata, **kwargs):
+        data = Body.read() if hasattr(Body, "read") else bytes(Body)
+        self.put_args.append(
+            {"Bucket": Bucket, "Key": Key, "Metadata": Metadata, **kwargs}
+        )
+        self.objects[Key] = (data, dict(Metadata))
 
 def test_safe_relative_path_rejects_traversal():
     with pytest.raises(StorageError):
@@ -32,3 +97,128 @@ def test_staged_delete_can_be_restored_or_finalized(tmp_path: Path):
     assert staged
     storage.finalize_staged_delete(staged)
     assert not path.exists()
+
+
+def test_s3_storage_round_trip_and_transactional_delete(tmp_path: Path, monkeypatch):
+    from app.services import storage as storage_module
+
+    monkeypatch.setattr(storage_module.settings, "s3_bucket", "private-test-bucket")
+    monkeypatch.setattr(storage_module.settings, "s3_prefix", "tenant-data")
+    monkeypatch.setattr(storage_module.settings, "s3_sse_algorithm", "AES256")
+    client = FakeS3Client()
+    storage = S3Storage(client=client, temp_root=tmp_path / "temp")
+    source = tmp_path / "source.pdf"
+    source.write_bytes(b"%PDF-test")
+    checksum = "a" * 64
+    original = "active/company/file.pdf"
+
+    storage.put_file(
+        source,
+        original,
+        content_type="application/pdf",
+        checksum=checksum,
+    )
+    assert len(client.put_args) == 1
+    assert client.put_args[0]["ContentLength"] == len(b"%PDF-test")
+    assert client.put_args[0]["ContentType"] == "application/pdf"
+    assert client.put_args[0]["Metadata"] == {"sha256": checksum}
+    assert storage.exists(original)
+    assert storage.size(original) == len(b"%PDF-test")
+    assert b"".join(storage.iter_bytes(original)) == b"%PDF-test"
+    with storage.materialize(original) as path:
+        assert path.read_bytes() == b"%PDF-test"
+
+    staged = storage.stage_delete(original)
+    assert staged and not storage.exists(original)
+    storage.restore_staged_delete(staged, original)
+    assert storage.exists(original)
+
+    staged = storage.stage_delete(original)
+    assert staged
+    storage.finalize_staged_delete(staged)
+    assert not storage.exists(original)
+    storage.check_ready()
+
+
+def test_r2_omits_unsupported_aws_encryption_headers(tmp_path: Path, monkeypatch):
+    from app.services import storage as storage_module
+
+    monkeypatch.setattr(storage_module.settings, "s3_provider", "r2")
+    monkeypatch.setattr(storage_module.settings, "s3_bucket", "private-r2-bucket")
+    monkeypatch.setattr(storage_module.settings, "s3_prefix", "tenant-data")
+    monkeypatch.setattr(
+        storage_module.settings,
+        "s3_sse_algorithm",
+        "provider-managed",
+    )
+    client = FakeS3Client()
+    storage = S3Storage(client=client, temp_root=tmp_path / "temp")
+    source = tmp_path / "source.pdf"
+    source.write_bytes(b"%PDF-r2")
+
+    storage.put_file(
+        source,
+        "active/company/file.pdf",
+        content_type="application/pdf",
+        checksum="b" * 64,
+    )
+    storage.copy("active/company/file.pdf", "active/company/copy.pdf")
+    storage.check_ready()
+
+    assert "ServerSideEncryption" not in client.put_args[0]
+    assert "SSEKMSKeyId" not in client.put_args[0]
+    assert all("ServerSideEncryption" not in args for args in client.copy_args)
+    assert all("ServerSideEncryption" not in args for args in client.put_args)
+
+
+def test_s3_readiness_caches_write_probe_but_always_checks_bucket(
+    tmp_path: Path,
+    monkeypatch,
+):
+    from app.services import storage as storage_module
+
+    monkeypatch.setattr(storage_module.settings, "s3_bucket", "private-test-bucket")
+    monkeypatch.setattr(storage_module.settings, "s3_prefix", "tenant-data")
+    monkeypatch.setattr(
+        storage_module.settings,
+        "storage_write_probe_interval_seconds",
+        900,
+    )
+    client = FakeS3Client()
+    storage = S3Storage(client=client, temp_root=tmp_path / "temp")
+
+    storage.check_ready()
+    storage.check_ready()
+
+    assert client.head_bucket_calls == 2
+    assert len(client.put_args) == 1
+    assert len(client.delete_args) == 1
+    assert "/temp/readiness/" in client.put_args[0]["Key"]
+
+    storage._last_write_probe_at = None
+    storage.check_ready()
+
+    assert client.head_bucket_calls == 3
+    assert len(client.put_args) == 2
+    assert len(client.delete_args) == 2
+
+
+def test_r2_client_uses_required_endpoint_and_checksum_mode(tmp_path: Path, monkeypatch):
+    from app.services import storage as storage_module
+
+    endpoint = "https://0123456789abcdef0123456789abcdef.r2.cloudflarestorage.com"
+    monkeypatch.setattr(storage_module.settings, "s3_provider", "r2")
+    monkeypatch.setattr(storage_module.settings, "s3_bucket", "private-r2-bucket")
+    monkeypatch.setattr(storage_module.settings, "s3_region", "auto")
+    monkeypatch.setattr(storage_module.settings, "s3_endpoint_url", endpoint)
+    monkeypatch.setattr(storage_module.settings, "s3_access_key_id", "bucket-access-key")
+    monkeypatch.setattr(storage_module.settings, "s3_secret_access_key", "bucket-secret-key")
+    monkeypatch.setattr(storage_module.settings, "s3_session_token", "")
+    monkeypatch.setattr(storage_module.settings, "s3_addressing_style", "path")
+
+    storage = S3Storage(temp_root=tmp_path / "temp")
+
+    assert storage.client.meta.endpoint_url == endpoint
+    assert storage.client.meta.config.region_name == "auto"
+    assert storage.client.meta.config.request_checksum_calculation == "when_required"
+    assert storage.client.meta.config.response_checksum_validation == "when_required"

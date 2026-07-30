@@ -20,7 +20,7 @@ import {
   setProjectPaymentMode,
   updateProjectTimelineStep,
 } from '../../lib/api'
-import type { ProjectTimeline, ProjectTimelineListItem, ProjectTimelineStep, Session } from '../../types'
+import type { ProjectTimeline, ProjectTimelineListItem, ProjectTimelineStep } from '../../types'
 import { EmptyState, ErrorState, LoadingSkeleton } from '../ui/PageState'
 import { useToast } from '../ui/ToastProvider'
 import { KpiGrid, WorkspacePage } from '../workspace'
@@ -70,7 +70,7 @@ function TimelineStepRow({ step }: { step: ProjectTimelineStep }) {
   )
 }
 
-export function ProjectTimelinePage({ session }: { session: Session }) {
+export function ProjectTimelinePage() {
   const [projects, setProjects] = useState<ProjectTimelineListItem[]>([])
   const [selectedId, setSelectedId] = useState('')
   const [timeline, setTimeline] = useState<ProjectTimeline | null>(null)

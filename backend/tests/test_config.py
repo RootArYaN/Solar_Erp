@@ -13,8 +13,10 @@ def _production_settings(**overrides):
         "trusted_hosts": "api.example.com",
         "require_malware_scan": True,
         "malware_scan_command": "clamdscan --no-summary {path}",
-        "database_sslmode": "require",
+        "database_sslmode": "verify-full",
         "rate_limit_mode": "gateway",
+        "storage_type": "s3",
+        "s3_bucket": "private-solar-erp-test",
     }
     values.update(overrides)
     return Settings(_env_file=None, **values)
@@ -29,6 +31,67 @@ def test_production_security_configuration_is_accepted():
     configured = _production_settings()
     assert configured.is_production
     assert configured.rate_limit_mode == "gateway"
+    assert configured.storage_type == "s3"
+
+
+def test_r2_production_configuration_is_accepted():
+    configured = _production_settings(
+        s3_provider="r2",
+        s3_region="auto",
+        s3_endpoint_url="https://0123456789abcdef0123456789abcdef.r2.cloudflarestorage.com",
+        s3_access_key_id="bucket-access-key",
+        s3_secret_access_key="bucket-secret-key",
+        s3_addressing_style="path",
+        s3_sse_algorithm="provider-managed",
+    )
+    assert configured.normalized_s3_provider == "r2"
+
+
+def test_r2_rejects_aws_encryption_headers():
+    with pytest.raises(
+        ValidationError,
+        match="Cloudflare R2 requires S3_SSE_ALGORITHM=provider-managed",
+    ):
+        _production_settings(
+            s3_provider="r2",
+            s3_region="auto",
+            s3_endpoint_url="https://0123456789abcdef0123456789abcdef.r2.cloudflarestorage.com",
+            s3_access_key_id="bucket-access-key",
+            s3_secret_access_key="bucket-secret-key",
+            s3_addressing_style="path",
+            s3_sse_algorithm="AES256",
+        )
+
+
+def test_r2_requires_cloudflare_endpoint_and_credentials():
+    common = {
+        "s3_provider": "r2",
+        "s3_region": "auto",
+        "s3_addressing_style": "path",
+        "s3_sse_algorithm": "provider-managed",
+    }
+    with pytest.raises(ValidationError, match="bucket-scoped access credentials"):
+        _production_settings(
+            **common,
+            s3_endpoint_url="https://0123456789abcdef0123456789abcdef.r2.cloudflarestorage.com",
+        )
+    with pytest.raises(ValidationError, match="Cloudflare R2 S3 endpoint"):
+        _production_settings(
+            **common,
+            s3_access_key_id="bucket-access-key",
+            s3_secret_access_key="bucket-secret-key",
+            s3_endpoint_url="https://s3.example.com",
+        )
+
+
+def test_production_requires_object_storage():
+    with pytest.raises(ValidationError, match="STORAGE_TYPE must be s3"):
+        _production_settings(storage_type="local")
+
+
+def test_production_rejects_unverified_database_tls():
+    with pytest.raises(ValidationError, match="verify the database certificate"):
+        _production_settings(database_sslmode="require")
 
 
 def test_invalid_rate_limit_mode_is_rejected():
@@ -44,3 +107,11 @@ def test_request_concurrency_cannot_exceed_database_capacity():
             db_max_overflow=1,
             max_concurrent_requests=4,
         )
+
+
+def test_storage_write_probe_interval_is_bounded():
+    with pytest.raises(
+        ValidationError,
+        match="STORAGE_WRITE_PROBE_INTERVAL_SECONDS must be between 60 and 86400",
+    ):
+        Settings(_env_file=None, storage_write_probe_interval_seconds=30)

@@ -1,0 +1,13 @@
+.env
+.env.*
+!.env.example
+!.env.*.example
+.git
+.gitignore
+node_modules
+dist
+coverage
+playwright-report
+test-results
+*.log
+Dockerfile*

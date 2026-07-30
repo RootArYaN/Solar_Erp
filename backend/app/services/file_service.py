@@ -83,6 +83,13 @@ def _summary(row: StoredFile) -> StoredFileSummary:
     )
 
 
+def _best_effort_storage_delete(relative_path: str) -> None:
+    try:
+        storage.delete(relative_path)
+    except StorageError:
+        pass
+
+
 def _customer_filter(actor: CurrentSession):
     if is_admin(actor) or "agents.view_all" in actor.permissions or "agents.manage" in actor.permissions:
         return AgentCustomer.company_id == actor.membership.company_id
@@ -220,13 +227,21 @@ def save_file(
 
     relative = f"active/{actor.membership.company_id}/{uuid4().hex}{extension}"
     try:
-        size_bytes, checksum = storage.save_upload(upload, relative, settings.max_upload_bytes)
-        if size_bytes <= 0:
-            raise FileServiceError("Empty files are not allowed")
-        detected_mime = validate_saved_content(storage.path(relative), extension)
-        storage.scan(relative)
+        with storage.prepare_upload(upload, settings.max_upload_bytes) as candidate:
+            if candidate.size_bytes <= 0:
+                raise FileServiceError("Empty files are not allowed")
+            detected_mime = validate_saved_content(candidate.path, extension)
+            storage.scan_path(candidate.path)
+            storage.put_file(
+                candidate.path,
+                relative,
+                content_type=detected_mime,
+                checksum=candidate.checksum,
+            )
+            size_bytes = candidate.size_bytes
+            checksum = candidate.checksum
     except (StorageError, FileServiceError, FileValidationError) as exc:
-        storage.delete(relative)
+        _best_effort_storage_delete(relative)
         if isinstance(exc, FileServiceError):
             raise
         raise FileServiceError(str(exc)) from exc
@@ -269,7 +284,7 @@ def save_file(
         db.commit()
     except Exception:
         db.rollback()
-        storage.delete(relative)
+        _best_effort_storage_delete(relative)
         raise
     return _summary(row)
 

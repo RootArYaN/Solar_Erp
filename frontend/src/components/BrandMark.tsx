@@ -9,7 +9,7 @@ export function BrandMark({ compact = false }: { compact?: boolean }) {
       </div>
       <div>
         <div className="brand-mark__name">
-          <span>Solar</span> <strong>ERP</strong>
+          <span>Shree</span> <strong>ERP</strong>
         </div>
         {!compact && <div className="brand-mark__tagline">Powering organized growth</div>}
       </div>

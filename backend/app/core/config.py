@@ -1,5 +1,7 @@
+import re
 from functools import lru_cache
 from pathlib import Path
+from urllib.parse import urlparse
 
 from pydantic import EmailStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -41,6 +43,19 @@ class Settings(BaseSettings):
 
     storage_type: str = "local"
     storage_path: str = "./storage"
+    storage_temp_path: str = "./storage/temp"
+    s3_provider: str = "aws"
+    s3_bucket: str = ""
+    s3_prefix: str = "solar-erp"
+    s3_region: str = "ap-south-1"
+    s3_endpoint_url: str = ""
+    s3_access_key_id: str = ""
+    s3_secret_access_key: str = ""
+    s3_session_token: str = ""
+    s3_addressing_style: str = "auto"
+    s3_sse_algorithm: str = "AES256"
+    s3_kms_key_id: str = ""
+    storage_write_probe_interval_seconds: int = 900
     max_upload_mb: int = 20
     upload_chunk_kb: int = 512
     max_request_body_mb: int = 2
@@ -95,6 +110,18 @@ class Settings(BaseSettings):
         return Path(self.storage_path).expanduser().resolve()
 
     @property
+    def storage_temp_root(self) -> Path:
+        return Path(self.storage_temp_path).expanduser().resolve()
+
+    @property
+    def normalized_s3_prefix(self) -> str:
+        return self.s3_prefix.strip().strip("/")
+
+    @property
+    def normalized_s3_provider(self) -> str:
+        return self.s3_provider.strip().lower()
+
+    @property
     def max_upload_bytes(self) -> int:
         return self.max_upload_mb * 1024 * 1024
 
@@ -118,8 +145,59 @@ class Settings(BaseSettings):
             raise ValueError("SESSION_COOKIE_SAMESITE must be lax, strict or none")
         if self.session_cookie_samesite == "none" and not self.session_cookie_secure:
             raise ValueError("SameSite=None cookies must also be Secure")
-        if self.storage_type != "local":
-            raise ValueError("Only STORAGE_TYPE=local is available before cloud integration")
+        if self.storage_type not in {"local", "s3"}:
+            raise ValueError("STORAGE_TYPE must be local or s3")
+        if self.normalized_s3_provider not in {"aws", "r2"}:
+            raise ValueError("S3_PROVIDER must be aws or r2")
+        if self.s3_addressing_style not in {"auto", "path", "virtual"}:
+            raise ValueError("S3_ADDRESSING_STYLE must be auto, path or virtual")
+        if self.s3_sse_algorithm not in {"AES256", "aws:kms", "provider-managed"}:
+            raise ValueError(
+                "S3_SSE_ALGORITHM must be AES256, aws:kms or provider-managed"
+            )
+        if self.s3_sse_algorithm == "aws:kms" and self.storage_type == "s3" and not self.s3_kms_key_id.strip():
+            raise ValueError("S3_KMS_KEY_ID is required when S3_SSE_ALGORITHM=aws:kms")
+        if bool(self.s3_access_key_id.strip()) != bool(self.s3_secret_access_key.strip()):
+            raise ValueError("S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY must be provided together")
+        if self.storage_type == "s3" and not self.s3_bucket.strip():
+            raise ValueError("S3_BUCKET is required when STORAGE_TYPE=s3")
+        if self.storage_type == "s3" and self.normalized_s3_provider == "aws":
+            if self.s3_sse_algorithm == "provider-managed":
+                raise ValueError(
+                    "AWS S3 requires explicit AES256 or aws:kms encryption"
+                )
+        if self.storage_type == "s3" and self.normalized_s3_provider == "r2":
+            if self.s3_sse_algorithm != "provider-managed":
+                raise ValueError(
+                    "Cloudflare R2 requires S3_SSE_ALGORITHM=provider-managed"
+                )
+            if self.s3_region.strip().lower() != "auto":
+                raise ValueError("Cloudflare R2 requires S3_REGION=auto")
+            if self.s3_addressing_style != "path":
+                raise ValueError("Cloudflare R2 requires S3_ADDRESSING_STYLE=path")
+            if not self.s3_access_key_id.strip() or not self.s3_secret_access_key.strip():
+                raise ValueError(
+                    "Cloudflare R2 requires bucket-scoped access credentials"
+                )
+            endpoint = urlparse(self.s3_endpoint_url.strip())
+            hostname = (endpoint.hostname or "").lower()
+            if (
+                endpoint.scheme != "https"
+                or not hostname.endswith(".r2.cloudflarestorage.com")
+                or not re.fullmatch(r"[0-9a-f]{32}", hostname.split(".", 1)[0])
+                or endpoint.username
+                or endpoint.password
+                or endpoint.path not in {"", "/"}
+                or endpoint.query
+                or endpoint.fragment
+            ):
+                raise ValueError(
+                    "S3_ENDPOINT_URL must be the HTTPS Cloudflare R2 S3 endpoint"
+                )
+            if self.s3_access_key_id.startswith("replace-") or self.s3_secret_access_key.startswith("replace-"):
+                raise ValueError(
+                    "Replace the placeholder Cloudflare R2 credentials"
+                )
         if not self.database_url.startswith("postgresql"):
             raise ValueError("DATABASE_URL must use PostgreSQL")
         if self.database_sslmode not in {"disable", "allow", "prefer", "require", "verify-ca", "verify-full"}:
@@ -132,6 +210,13 @@ class Settings(BaseSettings):
             raise ValueError("MAX_REQUEST_BODY_MB must be between 1 and 20")
         if self.upload_chunk_kb < 64 or self.upload_chunk_kb > 2048:
             raise ValueError("UPLOAD_CHUNK_KB must be between 64 and 2048")
+        if (
+            self.storage_write_probe_interval_seconds < 60
+            or self.storage_write_probe_interval_seconds > 86_400
+        ):
+            raise ValueError(
+                "STORAGE_WRITE_PROBE_INTERVAL_SECONDS must be between 60 and 86400"
+            )
         if self.require_malware_scan and not self.malware_scan_command.strip():
             raise ValueError("MALWARE_SCAN_COMMAND is required when REQUIRE_MALWARE_SCAN=true")
         if self.db_pool_size < 1 or self.db_pool_size > 20:
@@ -153,6 +238,8 @@ class Settings(BaseSettings):
                 raise ValueError("CSRF_ENABLED must be true in production")
             if self.jwt_secret.startswith("replace-this-development-secret"):
                 raise ValueError("Set a private JWT_SECRET before production startup")
+            if len(self.jwt_secret) < 64:
+                raise ValueError("Production JWT_SECRET must contain at least 64 characters")
             if not self.session_cookie_secure:
                 raise ValueError("SESSION_COOKIE_SECURE must be true in production")
             if any(origin == "*" for origin in self.cors_origins):
@@ -163,13 +250,19 @@ class Settings(BaseSettings):
                 raise ValueError("TRUSTED_HOSTS must be explicit in production")
             if not self.require_malware_scan:
                 raise ValueError("REQUIRE_MALWARE_SCAN must be true in production")
-            if self.database_sslmode not in {"require", "verify-ca", "verify-full"}:
-                raise ValueError("DATABASE_SSLMODE must require TLS in production")
+            if self.database_sslmode not in {"verify-ca", "verify-full"}:
+                raise ValueError("DATABASE_SSLMODE must verify the database certificate in production")
             if self.rate_limit_mode != "gateway":
                 raise ValueError(
                     "RATE_LIMIT_MODE must be gateway in production; configure distributed rate limiting "
                     "at the API gateway or reverse proxy"
                 )
+            if self.storage_type != "s3":
+                raise ValueError("STORAGE_TYPE must be s3 in production")
+            if not self.normalized_s3_prefix:
+                raise ValueError("S3_PREFIX must not be empty in production")
+            if self.s3_endpoint_url and not self.s3_endpoint_url.startswith("https://"):
+                raise ValueError("S3_ENDPOINT_URL must use HTTPS in production")
         return self
 
 
