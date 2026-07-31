@@ -1,0 +1,121 @@
+services:
+  - type: pserv
+    name: shree-enterprise-clamav
+    runtime: image
+    plan: pro
+    region: singapore
+    image:
+      url: docker.io/clamav/clamav:1.4
+    maxShutdownDelaySeconds: 30
+
+  - type: web
+    name: shree-enterprise-api
+    runtime: docker
+    plan: starter
+    region: singapore
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    numInstances: 1
+    autoDeployTrigger: checksPass
+    healthCheckPath: /api/v1/ready
+    maxShutdownDelaySeconds: 30
+    preDeployCommand: scripts/run_production_migrations.sh
+    initialDeployHook: python scripts/bootstrap_admin.py
+    envVars:
+      - key: APP_NAME
+        value: Shree Enterprise API
+      - key: ENVIRONMENT
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: shree-enterprise-db
+          property: connectionString
+      # Render Postgres traffic stays on the same-region private network.
+      - key: DATABASE_SSLMODE
+        value: disable
+      - key: JWT_SECRET
+        generateValue: true
+      - key: SESSION_COOKIE_SECURE
+        value: "true"
+      - key: SESSION_COOKIE_SAMESITE
+        value: none
+      - key: CSRF_ENABLED
+        value: "true"
+      - key: FRONTEND_ORIGINS
+        sync: false
+      - key: TRUSTED_HOSTS
+        value: 127.0.0.1,localhost
+      - key: TRUST_PROXY_HEADERS
+        value: "true"
+      - key: FORWARDED_ALLOW_IPS
+        value: "*"
+      # This Blueprint deliberately fixes the API at one instance and one
+      # worker. Switch to a shared gateway limiter before scaling either value.
+      - key: RATE_LIMIT_MODE
+        value: local
+      - key: WEB_CONCURRENCY
+        value: "1"
+      - key: STORAGE_TYPE
+        value: s3
+      - key: STORAGE_TEMP_PATH
+        value: /tmp/solar-erp
+      - key: S3_PROVIDER
+        value: r2
+      - key: S3_BUCKET
+        value: shree-enterprise-files
+      - key: S3_PREFIX
+        value: production
+      - key: S3_REGION
+        value: auto
+      - key: S3_ENDPOINT_URL
+        sync: false
+      - key: S3_ACCESS_KEY_ID
+        sync: false
+      - key: S3_SECRET_ACCESS_KEY
+        sync: false
+      - key: S3_ADDRESSING_STYLE
+        value: path
+      - key: S3_SSE_ALGORITHM
+        value: provider-managed
+      - key: REQUIRE_MALWARE_SCAN
+        value: "true"
+      - key: MALWARE_SCAN_COMMAND
+        value: python /app/scripts/clamd_scan.py {path}
+      - key: CLAMD_HOST
+        fromService:
+          type: pserv
+          name: shree-enterprise-clamav
+          property: host
+      - key: CLAMD_PORT
+        value: "3310"
+      - key: BOOTSTRAP_ADMIN_ENABLED
+        value: "true"
+      - key: SEED_COMPANY_NAME
+        value: Shree Enterprise
+      - key: SEED_COMPANY_CODE
+        value: SHREE
+      - key: SEED_ADMIN_NAME
+        value: Shree Enterprise Administrator
+      - key: SEED_ADMIN_USERNAME
+        value: admin
+      - key: SEED_ADMIN_EMAIL
+        sync: false
+      - key: SEED_ADMIN_PASSWORD
+        sync: false
+      - key: DB_POOL_SIZE
+        value: "3"
+      - key: DB_MAX_OVERFLOW
+        value: "2"
+      - key: MAX_CONCURRENT_REQUESTS
+        value: "5"
+
+databases:
+  - name: shree-enterprise-db
+    plan: basic-256mb
+    region: singapore
+    databaseName: shree_enterprise
+    user: shree_enterprise
+    postgresMajorVersion: "18"
+    ipAllowList: []
+    storageAutoscalingEnabled: true

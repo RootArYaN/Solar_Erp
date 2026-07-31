@@ -34,6 +34,29 @@ def test_production_security_configuration_is_accepted():
     assert configured.storage_type == "s3"
 
 
+def test_render_single_instance_production_configuration_is_accepted():
+    configured = _production_settings(
+        render=True,
+        render_external_hostname="shree-enterprise-api.onrender.com",
+        database_url="postgresql://user:password@private-db/shree_enterprise",
+        database_sslmode="disable",
+        rate_limit_mode="local",
+        web_concurrency=1,
+    )
+    assert configured.database_url.startswith("postgresql+psycopg://")
+    assert "shree-enterprise-api.onrender.com" in configured.trusted_host_list
+
+
+def test_render_local_rate_limiting_requires_one_worker():
+    with pytest.raises(ValidationError, match="single-worker Render service"):
+        _production_settings(
+            render=True,
+            database_sslmode="disable",
+            rate_limit_mode="local",
+            web_concurrency=2,
+        )
+
+
 def test_r2_production_configuration_is_accepted():
     configured = _production_settings(
         s3_provider="r2",

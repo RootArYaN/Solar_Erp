@@ -1,6 +1,6 @@
-# Solar ERP Starter
+# Shree Enterprise
 
-A clean, responsive authentication foundation for a Solar EPC ERP.
+A secure Solar EPC ERP for Shree Enterprise.
 
 ## Included
 
@@ -20,7 +20,8 @@ A clean, responsive authentication foundation for a Solar EPC ERP.
 ```text
 solar-erp-starter/
 ├── frontend/                 React + Vite application
-└── backend/                  FastAPI application
+├── backend/                  FastAPI application
+└── render.yaml               Render backend Blueprint
 ```
 
 ## 1. Run the backend
@@ -66,13 +67,18 @@ objects automatically; the application deliberately omits unsupported AWS SSE
 headers. Use `backend/.env.production.example` and
 `backend/docs/R2_SETUP.md` as the configuration checklist.
 
+The static frontend uses a different R2 bucket and a small Cloudflare Worker
+for React route fallback. Never make the private document bucket public. See
+`deploy/RENDER_CLOUDFLARE.md` for the release sequence.
+
 ## Production migration path
 
 - Inject the production environment through the cloud secret manager.
 - Create verified database and object-storage recovery points.
 - Rehearse the migration against a restored database copy.
 - Run the migration release command with the backup reference.
-- Serve the frontend and API through one HTTPS reverse-proxy origin.
+- Allow only the deployed Cloudflare frontend origin in the Render API CORS
+  configuration.
 
 ## ERP expansion sequence
 

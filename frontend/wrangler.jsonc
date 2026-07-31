@@ -1,0 +1,16 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "shree-enterprise-web",
+  "main": "cloudflare/worker.mjs",
+  "compatibility_date": "2026-07-31",
+  "workers_dev": true,
+  "observability": {
+    "enabled": true
+  },
+  "r2_buckets": [
+    {
+      "binding": "STATIC_BUCKET",
+      "bucket_name": "shree-enterprise-static"
+    }
+  ]
+}
