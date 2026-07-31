@@ -280,9 +280,9 @@ def _seed_business_defaults(db: Session, company: Company, membership: Membershi
         db.add(PricingBook(company_id=company.id, name="Master Price List", version=1, is_default=True, is_active=True, created_by=membership.id, updated_by=membership.id))
 
 
-def bootstrap_super_admin(db: Session) -> None:
+def bootstrap_super_admin(db: Session, *, allow_production: bool = False) -> None:
     """Create the initial super administrator without changing existing data."""
-    if settings.is_production:
+    if settings.is_production and not allow_production:
         raise RuntimeError("Development bootstrap is disabled in production")
 
     username = settings.seed_admin_username.strip().lower()

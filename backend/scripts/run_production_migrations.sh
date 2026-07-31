@@ -7,9 +7,11 @@ if [ "${ENVIRONMENT:-}" != "production" ]; then
 fi
 
 backup_reference=${BACKUP_REFERENCE:-}
-if [ "${#backup_reference}" -lt 8 ]; then
-  echo "BACKUP_REFERENCE must contain the verified database/storage recovery-point identifier." >&2
-  exit 64
+if [ -n "${backup_reference}" ]; then
+  exec python -m app.db.migrate upgrade --backup-reference "${backup_reference}"
 fi
 
-exec python -m app.db.migrate upgrade --backup-reference "${backup_reference}"
+# The migration layer permits an empty reference only for a brand-new database.
+# It still refuses changes to an existing production database without a
+# verified recovery-point identifier.
+exec python -m app.db.migrate upgrade

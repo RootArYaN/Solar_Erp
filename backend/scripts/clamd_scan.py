@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import socket
 import struct
 import sys
@@ -38,8 +39,8 @@ def scan(path: Path, *, host: str, port: int, timeout: float) -> str:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Stream one file to a clamd service")
     parser.add_argument("path", type=Path)
-    parser.add_argument("--host", default="malware-scanner")
-    parser.add_argument("--port", type=int, default=3310)
+    parser.add_argument("--host", default=os.getenv("CLAMD_HOST", "malware-scanner"))
+    parser.add_argument("--port", type=int, default=int(os.getenv("CLAMD_PORT", "3310")))
     parser.add_argument("--timeout", type=float, default=60)
     args = parser.parse_args()
 

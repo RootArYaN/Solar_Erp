@@ -5,7 +5,7 @@ Use `backend/.env.example` for local PostgreSQL development and
 
 Production configuration is fail-closed. Startup requires:
 
-- a private JWT secret of at least 64 characters;
+- a private JWT secret containing at least 256 bits of random data;
 - HTTPS frontend origins and secure refresh cookies;
 - PostgreSQL certificate verification (`verify-ca` or `verify-full`);
 - gateway/distributed rate limiting;
