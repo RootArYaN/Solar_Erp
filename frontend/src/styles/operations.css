@@ -1,42 +1,12 @@
-/* Today's solar pricing */
-
-/* Workbook-driven solar price desk */
-
-/* Solar inventory and stock flow */
-
 @media (max-width: 1080px) {
-  .app-shell { grid-template-columns: 204px minmax(0, 1fr); }
-  .app-shell--sidebar-collapsed { grid-template-columns: 64px minmax(0, 1fr); }
-
   .role-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-
 }
 
 @media (max-width: 780px) {
-  .app-shell { display: block; }
-  .app-sidebar { position: fixed; left: 0; width: min(300px, 86vw); transform: translateX(-104%); transition: transform .24s ease; }
-  .app-shell--sidebar-collapsed .app-sidebar { padding: 16px 13px; }
-  .app-shell--sidebar-collapsed .app-sidebar__brand { justify-content: space-between; padding: 1px 4px 17px; }
-  .app-shell--sidebar-collapsed .app-sidebar__brand .brand-mark { display: inline-flex; }
-  .app-shell--sidebar-collapsed .app-nav a { justify-content: flex-start; padding: 0 11px; }
-  .app-shell--sidebar-collapsed .app-nav a span { display: inline; }
-  .app-shell--sidebar-collapsed .sidebar-company { display: flex; }
-  .app-shell--sidebar-collapsed .sidebar-profile { flex-direction: row; margin-top: 7px; padding: 9px 5px; }
-  .app-shell--sidebar-collapsed .sidebar-profile__copy { display: grid; }
-  .app-shell--sidebar-collapsed .sidebar-logout { margin-left: auto; }
-  .app-sidebar--open { transform: translateX(0); }
-  .app-sidebar__close, .app-menu-button { display: grid; }
-  .sidebar-collapse-button { display: none; }
-  .sidebar-backdrop { display: block; position: fixed; inset: 0; z-index: 25; border: 0; background: rgba(8,20,29,.48); }
-  .app-topbar { height: 56px; display: flex; align-items: center; padding: 0 14px; border-bottom: 1px solid var(--line); background: rgba(255,255,255,.76); backdrop-filter: blur(16px); position: sticky; top: 0; z-index: 20; }
-  .app-main { height: 100dvh; }
-
   .admin-page, .agent-page{ width: min(100% - 28px, 720px); height: calc(100dvh - 56px); padding: 20px 0 24px; }
   .page-heading { align-items: flex-start; flex-direction: column; }
-  .agent-workspace-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) auto; }
   .agent-global-search { width: 100%; grid-column: 1 / -1; }
   .agent-toolbar-picker { min-width: 0; }
-  .agent-page__actions { width: 100%; justify-content: flex-start; }
 
   .agent-section-heading { align-items: stretch; flex-direction: column; }
   .agent-section-actions { width: 100%; justify-content: space-between; }
@@ -48,12 +18,7 @@
   .admin-stats article { min-height: 64px; }
   .data-panel__toolbar { align-items: stretch; flex-direction: column; }
   .search-control { width: 100%; }
-  .role-grid { grid-template-columns: 1fr; }
-  .modal-layer { padding: 0; place-items: end center; }
-  .modal-card { max-height: 94vh; border-radius: 20px 20px 0 0; }
-
   .poster-grid { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
-
 }
 
 @media (max-width: 600px) {

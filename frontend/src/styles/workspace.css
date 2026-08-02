@@ -507,7 +507,7 @@ body,
   min-height: 0;
 }
 
-.security-device-surface > :is(.device-list, .active-device-list, .security-device-list) {
+.security-device-surface > .device-list {
   min-height: 0;
 }
 
@@ -838,7 +838,7 @@ body,
   align-items: center;
   justify-content: center;
   gap: 4px;
-  padding: 0 7px;
+  padding: 0;
   border: 1px solid #e0e5e9;
   border-radius: 7px;
   background: #fff;
@@ -852,10 +852,6 @@ body,
   border-color: #d5a344;
   color: #9a6815;
   background: #fff9ed;
-}
-
-.document-page .document-checklist__actions button {
-  padding: 0;
 }
 
 .document-page .document-checklist__actions button:disabled {
@@ -967,54 +963,6 @@ body,
 
 }
 
-/* Modal viewport card: header fixed, body scrolls, action rows remain reachable. */
-.modal-layer {
-  padding: 12px;
-  overflow: hidden;
-}
-
-.modal-layer .modal-card {
-  width: min(700px, 100%);
-  max-width: 100%;
-  max-height: calc(100dvh - 24px);
-  min-height: 0;
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
-  overflow: hidden;
-  border-radius: var(--workspace-radius);
-}
-
-/* Preserve purpose-built dialog widths while applying the shared viewport cap. */
-.modal-layer .modal-card.quotation-request-modal { width: min(640px, 100%); }
-.modal-layer .modal-card.quotation-builder-modal { width: min(920px, 100%); }
-.modal-layer .modal-card.quotation-preview-modal { width: min(900px, 100%); }
-.modal-layer .modal-card.document-template-modal { width: min(920px, 100%); }
-.modal-layer .modal-card.finance-modal { width: min(640px, 100%); }
-
-.modal-card__header {
-  position: relative;
-  top: auto;
-  padding: 11px 12px;
-}
-
-.modal-card__header h2 {
-  margin: 0;
-  font-size: 18px;
-}
-
-.modal-card__header p {
-  margin-top: 2px;
-  font-size: 11px;
-}
-
-.modal-card__body {
-  min-width: 0;
-  min-height: 0;
-  overflow: auto;
-  overscroll-behavior: contain;
-  scrollbar-gutter: stable;
-}
-
 .quotation-preview-modal .modal-card__body {
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto;
@@ -1026,7 +974,7 @@ body,
   min-height: 0;
 }
 
-.modal-card__body > :is(form, .quotation-preview-body) {
+.modal-card__body > form {
   min-width: 0;
 }
 
@@ -1035,7 +983,7 @@ body,
   overflow: visible;
 }
 
-.modal-card__body :is(.modal-actions, .erp-form-actions, .quotation-request-actions, .dialog-actions) {
+.modal-card__body :is(.modal-actions, .erp-form-actions, .quotation-request-actions) {
   position: sticky;
   z-index: 4;
   bottom: 0;
@@ -1054,146 +1002,6 @@ body,
   .workspace-kpi-grid,
   .workspace-page > :is(.erp-kpi-grid, .admin-stats, .agent-kpi-grid, .customer-kpis, .finance-kpis) {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 780px) {
-  :root {
-    --workspace-inset: 8px;
-    --workspace-control-height: var(--workspace-touch-height);
-  }
-
-  .app-main {
-    grid-template-rows: 48px minmax(0, 1fr);
-  }
-
-  .app-topbar {
-    height: 48px;
-    min-height: 48px;
-  }
-
-  .app-viewport {
-    grid-row: 2;
-  }
-
-  .workspace-page,
-.workspace-page.erp-page,
-.workspace-page.admin-page,
-.workspace-page.agent-page,
-.workspace-page.customer-detail-page,
-.workspace-page.project-timeline-page,
-.workspace-page.approval-page,
-.workspace-page.finance-page,
-.workspace-page.security-page{
-    width: 100%;
-    height: 100%;
-    min-height: 0;
-    margin: 0;
-    padding: var(--workspace-inset);
-    overflow: hidden;
-  }
-
-  .workspace-header,
-  .workspace-page > :is(.erp-page-head, .page-heading, .security-header, .finance-page-header, .module-page-header) {
-    align-items: stretch;
-  }
-
-  .workspace-header__actions,
-  .workspace-page > :is(.erp-page-head, .page-heading, .security-header, .finance-page-header, .module-page-header) > :last-child:not(:first-child),
-  .erp-head-actions,
-  .agent-page__actions {
-    width: auto;
-  }
-
-  .workspace-toolbar,
-  .workspace-toolbar__controls,
-  .workspace-toolbar__actions {
-    width: 100%;
-  }
-
-  .workspace-toolbar__actions > * {
-    flex: 1 1 auto;
-  }
-
-  .workspace-page .customer-detail-layout,
-  .workspace-page .project-timeline-layout,
-  .workspace-page .approval-split-layout {
-    flex: 1 1 auto;
-    height: auto;
-    min-height: 0;
-    overflow: hidden;
-  }
-
-  .workspace-page .customer-workspace,
-  .workspace-page .timeline-detail-panel {
-    height: 100%;
-    min-height: 0;
-    overflow: hidden;
-  }
-
-  .workspace-page .workspace-tab-panel,
-  .workspace-page .finance-tab-panel {
-    min-height: 0;
-  }
-
-  .workspace-page .customer-detail-layout {
-    grid-template-columns: 1fr;
-    grid-template-rows: minmax(0, .38fr) minmax(0, 1fr);
-  }
-
-  .workspace-page .customer-directory {
-    width: 100%;
-    height: 100%;
-    max-height: none;
-    overflow: hidden;
-  }
-
-  .workspace-page .customer-workspace {
-    height: 100%;
-    overflow: hidden;
-  }
-
-  .workspace-page .project-timeline-layout {
-    grid-template-columns: 1fr;
-    grid-template-rows: minmax(0, .34fr) minmax(0, 1fr);
-  }
-
-  .workspace-page .timeline-projects-panel {
-    width: 100%;
-    height: 100%;
-    max-height: none;
-  }
-
-  .workspace-page .timeline-detail-panel {
-    height: 100%;
-    overflow: auto;
-  }
-
-  .workspace-page .approval-split-layout {
-    grid-template-columns: 1fr;
-    grid-template-rows: repeat(2, minmax(0, 1fr));
-  }
-
-  .inventory-stock-grid {
-    grid-template-columns: 1fr;
-    grid-template-rows: repeat(2, minmax(0, 1fr));
-  }
-
-  .modal-layer {
-    place-items: end center;
-    padding: 8px;
-  }
-
-  .modal-layer .modal-card.quotation-builder-modal,
-  .modal-layer .modal-card.quotation-preview-modal,
-  .modal-layer .modal-card.finance-modal {
-    width: 100%;
-  }
-
-  .modal-layer .modal-card {
-    width: 100%;
-    max-height: calc(100dvh - 16px);
-    border-radius: var(--workspace-radius);
   }
 }
 
@@ -1791,22 +1599,6 @@ body,
   box-shadow: 0 0 0 1px rgba(25, 40, 53, .08), 0 20px 60px rgba(25, 40, 53, .12);
 }
 
-.app-shell--view-mobile .app-sidebar {
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: min(300px, 86%);
-  height: 100%;
-  transform: translateX(-104%);
-  transition: transform .24s ease;
-}
-
-.app-shell--view-mobile .app-sidebar--open { transform: translateX(0); }
-.app-shell--view-mobile .app-sidebar__close,
-.app-shell--view-mobile .app-menu-button { display: grid; }
-.app-shell--view-mobile .sidebar-collapse-button { display: none; }
-.app-shell--view-mobile .sidebar-backdrop { position: absolute; display: block; }
-.app-shell--view-mobile .app-topbar { justify-content: space-between; }
-
 .app-shell--view-mobile .workspace-page,
 .app-shell--view-mobile .workspace-page.erp-page,
 .app-shell--view-mobile .workspace-page.admin-page,
@@ -1890,16 +1682,20 @@ body,
 }
 
 .app-shell--view-mobile .workspace-page :is(.customer-workspace, .timeline-detail-panel) { overflow: visible; }
-.app-shell--view-mobile .customer-directory { min-height: 260px; max-height: 320px !important; }
 .app-shell--view-mobile .data-panel { flex: 0 0 auto; min-height: 420px; }
 .app-shell--view-mobile .role-grid { display: grid; grid-template-columns: 1fr; }
 .app-shell--view-mobile .inventory-workspace-body,
 .app-shell--view-mobile .pricing-workspace-panel { height: auto; overflow: visible; }
 .app-shell--view-mobile .inventory-stock-grid > .erp-panel,
-.app-shell--view-mobile .inventory-workspace-body > .erp-panel { height: auto; min-height: 360px; }
+.app-shell--view-mobile .inventory-workspace-body > .erp-panel { height: auto; }
 .app-shell--view-mobile .dashboard-live { overflow-y: auto !important; }
 
 @media (max-width: 780px) {
+  :root {
+    --workspace-inset: 8px;
+    --workspace-control-height: var(--workspace-touch-height);
+  }
+
   .app-shell--has-view-switch .layout-view-switch > span { display: none; }
 
   .app-viewport,
@@ -1958,13 +1754,12 @@ body,
   }
 
   .workspace-page :is(.customer-workspace, .timeline-detail-panel) { overflow: visible; }
-  .customer-directory { min-height: 260px; max-height: 320px !important; }
   .admin-page > .data-panel { flex: 0 0 auto; min-height: 420px; }
   .role-grid { display: grid; grid-template-columns: 1fr; }
   .inventory-workspace-body,
   .pricing-workspace-panel { height: auto; overflow: visible; }
   .inventory-stock-grid > .erp-panel,
-  .inventory-workspace-body > .erp-panel { height: auto; min-height: 360px; }
+  .inventory-workspace-body > .erp-panel { height: auto; }
   .dashboard-live { overflow-y: auto !important; }
 
   .workspace-kpi-grid,
@@ -2125,20 +1920,6 @@ body,
   .workspace-page .timeline-view-panel {
     width: 100%;
     min-width: 0;
-  }
-}
-
-/* This override must follow the shared phone layout, which otherwise restores
-   the old fixed-height directory and clips the final customer rows. */
-.app-shell--view-mobile .customer-directory {
-  min-height: 0;
-  max-height: none !important;
-}
-
-@media (max-width: 780px) {
-  .workspace-page .customer-directory {
-    min-height: 0;
-    max-height: none !important;
   }
 }
 
@@ -2664,131 +2445,6 @@ body,
     min-width: 0;
     overflow-x: auto;
     overflow-y: visible;
-  }
-}
-
-/* Dialogs are portalled to <body>, outside the simulated phone shell. Mirror
-   the 430px preview frame on the portal so forms cannot size against the full
-   desktop browser viewport. */
-body.app-preview-mobile :is(.modal-layer, .alert-dialog-layer) {
-  inset: 0 auto 0 50%;
-  width: min(430px, 100vw);
-  max-width: 100vw;
-  padding: 8px;
-  place-items: end center;
-  overflow: hidden;
-  transform: translateX(-50%);
-}
-
-body.app-preview-mobile .modal-layer .modal-card,
-body.app-preview-mobile .modal-layer .modal-card:is(.quotation-request-modal, .quotation-builder-modal, .quotation-preview-modal, .document-template-modal, .finance-modal, .inventory-movement-modal),
-body.app-preview-mobile .alert-dialog {
-  width: 100%;
-  max-width: 100%;
-  max-height: calc(100dvh - 16px);
-  border-radius: 16px 16px 0 0;
-}
-
-body.app-preview-mobile .modal-layer .modal-card {
-  min-width: 0;
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
-  overflow: hidden;
-}
-
-body.app-preview-mobile .modal-card__header {
-  min-width: 0;
-  padding: 11px 12px;
-}
-
-body.app-preview-mobile .modal-card__header > div {
-  min-width: 0;
-}
-
-body.app-preview-mobile .modal-card__header h2,
-body.app-preview-mobile .modal-card__header p {
-  overflow-wrap: anywhere;
-}
-
-body.app-preview-mobile .modal-card__body {
-  min-width: 0;
-  min-height: 0;
-  overflow-x: hidden;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scrollbar-gutter: auto;
-}
-
-body.app-preview-mobile .modal-card__body > *,
-body.app-preview-mobile .modal-card__body .erp-form {
-  width: 100%;
-  max-width: 100%;
-  min-width: 0;
-  box-sizing: border-box;
-}
-
-body.app-preview-mobile .modal-card :is(.admin-form__grid, .erp-form-grid, .quotation-request-fields) {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-body.app-preview-mobile .finance-modal .erp-form {
-  padding: 12px;
-}
-
-body.app-preview-mobile .modal-card__body :is(.erp-form-actions, .modal-actions, .dialog-actions) {
-  width: auto;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  margin-inline: -12px;
-  padding-inline: 12px;
-}
-
-body.app-preview-mobile .modal-card__body :is(.erp-form-actions, .modal-actions, .dialog-actions) button {
-  width: 100%;
-  min-width: 0;
-}
-
-@media (max-width: 780px) {
-  .modal-layer .finance-modal {
-    width: 100%;
-    max-width: 100%;
-    min-width: 0;
-    max-height: calc(100dvh - 16px);
-    display: grid;
-    grid-template-rows: auto minmax(0, 1fr) auto;
-    overflow: hidden;
-    border-radius: 16px 16px 0 0;
-  }
-
-  .finance-modal .modal-card__body {
-    min-width: 0;
-    min-height: 0;
-    overflow-x: hidden;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-  }
-
-  .finance-modal .modal-card__body > *,
-  .finance-modal .modal-card__body .erp-form {
-    width: 100%;
-    max-width: 100%;
-    min-width: 0;
-    box-sizing: border-box;
-  }
-
-  .finance-modal .erp-form-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .finance-modal .modal-card__body :is(.erp-form-actions, .modal-actions, .dialog-actions) {
-    width: auto;
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .finance-modal .modal-card__body :is(.erp-form-actions, .modal-actions, .dialog-actions) button {
-    width: 100%;
-    min-width: 0;
   }
 }
 

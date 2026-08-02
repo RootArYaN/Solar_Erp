@@ -18,6 +18,9 @@
 /* Dialogs and confirmation alerts use the same spacing and viewport rules. */
 .modal-layer,
 .alert-dialog-layer {
+  position: fixed;
+  inset: 0;
+  display: grid;
   padding: 16px;
   place-items: center;
   overflow: hidden;
@@ -25,11 +28,21 @@
   backdrop-filter: blur(9px);
 }
 
+.modal-layer { z-index: 80; }
+.alert-dialog-layer { z-index: 200; }
+
 .modal-layer .modal-card {
   width: min(var(--ui-dialog-width), 100%);
+  min-width: 0;
   max-width: 100%;
   max-height: var(--ui-dialog-max-height);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,.55);
   border-radius: 16px;
+  background: #fbfaf7;
+  box-shadow: 0 24px 64px rgba(6,16,24,.26);
 }
 
 .modal-layer .modal-card:is(
@@ -46,23 +59,41 @@
 }
 
 .modal-card__header {
+  position: relative;
+  top: auto;
+  z-index: 2;
   min-height: 64px;
+  display: flex;
   padding: 13px 16px;
   align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(255,255,255,.92);
 }
 
 .modal-card__header--titleless {
   min-height: 44px;
   padding: 6px 10px;
+  justify-content: flex-end;
+  border-bottom: 0;
+}
+
+.modal-card__header--titleless .icon-button {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
 }
 
 .modal-card__header h2 {
+  margin: 0;
   font-size: 18px;
   line-height: 1.25;
 }
 
 .modal-card__header p {
-  margin-top: 3px;
+  margin: 3px 0 0;
+  color: var(--muted);
   font-size: 11px;
   line-height: 1.4;
 }
@@ -214,31 +245,6 @@
 }
 
 @media (max-width: 640px) {
-  .modal-layer,
-  .alert-dialog-layer {
-    place-items: end center;
-    padding: 0;
-  }
-
-  .modal-layer .modal-card,
-  .modal-layer .modal-card:is(
-    .quotation-request-modal,
-    .quotation-builder-modal,
-    .quotation-preview-modal,
-    .document-template-modal,
-    .finance-modal,
-    .inventory-movement-modal
-  ),
-  .alert-dialog {
-    width: 100%;
-    max-height: 94dvh;
-    border-radius: 18px 18px 0 0;
-  }
-
-  .modal-card :is(.admin-form__grid, .erp-form-grid, .quotation-request-fields) {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
   .modal-card .field__control,
   .modal-card .erp-form :is(input:not([type='checkbox']):not([type='radio']), select),
   .workspace-page .erp-form :is(input:not([type='checkbox']):not([type='radio']), select),
@@ -248,15 +254,6 @@
     height: var(--ui-touch-control-height);
     min-height: var(--ui-touch-control-height);
   }
-
-  .alert-dialog footer {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .alert-dialog footer button {
-    width: 100%;
-    min-width: 0;
-  }
 }
 
 /* Responsive overlay contract ------------------------------------------
@@ -264,13 +261,6 @@
  * make them follow both a real narrow viewport and the super-admin phone
  * preview, with one scroll owner and safe-area-aware actions.
  */
-.modal-layer .modal-card {
-  min-width: 0;
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
-  overflow: hidden;
-}
-
 .modal-card__header,
 .modal-card__header > div,
 .modal-card__body,
@@ -294,6 +284,7 @@
   overflow-y: auto;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
+  scrollbar-gutter: stable;
 }
 
 .modal-card__body :is(form, fieldset, section, article, .admin-form__grid, .erp-form-grid) {
@@ -400,7 +391,7 @@ body.app-preview-mobile .modal-card .movement-line__remove {
   right: 7px;
 }
 
-body.app-preview-mobile .modal-card__body :is(.erp-form-actions, .modal-actions, .dialog-actions),
+body.app-preview-mobile .modal-card__body :is(.erp-form-actions, .modal-actions),
 body.app-preview-mobile .entity-edit-dialog__footer,
 body.app-preview-mobile .alert-dialog footer {
   width: 100%;
@@ -410,7 +401,7 @@ body.app-preview-mobile .alert-dialog footer {
   padding-bottom: max(10px, env(safe-area-inset-bottom));
 }
 
-body.app-preview-mobile .modal-card__body :is(.erp-form-actions, .modal-actions, .dialog-actions) button,
+body.app-preview-mobile .modal-card__body :is(.erp-form-actions, .modal-actions) button,
 body.app-preview-mobile .entity-edit-dialog__footer button,
 body.app-preview-mobile .alert-dialog footer button {
   width: 100%;
@@ -492,7 +483,7 @@ body.app-preview-mobile .alert-dialog footer button {
     right: 7px;
   }
 
-  .modal-card__body :is(.erp-form-actions, .modal-actions, .dialog-actions),
+  .modal-card__body :is(.erp-form-actions, .modal-actions),
   .entity-edit-dialog__footer,
   .alert-dialog footer {
     width: 100%;
@@ -502,7 +493,7 @@ body.app-preview-mobile .alert-dialog footer button {
     padding-bottom: max(10px, env(safe-area-inset-bottom));
   }
 
-  .modal-card__body :is(.erp-form-actions, .modal-actions, .dialog-actions) button,
+  .modal-card__body :is(.erp-form-actions, .modal-actions) button,
   .entity-edit-dialog__footer button,
   .alert-dialog footer button {
     width: 100%;

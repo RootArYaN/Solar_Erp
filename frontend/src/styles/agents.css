@@ -69,8 +69,7 @@
 .agent-table-wrap { flex: 1 1 auto; min-height: 0; overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
 .agent-table { width: 100%; min-width: 900px; border-collapse: collapse; }
 .transaction-table { min-width: 1040px; }
-.agent-table th { padding: 8px 10px; color: #868c94; background: #faf9f7; text-align: left; font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 1.05px; }
-.agent-table th { position: sticky; top: 0; z-index: 1; }
+.agent-table th { position: sticky; top: 0; z-index: 1; padding: 8px 10px; color: #868c94; background: #faf9f7; text-align: left; font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 1.05px; }
 .agent-table td { padding: 8px 10px; border-top: 1px solid rgba(35,46,61,.075); color: #59626d; font-size: 11px; vertical-align: middle; }
 .agent-table tbody tr:hover { background: #fffdf8; }
 .numeric-cell { text-align: right !important; white-space: nowrap; }
