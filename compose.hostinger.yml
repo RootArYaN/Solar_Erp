@@ -47,8 +47,7 @@ services:
       - egress
 
   migrate:
-    build:
-      context: ./backend
+    image: solar-erp-api:hostinger
     profiles: [release]
     env_file:
       - ${HOSTINGER_ENV_FILE:-.env.hostinger}
@@ -70,8 +69,7 @@ services:
       - egress
 
   bootstrap-admin:
-    build:
-      context: ./backend
+    image: solar-erp-api:hostinger
     profiles: [release]
     env_file:
       - ${HOSTINGER_ENV_FILE:-.env.hostinger}
@@ -92,6 +90,7 @@ services:
       - services
 
   api:
+    image: solar-erp-api:hostinger
     build:
       context: ./backend
     restart: unless-stopped
@@ -116,6 +115,7 @@ services:
       - egress
 
   frontend:
+    image: solar-erp-frontend:hostinger
     build:
       context: ./frontend
     restart: unless-stopped
