@@ -153,7 +153,9 @@ class LocalStorage(StorageBackend):
     def __init__(self, root: Path | None = None, temp_root: Path | None = None):
         self.root = (root or settings.storage_root).resolve()
         self.active_root = self.root / "active"
-        effective_temp = temp_root or (self.root / "temp")
+        effective_temp = temp_root or (
+            settings.storage_temp_root if root is None else self.root / "temp"
+        )
         super().__init__(effective_temp)
         for path in (self.root, self.active_root, self.temp_root):
             path.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -255,7 +257,6 @@ class LocalStorage(StorageBackend):
 class S3Storage(StorageBackend):
     def __init__(self, *, client=None, temp_root: Path | None = None):
         super().__init__(temp_root)
-        self.provider = settings.normalized_s3_provider
         self.bucket = settings.s3_bucket.strip()
         self.prefix = settings.normalized_s3_prefix
         if not self.bucket:
@@ -271,12 +272,6 @@ class S3Storage(StorageBackend):
                 "retries": {"max_attempts": 5, "mode": "standard"},
                 "s3": {"addressing_style": settings.s3_addressing_style},
             }
-            if self.provider == "r2":
-                # Newer botocore releases add optional AWS checksum headers by
-                # default. R2 supports only a subset, so send them only when an
-                # operation requires one.
-                config_options["request_checksum_calculation"] = "when_required"
-                config_options["response_checksum_validation"] = "when_required"
             client_options: dict[str, object] = {
                 "service_name": "s3",
                 "region_name": settings.s3_region or None,
@@ -303,10 +298,6 @@ class S3Storage(StorageBackend):
         return f"{self.prefix}/{relative}" if self.prefix else relative
 
     def _encryption_args(self) -> dict[str, str]:
-        if self.provider == "r2":
-            # R2 encrypts every object at rest with provider-managed AES-256
-            # and rejects AWS's x-amz-server-side-encryption request headers.
-            return {}
         values = {"ServerSideEncryption": settings.s3_sse_algorithm}
         if settings.s3_sse_algorithm == "aws:kms":
             values["SSEKMSKeyId"] = settings.s3_kms_key_id

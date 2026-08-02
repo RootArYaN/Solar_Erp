@@ -21,7 +21,8 @@ A secure Solar EPC ERP for Shree Enterprise.
 solar-erp-starter/
 ├── frontend/                 React + Vite application
 ├── backend/                  FastAPI application
-└── render.yaml               Render backend Blueprint
+├── compose.hostinger.yml     Supported production topology
+└── deploy/HOSTINGER_VPS.md   Production runbook
 ```
 
 ## 1. Run the backend
@@ -64,27 +65,22 @@ Open `http://localhost:5173`.
 
 ## Customer document storage
 
-Local development uses the private `backend/storage` directory. Managed
-production deployments use a private Cloudflare R2 bucket through its
-S3-compatible API. The single-server Hostinger topology instead uses a private
-persistent Docker volume with independent off-server backups. Use the matching
-provider deployment guide and never expose either storage backend publicly.
-
-The static frontend uses a different R2 bucket and a small Cloudflare Worker
-for React route fallback. Never make the private document bucket public. See
-`deploy/RENDER_CLOUDFLARE.md` for the release sequence.
+Local development uses the private `backend/storage` directory. Hostinger
+production uses the private `solar-erp-hostinger_document-storage` Docker
+volume. The frontend and API are served from one HTTPS origin; document files
+are never exposed as a public directory.
 
 ## Production migration path
 
-- Inject the production environment through the cloud secret manager.
-- Create verified database and object-storage recovery points.
+- Keep production secrets only in the ignored `.env.hostinger` file.
+- Create verified Hostinger, PostgreSQL, and document-volume recovery points.
 - Rehearse the migration against a restored database copy.
 - Run the migration release command with the backup reference.
-- Allow only the deployed Cloudflare frontend origin in the Render API CORS
-  configuration.
+- Run the safe identity initializer after migrations.
+- Keep PostgreSQL, the API, ClamAV, and document storage off public ports.
 
-For a single-server Hostinger deployment, use the Ubuntu 24.04 Docker VPS
-template and follow [`deploy/HOSTINGER_VPS.md`](deploy/HOSTINGER_VPS.md).
+Use the Hostinger Ubuntu 24.04 Docker VPS template and follow
+[`deploy/HOSTINGER_VPS.md`](deploy/HOSTINGER_VPS.md).
 
 ## ERP expansion sequence
 

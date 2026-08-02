@@ -26,14 +26,20 @@ def main() -> int:
             username_user = db.scalar(select(User).where(User.username == username))
             email_user = db.scalar(select(User).where(User.email == email))
             password = settings.seed_admin_password
-            if username_user is None and email_user is None and (
-                password == "ChangeMe123!" or len(password) < 12
-            ):
-                print(
-                    "SEED_ADMIN_PASSWORD must be a non-default password with at least 12 characters.",
-                    file=sys.stderr,
-                )
-                return 64
+            if username_user is None and email_user is None:
+                if email.endswith("@example.com"):
+                    print("SEED_ADMIN_EMAIL must be the real administrator email.", file=sys.stderr)
+                    return 64
+                if (
+                    password == "ChangeMe123!"
+                    or len(password) < 12
+                    or "replace-with" in password.lower()
+                ):
+                    print(
+                        "SEED_ADMIN_PASSWORD must be a non-placeholder password with at least 12 characters.",
+                        file=sys.stderr,
+                    )
+                    return 64
             bootstrap_super_admin(db, allow_production=True)
     except RuntimeError as exc:
         print(str(exc), file=sys.stderr)

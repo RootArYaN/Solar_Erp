@@ -2,7 +2,7 @@
 
 ## Summary
 
-Build a single-company modular monolith using FastAPI, PostgreSQL, Alembic, and S3-compatible object storage. The first phase establishes the foundation only: secure sessions, roles, audit history, archive/purge behavior, file storage, offline-sync primitives, migrations, and backups.
+Build a single-company modular monolith using FastAPI, PostgreSQL, and private persistent file storage. The first phase establishes the foundation only: secure sessions, roles, audit history, file storage, migrations, and backups.
 
 Existing development data will be reset. Current business pages remain usable while they are connected to backend modules incrementally.
 
@@ -13,7 +13,7 @@ Future data chain:
 ## Foundation Architecture
 
 - Replace SQLite and runtime `create_all()` with local PostgreSQL and Alembic migrations.
-- Use Docker Compose for PostgreSQL and MinIO locally; cloud deployment later swaps these for managed PostgreSQL and S3/R2 without changing application models.
+- Use Docker Compose for PostgreSQL and a private document volume on Hostinger.
 - Keep one FastAPI modular monolith. Separate modules by routes, schemas, services, models, permissions, and events; do not introduce microservices or Redis.
 - Use PostgreSQL-backed background jobs and an outbox table for document processing, thumbnails, notifications, and reliable cross-module events.
 - Use normalized columns for searchable business data and JSONB only for audit payloads, template configuration, and flexible metadata.
@@ -55,16 +55,16 @@ Future data chain:
 
 ## Files, Offline UX, Deletion, and Backups
 
-- Store only file metadata in PostgreSQL. Store binaries privately in MinIO/S3 with checksums, versions, categories, ownership links, and upload status.
-- Upload directly to object storage using signed multipart URLs; complete through the API after size/type/checksum validation.
-- Serve short-lived signed download URLs, lazy previews, thumbnails, compressed images, and range-enabled PDFs to reduce bandwidth.
+- Store only file metadata in PostgreSQL. Store binaries in the private Hostinger document volume with checksums, versions, categories, ownership links, and upload status.
+- Stream uploads through the API for size, type, signature, checksum, and malware validation before persistence.
+- Serve authenticated downloads and lazy previews through the API.
 - Cache lists, summaries, drafts, document metadata, and redacted thumbnails in IndexedDB. Do not cache Aadhaar, PAN, licence, bank-proof, or other sensitive originals.
 - Use a frontend outbox with client-generated idempotency keys. Customer edits, drafts, uploads, and material requests can queue offline.
 - Stock and finance transactions may be drafted offline but become official only after online server validation.
 - Use record versions and return `409 Conflict` with the current server version when an offline edit is stale.
 - Default deletion is archive/restore. Referenced business records cannot be directly purged.
 - Allow controlled administrator purge after a 30-day trash period. Immutable audit, stock, and financial history use reversals or tombstones instead of deletion.
-- Perform nightly encrypted PostgreSQL and object-storage backups, targeting at most 24 hours of data loss. Retain 7 daily, 4 weekly, and 6 monthly backups, with checksums and periodic restore tests.
+- Perform nightly encrypted PostgreSQL and document-volume backups off the VPS, targeting at most 24 hours of data loss. Retain 7 daily, 4 weekly, and 6 monthly backups, with checksums and periodic restore tests.
 
 ## Public Interfaces
 

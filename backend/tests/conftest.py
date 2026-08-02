@@ -65,7 +65,7 @@ def _assert_test_database() -> None:
         raise RuntimeError("Tests require a database name containing 'test' or 'perf'")
 
 
-@pytest.fixture(scope="session", autouse=True)
+@pytest.fixture(scope="session")
 def prepared_database() -> None:
     _assert_test_database()
     try:

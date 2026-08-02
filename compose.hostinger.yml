@@ -6,6 +6,7 @@ x-api-environment: &api-environment
   ALLOW_PRIVATE_DATABASE_NO_TLS: "true"
   FRONTEND_ORIGINS: https://${ERP_DOMAIN:?Set ERP_DOMAIN}
   TRUSTED_HOSTS: ${ERP_DOMAIN:?Set ERP_DOMAIN},127.0.0.1,localhost
+  TRUST_PROXY_HEADERS: "true"
   FORWARDED_ALLOW_IPS: "*"
   RATE_LIMIT_MODE: local
   SINGLE_INSTANCE_DEPLOYMENT: "true"
@@ -107,7 +108,7 @@ services:
       database:
         condition: service_healthy
       malware-scanner:
-        condition: service_started
+        condition: service_healthy
     read_only: true
     volumes:
       - document-storage:/app/storage

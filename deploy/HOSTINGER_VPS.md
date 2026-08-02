@@ -11,16 +11,24 @@ recommended because ClamAV and PostgreSQL run alongside the application.
 1. Point an `A` record for the ERP hostname (for example `erp.example.com`) to
    the VPS IPv4 address. Remove conflicting `A`/`AAAA` records.
 2. In hPanel, allow inbound TCP ports `80` and `443`, UDP `443`, and the VPS SSH
-   port. Do not expose PostgreSQL port `5432` or API port `8000`.
+   port. Do not open TCP `445`; do not expose PostgreSQL `5432`, FastAPI `8000`,
+   or ClamAV `3310`.
 3. Enable Hostinger daily backups if available. Create a manual snapshot before
    every application or database migration.
 4. In hPanel, open **VPS → Manage → Docker Manager** and deploy the Traefik
    project if it is not already running. Enter a valid email for Let's Encrypt.
 
-Hostinger's current Traefik template uses host networking and discovers the
-frontend through Docker labels; the application does not publish ports 80 or
-443 itself. HTTPS is issued automatically after DNS resolves to the VPS and
-Traefik sees the frontend container labels.
+This repository is configured for the host-networked Traefik installation
+already present on this VPS (`traefik-traefik-1`). Confirm it before starting:
+
+```bash
+docker inspect traefik-traefik-1 --format '{{.HostConfig.NetworkMode}}'
+```
+
+It must print `host`. The application does not publish ports 80, 443, 8000,
+5432, or 3310. HTTPS is issued after DNS resolves and Traefik detects the
+frontend labels. Do not create an external `traefik-proxy` network for this
+host-networked installation.
 
 ## 2. Copy and configure the project
 
@@ -38,13 +46,16 @@ Edit `.env.hostinger`. Use the two generated values for `POSTGRES_PASSWORD` and
 `JWT_SECRET`, then set the real domain, email and initial administrator values.
 Documents are stored in the private `document-storage` Docker volume on the
 VPS. The PostgreSQL password must remain URL-safe; the hexadecimal command
-above provides a safe value.
+above provides a safe value. After PostgreSQL initializes, never change
+`POSTGRES_PASSWORD` only in the file—the existing database password would no
+longer match.
 
 ## 3. Validate and initialize
 
 Every Compose command must use the deployment environment file:
 
 ```bash
+python3 deploy/validate_hostinger_env.py .env.hostinger --require-bootstrap-password
 docker compose --env-file .env.hostinger -f compose.hostinger.yml config --quiet
 docker compose --env-file .env.hostinger -f compose.hostinger.yml build
 docker compose --env-file .env.hostinger -f compose.hostinger.yml up -d database malware-scanner
@@ -67,6 +78,7 @@ docker compose --env-file .env.hostinger -f compose.hostinger.yml ps
 docker compose --env-file .env.hostinger -f compose.hostinger.yml logs --tail=100 api frontend
 curl -fsS https://erp.example.com/api/v1/health
 curl -fsS https://erp.example.com/api/v1/ready
+curl -fsSI https://erp.example.com/login
 ```
 
 Replace `erp.example.com` in the verification commands with the configured
@@ -79,9 +91,11 @@ First create a Hostinger snapshot and record its identifier or timestamp:
 
 ```bash
 git pull --ff-only
+python3 deploy/validate_hostinger_env.py .env.hostinger
 docker compose --env-file .env.hostinger -f compose.hostinger.yml build
 BACKUP_REFERENCE=hostinger-snapshot-YYYYMMDD-HHMM docker compose --env-file .env.hostinger -f compose.hostinger.yml --profile release run --rm migrate
-docker compose --env-file .env.hostinger -f compose.hostinger.yml up -d
+docker compose --env-file .env.hostinger -f compose.hostinger.yml --profile release run --rm bootstrap-admin
+docker compose --env-file .env.hostinger -f compose.hostinger.yml up -d --remove-orphans
 ```
 
 Do not scale the `api` service in this topology. It deliberately uses one API
@@ -94,8 +108,8 @@ Hostinger snapshots are useful for whole-server recovery, but also keep
 independent encrypted PostgreSQL and document exports outside the VPS:
 
 ```bash
-docker compose --env-file .env.hostinger -f compose.hostinger.yml exec -T database pg_dump -U solar_erp -d solar_erp -Fc > solar-erp-$(date +%F).dump
 mkdir -p backups
+docker compose --env-file .env.hostinger -f compose.hostinger.yml exec -T database pg_dump -U solar_erp -d solar_erp -Fc > backups/solar-erp-$(date +%F).dump
 docker run --rm -v solar-erp-hostinger_document-storage:/data:ro -v "$PWD/backups:/backup" alpine:3.21 tar -czf /backup/solar-erp-documents-$(date +%F).tar.gz -C /data .
 ```
 

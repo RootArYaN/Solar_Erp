@@ -21,7 +21,7 @@ migrations at startup; run migrations once as a controlled release command.
 1. Stop writes or enter a maintenance window.
 2. Create a managed PostgreSQL snapshot/backup.
 3. Confirm the backup can be restored to a separate database.
-4. Confirm the independent R2 backup completed and record its recovery job ID.
+4. Export the document volume, verify the archive, and record its identifier.
 5. Rehearse the upgrade against a restored database copy.
 6. Inspect migration state:
 
@@ -44,7 +44,7 @@ A brand-new empty database does not require `--backup-reference`.
 
 Schema downgrades are intentionally not automated because several historical
 migrations remove obsolete data and columns. Roll back by stopping the new API,
-restoring the recorded PostgreSQL snapshot and corresponding object-storage
-version/recovery point, and deploying the previous application version.
+restoring the recorded PostgreSQL snapshot and matching document-volume
+archive, and deploying the previous application version.
 
 Never edit an applied migration or its checksum. Add a new migration instead.

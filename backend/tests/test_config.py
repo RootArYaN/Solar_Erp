@@ -34,29 +34,6 @@ def test_production_security_configuration_is_accepted():
     assert configured.storage_type == "s3"
 
 
-def test_render_single_instance_production_configuration_is_accepted():
-    configured = _production_settings(
-        render=True,
-        render_external_hostname="shree-enterprise-api.onrender.com",
-        database_url="postgresql://user:password@private-db/shree_enterprise",
-        database_sslmode="disable",
-        rate_limit_mode="local",
-        web_concurrency=1,
-    )
-    assert configured.database_url.startswith("postgresql+psycopg://")
-    assert "shree-enterprise-api.onrender.com" in configured.trusted_host_list
-
-
-def test_render_local_rate_limiting_requires_one_worker():
-    with pytest.raises(ValidationError, match="single-worker deployment"):
-        _production_settings(
-            render=True,
-            database_sslmode="disable",
-            rate_limit_mode="local",
-            web_concurrency=2,
-        )
-
-
 def test_private_single_host_production_configuration_is_accepted():
     configured = _production_settings(
         database_url="postgresql://solar_erp:password@database/solar_erp",
@@ -85,56 +62,6 @@ def test_single_host_local_rate_limiting_requires_one_worker():
             rate_limit_mode="local",
             single_instance_deployment=True,
             web_concurrency=2,
-        )
-
-
-def test_r2_production_configuration_is_accepted():
-    configured = _production_settings(
-        s3_provider="r2",
-        s3_region="auto",
-        s3_endpoint_url="https://0123456789abcdef0123456789abcdef.r2.cloudflarestorage.com",
-        s3_access_key_id="bucket-access-key",
-        s3_secret_access_key="bucket-secret-key",
-        s3_addressing_style="path",
-        s3_sse_algorithm="provider-managed",
-    )
-    assert configured.normalized_s3_provider == "r2"
-
-
-def test_r2_rejects_aws_encryption_headers():
-    with pytest.raises(
-        ValidationError,
-        match="Cloudflare R2 requires S3_SSE_ALGORITHM=provider-managed",
-    ):
-        _production_settings(
-            s3_provider="r2",
-            s3_region="auto",
-            s3_endpoint_url="https://0123456789abcdef0123456789abcdef.r2.cloudflarestorage.com",
-            s3_access_key_id="bucket-access-key",
-            s3_secret_access_key="bucket-secret-key",
-            s3_addressing_style="path",
-            s3_sse_algorithm="AES256",
-        )
-
-
-def test_r2_requires_cloudflare_endpoint_and_credentials():
-    common = {
-        "s3_provider": "r2",
-        "s3_region": "auto",
-        "s3_addressing_style": "path",
-        "s3_sse_algorithm": "provider-managed",
-    }
-    with pytest.raises(ValidationError, match="bucket-scoped access credentials"):
-        _production_settings(
-            **common,
-            s3_endpoint_url="https://0123456789abcdef0123456789abcdef.r2.cloudflarestorage.com",
-        )
-    with pytest.raises(ValidationError, match="Cloudflare R2 S3 endpoint"):
-        _production_settings(
-            **common,
-            s3_access_key_id="bucket-access-key",
-            s3_secret_access_key="bucket-secret-key",
-            s3_endpoint_url="https://s3.example.com",
         )
 
 

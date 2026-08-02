@@ -13,7 +13,7 @@ from app.db.session import engine, session_scope
 
 
 @pytest.mark.integration
-def test_migration_history_is_current_and_checksummed():
+def test_migration_history_is_current_and_checksummed(prepared_database):
     with session_scope() as db:
         rows = db.execute(text(
             "SELECT id, checksum FROM schema_migrations ORDER BY applied_at, id"
@@ -26,7 +26,7 @@ def test_migration_history_is_current_and_checksummed():
 
 
 @pytest.mark.integration
-def test_historical_migration_ids_are_recognized_and_checksummed():
+def test_historical_migration_ids_are_recognized_and_checksummed(prepared_database):
     migration_id = HISTORICAL_MIGRATION_IDS[0]
     with engine.connect() as connection:
         transaction = connection.begin()
@@ -51,7 +51,7 @@ def test_historical_migration_ids_are_recognized_and_checksummed():
 
 
 @pytest.mark.integration
-def test_unknown_migration_id_is_still_rejected():
+def test_unknown_migration_id_is_still_rejected(prepared_database):
     with engine.connect() as connection:
         transaction = connection.begin()
         try:

@@ -99,6 +99,20 @@ def test_staged_delete_can_be_restored_or_finalized(tmp_path: Path):
     assert not path.exists()
 
 
+def test_default_local_storage_uses_configured_ephemeral_temp_root(tmp_path: Path, monkeypatch):
+    from app.services import storage as storage_module
+
+    persistent_root = tmp_path / "documents"
+    ephemeral_root = tmp_path / "uploads"
+    monkeypatch.setattr(storage_module.settings, "storage_path", str(persistent_root))
+    monkeypatch.setattr(storage_module.settings, "storage_temp_path", str(ephemeral_root))
+
+    configured = LocalStorage()
+
+    assert configured.root == persistent_root
+    assert configured.temp_root == ephemeral_root
+
+
 def test_s3_storage_round_trip_and_transactional_delete(tmp_path: Path, monkeypatch):
     from app.services import storage as storage_module
 
@@ -140,37 +154,6 @@ def test_s3_storage_round_trip_and_transactional_delete(tmp_path: Path, monkeypa
     storage.check_ready()
 
 
-def test_r2_omits_unsupported_aws_encryption_headers(tmp_path: Path, monkeypatch):
-    from app.services import storage as storage_module
-
-    monkeypatch.setattr(storage_module.settings, "s3_provider", "r2")
-    monkeypatch.setattr(storage_module.settings, "s3_bucket", "private-r2-bucket")
-    monkeypatch.setattr(storage_module.settings, "s3_prefix", "tenant-data")
-    monkeypatch.setattr(
-        storage_module.settings,
-        "s3_sse_algorithm",
-        "provider-managed",
-    )
-    client = FakeS3Client()
-    storage = S3Storage(client=client, temp_root=tmp_path / "temp")
-    source = tmp_path / "source.pdf"
-    source.write_bytes(b"%PDF-r2")
-
-    storage.put_file(
-        source,
-        "active/company/file.pdf",
-        content_type="application/pdf",
-        checksum="b" * 64,
-    )
-    storage.copy("active/company/file.pdf", "active/company/copy.pdf")
-    storage.check_ready()
-
-    assert "ServerSideEncryption" not in client.put_args[0]
-    assert "SSEKMSKeyId" not in client.put_args[0]
-    assert all("ServerSideEncryption" not in args for args in client.copy_args)
-    assert all("ServerSideEncryption" not in args for args in client.put_args)
-
-
 def test_s3_readiness_caches_write_probe_but_always_checks_bucket(
     tmp_path: Path,
     monkeypatch,
@@ -201,24 +184,3 @@ def test_s3_readiness_caches_write_probe_but_always_checks_bucket(
     assert client.head_bucket_calls == 3
     assert len(client.put_args) == 2
     assert len(client.delete_args) == 2
-
-
-def test_r2_client_uses_required_endpoint_and_checksum_mode(tmp_path: Path, monkeypatch):
-    from app.services import storage as storage_module
-
-    endpoint = "https://0123456789abcdef0123456789abcdef.r2.cloudflarestorage.com"
-    monkeypatch.setattr(storage_module.settings, "s3_provider", "r2")
-    monkeypatch.setattr(storage_module.settings, "s3_bucket", "private-r2-bucket")
-    monkeypatch.setattr(storage_module.settings, "s3_region", "auto")
-    monkeypatch.setattr(storage_module.settings, "s3_endpoint_url", endpoint)
-    monkeypatch.setattr(storage_module.settings, "s3_access_key_id", "bucket-access-key")
-    monkeypatch.setattr(storage_module.settings, "s3_secret_access_key", "bucket-secret-key")
-    monkeypatch.setattr(storage_module.settings, "s3_session_token", "")
-    monkeypatch.setattr(storage_module.settings, "s3_addressing_style", "path")
-
-    storage = S3Storage(temp_root=tmp_path / "temp")
-
-    assert storage.client.meta.endpoint_url == endpoint
-    assert storage.client.meta.config.region_name == "auto"
-    assert storage.client.meta.config.request_checksum_calculation == "when_required"
-    assert storage.client.meta.config.response_checksum_validation == "when_required"

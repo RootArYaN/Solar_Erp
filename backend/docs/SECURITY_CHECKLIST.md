@@ -30,20 +30,19 @@
 - [x] Production Vite source maps disabled
 - [x] Development seed blocked in production
 - [x] Insecure production cookie configuration rejected at startup
-- [x] Production supports private encrypted Cloudflare R2 storage without unsupported AWS headers
+- [x] Hostinger production keeps documents in a private persistent Docker volume
 - [x] Transactional migrations use a deployment lock and checksummed history
 - [x] Existing production databases require a verified backup reference before migration
 
 ## Before public cloud deployment
 
-- [ ] Move `JWT_SECRET`, database password and R2 token into a secret manager
+- [x] Keep `JWT_SECRET` and the database password in ignored `.env.hostinger`
 - [ ] Use HTTPS end to end
 - [ ] Put API and frontend behind one trusted reverse proxy/domain
 - [ ] Add proxy/API-gateway rate limiting for multi-instance deployment
 - [ ] Add managed malware scanning for uploads
-- [x] Add encrypted private object storage and an `S3Storage` adapter
 - [ ] Enable database backups and test restoration
-- [ ] Configure an independent R2 backup bucket, retention lock and lifecycle policy
+- [ ] Automate encrypted off-VPS database and document-volume backups
 - [ ] Add centralized structured logs with secret redaction
 - [ ] Run dependency and container vulnerability scans
 - [ ] Run the full frontend build and application test suite from the complete repository

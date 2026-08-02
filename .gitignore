@@ -30,6 +30,8 @@ logs/
 *.stackdump
 
 # Test coverage and generic caches
+__pycache__/
+*.py[cod]
 coverage/
 .coverage
 .coverage.*
