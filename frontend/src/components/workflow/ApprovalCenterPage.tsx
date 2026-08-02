@@ -5,10 +5,11 @@ import {
   FileCheck2,
   FilePlus2,
   RefreshCw,
+  Search,
   UserRound,
   X,
 } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   decideQuotation,
   decideTransaction,
@@ -46,6 +47,8 @@ export function ApprovalCenterPage() {
   const [builderRequest, setBuilderRequest] = useState<QuotationRequestSummary | null>(null)
   const [previewRequest, setPreviewRequest] = useState<QuotationRequestSummary | null>(null)
   const [decisionTarget, setDecisionTarget] = useState<DecisionTarget | null>(null)
+  const [quotationSearch, setQuotationSearch] = useState('')
+  const [transactionSearch, setTransactionSearch] = useState('')
   const { toast } = useToast()
 
   async function load() {
@@ -104,6 +107,44 @@ export function ApprovalCenterPage() {
     }
   }
 
+  const visibleQuotationRequests = useMemo(() => {
+    const term = quotationSearch.trim().toLowerCase()
+    if (!term) return data.quotation_requests
+    return data.quotation_requests.filter((item) => {
+      const quotation = item.quotation
+      return [
+        item.customer_name,
+        item.company_name,
+        item.customer_phone,
+        item.agent_name,
+        item.requirement_summary,
+        item.proposed_capacity_kw,
+        item.project_number,
+        item.project_status,
+        item.status,
+        quotation?.title,
+        quotation?.quotation_number,
+        quotation?.status,
+        quotation?.grand_total,
+      ].filter((value) => value != null).join(' ').toLowerCase().includes(term)
+    })
+  }, [data.quotation_requests, quotationSearch])
+
+  const visibleTransactions = useMemo(() => {
+    const term = transactionSearch.trim().toLowerCase()
+    if (!term) return data.transactions
+    return data.transactions.filter((item) => [
+      item.agent_name,
+      item.reference,
+      item.transaction_type,
+      item.description,
+      item.transaction_date,
+      item.status,
+      item.debit,
+      item.credit,
+    ].join(' ').toLowerCase().includes(term))
+  }, [data.transactions, transactionSearch])
+
   const quotationCount = data.quotation_requests.length
   const pendingQuotationCount = data.quotation_requests.filter((item) =>
     !item.quotation || ['pending_approval', 'condition', 'rejected'].includes(item.quotation.status),
@@ -128,16 +169,22 @@ export function ApprovalCenterPage() {
       <section className="approval-panel approval-panel--quotation">
         <header>
           <div><FileCheck2 size={18} /><span><strong>Quotations</strong><small>Simple quote review and approval</small></span></div>
-          <em>{data.quotation_requests.length}</em>
+          <em title={`${visibleQuotationRequests.length} visible of ${data.quotation_requests.length}`}>{quotationSearch.trim() ? `${visibleQuotationRequests.length}/${data.quotation_requests.length}` : data.quotation_requests.length}</em>
         </header>
+        {data.quotation_requests.length > 0 && <label className="approval-search">
+          <Search size={15} />
+          <input type="search" value={quotationSearch} onChange={(event) => setQuotationSearch(event.target.value)} placeholder="Search customer, project, quote or status" aria-label="Search quotation approvals" />
+        </label>}
         {loading
           ? <div className="approval-empty">Loading quotations…</div>
           : data.quotation_requests.length === 0
             ? <div className="approval-empty">No quotation requests.</div>
+            : visibleQuotationRequests.length === 0
+              ? <div className="approval-empty">No quotations match your search.</div>
             : <div className="approval-table-wrap" data-scroll-surface="table">
               <table className="approval-table approval-table--quotations">
                 <thead><tr><th>Customer</th><th>Requirement</th><th>Quote</th><th>Status</th><th>Action</th></tr></thead>
-                <tbody>{data.quotation_requests.map((item) => {
+                <tbody>{visibleQuotationRequests.map((item) => {
                   const quotation = item.quotation
                   return <tr key={item.id}>
                     <td data-label="Customer">
@@ -178,14 +225,20 @@ export function ApprovalCenterPage() {
       </section>
 
       <section className="approval-panel approval-panel--transactions">
-        <header><div><ClipboardCheck size={18} /><span><strong>Transactions</strong><small>Pending entries require approval</small></span></div><em>{data.transactions.length}</em></header>
+        <header><div><ClipboardCheck size={18} /><span><strong>Transactions</strong><small>Pending entries require approval</small></span></div><em title={`${visibleTransactions.length} visible of ${data.transactions.length}`}>{transactionSearch.trim() ? `${visibleTransactions.length}/${data.transactions.length}` : data.transactions.length}</em></header>
+        {data.transactions.length > 0 && <label className="approval-search">
+          <Search size={15} />
+          <input type="search" value={transactionSearch} onChange={(event) => setTransactionSearch(event.target.value)} placeholder="Search agent, reference or details" aria-label="Search transaction approvals" />
+        </label>}
         {loading
           ? <div className="approval-empty">Loading transactions…</div>
           : data.transactions.length === 0
             ? <div className="approval-empty">No transactions are waiting for approval.</div>
+            : visibleTransactions.length === 0
+              ? <div className="approval-empty">No transactions match your search.</div>
             : <div className="approval-table-wrap" data-scroll-surface="table"><table className="approval-table approval-table--transactions">
               <thead><tr><th>Agent</th><th>Date</th><th>Details</th><th>Amount</th><th>Action</th></tr></thead>
-              <tbody>{data.transactions.map((item) => <tr key={item.approval_id}>
+              <tbody>{visibleTransactions.map((item) => <tr key={item.approval_id}>
                 <td data-label="Agent"><strong>{item.agent_name}</strong><small>{item.reference || 'No reference'}</small></td>
                 <td data-label="Date">{dateFormatter.format(new Date(item.transaction_date))}</td>
                 <td data-label="Details"><strong>{prettyStatus(item.transaction_type)}</strong><small>{item.description}</small></td>

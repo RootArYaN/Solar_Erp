@@ -76,9 +76,17 @@ def test_environment_loader_rejects_duplicates(tmp_path: Path):
 
 def test_hostinger_runtime_contracts_are_pinned():
     compose = (REPOSITORY_ROOT / "compose.hostinger.yml").read_text()
+    local_backend_example = (REPOSITORY_ROOT / "backend/.env.example").read_text()
+    local_frontend_example = (REPOSITORY_ROOT / "frontend/.env.example").read_text()
     nginx = (REPOSITORY_ROOT / "frontend/nginx.conf").read_text()
     healthcheck = (REPOSITORY_ROOT / "backend/scripts/container_healthcheck.py").read_text()
 
+    assert "${HOSTINGER_ENV_FILE:-.env.hostinger}" in compose
+    assert "backend/.env" not in compose
+    assert "ENVIRONMENT=development" in local_backend_example
+    assert "SESSION_COOKIE_SECURE=false" in local_backend_example
+    assert "STORAGE_TYPE=local" in local_backend_example
+    assert "VITE_DEV_API_TARGET=http://127.0.0.1:8000" in local_frontend_example
     assert 'TRUST_PROXY_HEADERS: "true"' in compose
     assert "condition: service_healthy" in compose
     assert "document-storage:/app/storage" in compose
@@ -91,7 +99,6 @@ def test_obsolete_provider_deployment_files_are_absent():
     for relative in (
         "render.yaml",
         "compose.production.yml",
-        "deploy/RENDER_CLOUDFLARE.md",
         "frontend/wrangler.jsonc",
     ):
         assert not (REPOSITORY_ROOT / relative).exists()

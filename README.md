@@ -52,6 +52,10 @@ API documentation: `http://localhost:8000/docs`
 
 Backend test: `pip install -r requirements-dev.txt && pytest`
 
+Local backend commands always resolve `backend/.env`, even if launched from the
+repository root. The test suite overrides the database and storage paths with
+test-only values. Neither local development nor tests load `.env.hostinger`.
+
 ## 2. Run the frontend
 
 ```bash
@@ -73,6 +77,8 @@ are never exposed as a public directory.
 ## Production migration path
 
 - Keep production secrets only in the ignored `.env.hostinger` file.
+- Use `.env.hostinger` only with `compose.hostinger.yml`; never pass it to local
+  API, Vite, pytest, or performance commands.
 - Create verified Hostinger, PostgreSQL, and document-volume recovery points.
 - Rehearse the migration against a restored database copy.
 - Run the migration release command with the backup reference.

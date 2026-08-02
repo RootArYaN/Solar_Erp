@@ -7,6 +7,10 @@ from pydantic import EmailStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+BACKEND_ROOT = Path(__file__).resolve().parents[2]
+BACKEND_ENV_FILE = BACKEND_ROOT / ".env"
+
+
 class Settings(BaseSettings):
     app_name: str = "Shree Enterprise API"
     environment: str = "development"
@@ -94,7 +98,10 @@ class Settings(BaseSettings):
     seed_admin_email: EmailStr = "admin@solarerp.dev"
     seed_admin_password: str = "ChangeMe123!"
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    # Local runs always load backend/.env, even when the command is launched
+    # from the repository root. Production receives values from the explicit
+    # Hostinger Compose environment and the image does not contain this file.
+    model_config = SettingsConfigDict(env_file=BACKEND_ENV_FILE, env_file_encoding="utf-8", extra="ignore")
 
     @field_validator("database_url", mode="before")
     @classmethod
@@ -105,6 +112,11 @@ class Settings(BaseSettings):
             if value.startswith("postgres://"):
                 return value.replace("postgres://", "postgresql+psycopg://", 1)
         return value
+
+    @field_validator("storage_type", mode="before")
+    @classmethod
+    def normalize_storage_type(cls, value):
+        return value.strip().lower() if isinstance(value, str) else value
 
     @field_validator("seed_company_name", "seed_admin_name")
     @classmethod

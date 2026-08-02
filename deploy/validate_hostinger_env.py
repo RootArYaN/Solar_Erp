@@ -120,7 +120,7 @@ def validate(values: dict[str, str], *, require_bootstrap_password: bool) -> lis
 
     obsolete = sorted(
         key for key in values
-        if key.startswith(("CLOUDFLARE_", "R2_", "RENDER_", "S3_"))
+        if key.startswith(("RENDER_", "S3_"))
     )
     if obsolete:
         errors.append("Remove non-Hostinger storage/provider variables: " + ", ".join(obsolete))

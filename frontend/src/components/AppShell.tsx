@@ -1,5 +1,5 @@
-import { BadgeIndianRupee, Boxes, Building2, ClipboardCheck, ContactRound, FileUp, ImageUp, LayoutDashboard, ListChecks, LogOut, Menu, PanelLeftClose, PanelLeftOpen, ShieldCheck, Users, UsersRound, WalletCards, X } from 'lucide-react'
-import { Suspense, useState } from 'react'
+import { BadgeIndianRupee, Boxes, Building2, ClipboardCheck, ContactRound, FileUp, ImageUp, LayoutDashboard, ListChecks, LogOut, Menu, Monitor, PanelLeftClose, PanelLeftOpen, ShieldCheck, Smartphone, Users, UsersRound, WalletCards, X } from 'lucide-react'
+import { Suspense, useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { hasAnyPermission, hasPermission, PERMISSIONS } from '../lib/permissions'
 import type { Session } from '../types'
@@ -9,7 +9,15 @@ export function AppShell({ session, onLogout }: { session: Session; onLogout: ()
   const [mobileOpen, setMobileOpen] = useState(false)
   const location = useLocation()
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [layoutView, setLayoutView] = useState<'desktop' | 'mobile'>(() => window.matchMedia('(max-width: 780px)').matches ? 'mobile' : 'desktop')
+  const isSuperAdmin = session.user.is_super_admin
   const canViewAdministration = hasAnyPermission(session, [PERMISSIONS.users.view, PERMISSIONS.roles.view])
+
+  useEffect(() => {
+    const previewingMobile = isSuperAdmin && layoutView === 'mobile'
+    document.body.classList.toggle('app-preview-mobile', previewingMobile)
+    return () => document.body.classList.remove('app-preview-mobile')
+  }, [isSuperAdmin, layoutView])
 
   const links = [
     { to: '/app', end: true, label: 'Overview', title: 'Overview', icon: LayoutDashboard, permission: PERMISSIONS.dashboard.view },
@@ -26,7 +34,7 @@ export function AppShell({ session, onLogout }: { session: Session; onLogout: ()
   ]
 
   return (
-    <main className={`app-shell ${sidebarCollapsed ? 'app-shell--sidebar-collapsed' : ''}`}>
+    <main className={`app-shell ${sidebarCollapsed ? 'app-shell--sidebar-collapsed' : ''} ${isSuperAdmin ? `app-shell--has-view-switch app-shell--view-${layoutView}` : ''}`}>
       <aside className={`app-sidebar ${mobileOpen ? 'app-sidebar--open' : ''}`}>
         <div className="app-sidebar__brand">
           <BrandMark compact />
@@ -51,6 +59,17 @@ export function AppShell({ session, onLogout }: { session: Session; onLogout: ()
       <section className="app-main">
         <header className="app-topbar">
           <button className="icon-button app-menu-button" onClick={() => setMobileOpen(true)} aria-label="Open menu"><Menu size={20} /></button>
+          {isSuperAdmin && (
+            <div className="layout-view-switch" role="group" aria-label="Workspace preview size">
+              <span>View</span>
+              <button type="button" className={layoutView === 'desktop' ? 'is-active' : ''} aria-pressed={layoutView === 'desktop'} onClick={() => { setLayoutView('desktop'); setMobileOpen(false) }} title="Desktop view">
+                <Monitor size={15} /><span>Desktop</span>
+              </button>
+              <button type="button" className={layoutView === 'mobile' ? 'is-active' : ''} aria-pressed={layoutView === 'mobile'} onClick={() => { setLayoutView('mobile'); setSidebarCollapsed(false) }} title="Mobile view">
+                <Smartphone size={15} /><span>Mobile</span>
+              </button>
+            </div>
+          )}
         </header>
         <div className="app-viewport">
           <Suspense fallback={<RouteLoadingState />}>

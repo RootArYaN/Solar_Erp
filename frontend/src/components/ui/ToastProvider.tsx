@@ -1,6 +1,8 @@
 import { AlertCircle, CheckCircle2, Info, TriangleAlert, X } from 'lucide-react'
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { createClientId } from '../../lib/client-id'
+import { simpleToastError } from '../../lib/error-messages'
 
 type ToastVariant = 'success' | 'error' | 'warning' | 'info'
 
@@ -46,8 +48,8 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     const id = createClientId()
     const item: ToastItem = {
       id,
-      title: value.title,
-      message: value.message,
+      title: value.title ?? (value.variant === 'error' ? 'Action failed' : undefined),
+      message: value.variant === 'error' ? simpleToastError(value.message) : value.message,
       variant: value.variant ?? 'info',
       duration: value.duration ?? (value.variant === 'error' ? 6500 : 4200),
     }
@@ -75,7 +77,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   return (
     <ToastContext.Provider value={value}>
       {children}
-      <div className="toast-viewport" aria-live="polite" aria-relevant="additions removals">
+      {createPortal(<div className="toast-viewport" aria-live="polite" aria-relevant="additions removals">
         {items.map((item) => {
           const Icon = icons[item.variant]
           return (
@@ -90,7 +92,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
             </article>
           )
         })}
-      </div>
+      </div>, document.body)}
     </ToastContext.Provider>
   )
 }

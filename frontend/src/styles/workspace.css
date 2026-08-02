@@ -1197,6 +1197,261 @@ body,
   }
 }
 
+/* Customer workspace on phones: use the page as the only vertical scroll
+   surface, keep every directory row reachable, and give the customer identity
+   the full row before placing the two actions side by side. */
+.app-shell--view-mobile .customer-directory {
+  min-height: 0;
+  max-height: none !important;
+  padding: 10px;
+}
+
+.app-shell--view-mobile .customer-directory__filters {
+  grid-template-columns: minmax(0, 1fr) 118px;
+  align-items: stretch;
+}
+
+.app-shell--view-mobile .customer-directory__list {
+  overflow: visible;
+}
+
+.app-shell--view-mobile .customer-directory__list > button {
+  min-width: 0;
+  padding-block: 7px;
+}
+
+.app-shell--view-mobile .customer-workspace {
+  padding: 11px;
+}
+
+.app-shell--view-mobile .customer-workspace__header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+}
+
+.app-shell--view-mobile .customer-title-block,
+.app-shell--view-mobile .customer-title-block > div {
+  width: 100%;
+  min-width: 0;
+}
+
+.app-shell--view-mobile .customer-title-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  font-size: 14px;
+}
+
+.app-shell--view-mobile .customer-title-block h1 {
+  overflow: hidden;
+  margin-block: 2px;
+  font-size: 18px;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-shell--view-mobile .customer-title-block p {
+  row-gap: 3px;
+}
+
+.app-shell--view-mobile .customer-header-actions {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.app-shell--view-mobile .customer-header-actions button {
+  width: 100%;
+  min-width: 0;
+  min-height: 36px;
+  justify-content: center;
+  padding-inline: 10px;
+}
+
+.app-shell--view-mobile .customer-kpis article {
+  padding: 8px;
+}
+
+@media (max-width: 780px) {
+  .customer-directory {
+    min-height: 0;
+    max-height: none !important;
+    padding: 10px;
+  }
+
+  .customer-directory__filters {
+    grid-template-columns: minmax(0, 1fr) 118px;
+    align-items: stretch;
+  }
+
+  .customer-directory__list {
+    overflow: visible;
+  }
+
+  .customer-directory__list > button {
+    min-width: 0;
+    padding-block: 7px;
+  }
+
+  .customer-workspace {
+    padding: 11px;
+  }
+
+  .customer-workspace__header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .customer-title-block,
+  .customer-title-block > div {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .customer-title-icon {
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    font-size: 14px;
+  }
+
+  .customer-title-block h1 {
+    overflow: hidden;
+    margin-block: 2px;
+    font-size: 18px;
+    line-height: 1.15;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .customer-title-block p {
+    row-gap: 3px;
+  }
+
+  .customer-header-actions {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 7px;
+  }
+
+  .customer-header-actions button {
+    width: 100%;
+    min-width: 0;
+    min-height: 36px;
+    justify-content: center;
+    padding-inline: 10px;
+  }
+
+  .customer-kpis article {
+    padding: 8px;
+  }
+}
+
+/* Compact agent controls for phone mode. */
+.app-shell--view-mobile .agent-page > .workspace-header .workspace-header__copy {
+  display: none;
+}
+
+.app-shell--view-mobile .agent-page > .workspace-header {
+  display: block;
+}
+
+.app-shell--view-mobile .agent-page__actions {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(68px, 1fr));
+  gap: 5px;
+}
+
+.app-shell--view-mobile .agent-page__actions button {
+  width: 100%;
+  min-width: 0;
+  padding-inline: 5px;
+  gap: 4px;
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+.app-shell--view-mobile .agent-page__actions button > svg {
+  width: 13px;
+  height: 13px;
+}
+
+.app-shell--view-mobile .agent-action-label--full { display: none; }
+.app-shell--view-mobile .agent-action-label--compact { display: inline; }
+
+.app-shell--view-mobile .agent-workspace-toolbar {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.app-shell--view-mobile .agent-global-search,
+.app-shell--view-mobile .agent-toolbar-picker {
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  flex: none;
+  margin: 0;
+}
+
+@media (max-width: 780px) {
+  .agent-page > .workspace-header .workspace-header__copy { display: none; }
+  .agent-page > .workspace-header { display: block; }
+
+  .agent-page__actions {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(68px, 1fr));
+    gap: 5px;
+  }
+
+  .agent-page__actions button {
+    width: 100%;
+    min-width: 0;
+    padding-inline: 5px;
+    gap: 4px;
+    font-size: 9px;
+    white-space: nowrap;
+  }
+
+  .agent-page__actions button > svg {
+    width: 13px;
+    height: 13px;
+  }
+
+  .agent-action-label--full { display: none; }
+  .agent-action-label--compact { display: inline; }
+
+  .agent-workspace-toolbar {
+    width: 100%;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+  }
+
+  .agent-global-search,
+  .agent-toolbar-picker {
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    flex: none;
+    margin: 0;
+  }
+}
+
 @media (max-width: 520px) {
   .workspace-kpi-grid,
   .workspace-page > :is(.erp-kpi-grid, .admin-stats, .agent-kpi-grid, .customer-kpis, .finance-kpis) {
@@ -1453,4 +1708,1676 @@ body,
   .movement-lines>header{align-items:flex-start;flex-direction:column}
   .inventory-history-tabs{width:100%;margin-left:0}
   .inventory-history-tabs button{flex:1}
+}
+
+/* Super-admin responsive preview and mobile layout repair. */
+.app-shell--has-view-switch .app-main {
+  grid-template-rows: 48px minmax(0, 1fr);
+}
+
+.app-shell--has-view-switch .app-topbar {
+  min-width: 0;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--workspace-border);
+  background: rgba(255, 255, 255, .86);
+  backdrop-filter: blur(16px);
+  z-index: 20;
+}
+
+.app-shell--has-view-switch .app-viewport {
+  grid-row: 2;
+}
+
+.layout-view-switch {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid var(--workspace-border);
+  border-radius: 10px;
+  background: #f2f3f3;
+}
+
+.layout-view-switch > span {
+  padding: 0 6px;
+  color: #7a8490;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .55px;
+  text-transform: uppercase;
+}
+
+.layout-view-switch button {
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 7px;
+  color: #6b7682;
+  background: transparent;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.layout-view-switch button:hover {
+  color: #263a4d;
+  background: rgba(255, 255, 255, .72);
+}
+
+.layout-view-switch button.is-active {
+  color: #233d54;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(28, 42, 54, .11);
+}
+
+/* Mobile preview is a real narrow shell, so navigation, cards and scrolling can
+   be checked without resizing the browser. */
+.app-shell--view-mobile {
+  position: relative;
+  width: min(430px, 100%);
+  grid-template-columns: minmax(0, 1fr);
+  margin: 0 auto;
+  box-shadow: 0 0 0 1px rgba(25, 40, 53, .08), 0 20px 60px rgba(25, 40, 53, .12);
+}
+
+.app-shell--view-mobile .app-sidebar {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: min(300px, 86%);
+  height: 100%;
+  transform: translateX(-104%);
+  transition: transform .24s ease;
+}
+
+.app-shell--view-mobile .app-sidebar--open { transform: translateX(0); }
+.app-shell--view-mobile .app-sidebar__close,
+.app-shell--view-mobile .app-menu-button { display: grid; }
+.app-shell--view-mobile .sidebar-collapse-button { display: none; }
+.app-shell--view-mobile .sidebar-backdrop { position: absolute; display: block; }
+.app-shell--view-mobile .app-topbar { justify-content: space-between; }
+
+.app-shell--view-mobile .workspace-page,
+.app-shell--view-mobile .workspace-page.erp-page,
+.app-shell--view-mobile .workspace-page.admin-page,
+.app-shell--view-mobile .workspace-page.agent-page,
+.app-shell--view-mobile .workspace-page.customer-detail-page,
+.app-shell--view-mobile .workspace-page.project-timeline-page,
+.app-shell--view-mobile .workspace-page.approval-page,
+.app-shell--view-mobile .workspace-page.finance-page,
+.app-shell--view-mobile .workspace-page.security-page {
+  height: 100%;
+  max-height: 100%;
+  padding: 10px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  scrollbar-gutter: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.app-shell--view-mobile .workspace-header,
+.app-shell--view-mobile .workspace-page > :is(.erp-page-head, .page-heading, .security-header, .finance-page-header, .module-page-header) {
+  display: grid;
+  align-items: stretch;
+}
+
+.app-shell--view-mobile .workspace-header__actions,
+.app-shell--view-mobile .workspace-page > :is(.erp-page-head, .page-heading, .security-header, .finance-page-header, .module-page-header) > :last-child:not(:first-child),
+.app-shell--view-mobile .erp-head-actions,
+.app-shell--view-mobile .agent-page__actions {
+  width: 100%;
+}
+
+.app-shell--view-mobile .workspace-scroll-surface,
+.app-shell--view-mobile .role-grid,
+.app-shell--view-mobile .agent-page__body,
+.app-shell--view-mobile .agent-summary-layout,
+.app-shell--view-mobile .agent-tables-grid,
+.app-shell--view-mobile .workspace-page .workspace-tab-panel,
+.app-shell--view-mobile .workspace-page .finance-tab-panel {
+  flex: 0 0 auto;
+  height: auto;
+  max-height: none;
+  overflow: visible;
+}
+
+.app-shell--view-mobile .workspace-kpi-grid,
+.app-shell--view-mobile .workspace-page > :is(.erp-kpi-grid, .admin-stats, .agent-kpi-grid, .customer-kpis, .finance-kpis),
+.app-shell--view-mobile .dashboard-operation-grid,
+.app-shell--view-mobile .poster-grid,
+.app-shell--view-mobile .poster-grid--persistent {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+}
+
+.app-shell--view-mobile .workspace-kpi-grid > *,
+.app-shell--view-mobile .workspace-page > :is(.erp-kpi-grid, .admin-stats, .agent-kpi-grid, .customer-kpis, .finance-kpis) > *,
+.app-shell--view-mobile .dashboard-operation-grid > *,
+.app-shell--view-mobile .poster-grid > * {
+  width: 100%;
+  height: 100%;
+}
+
+.app-shell--view-mobile .workspace-page .customer-detail-layout,
+.app-shell--view-mobile .workspace-page .project-timeline-layout,
+.app-shell--view-mobile .workspace-page .approval-split-layout,
+.app-shell--view-mobile .inventory-stock-grid,
+.app-shell--view-mobile .agent-summary-layout,
+.app-shell--view-mobile .agent-tables-grid {
+  flex: 0 0 auto;
+  height: auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto;
+  overflow: visible;
+}
+
+.app-shell--view-mobile .workspace-page :is(.customer-directory, .customer-workspace, .timeline-projects-panel, .timeline-detail-panel, .approval-split-layout > *) {
+  width: 100%;
+  height: auto;
+  max-height: none;
+}
+
+.app-shell--view-mobile .workspace-page :is(.customer-workspace, .timeline-detail-panel) { overflow: visible; }
+.app-shell--view-mobile .customer-directory { min-height: 260px; max-height: 320px !important; }
+.app-shell--view-mobile .data-panel { flex: 0 0 auto; min-height: 420px; }
+.app-shell--view-mobile .role-grid { display: grid; grid-template-columns: 1fr; }
+.app-shell--view-mobile .inventory-workspace-body,
+.app-shell--view-mobile .pricing-workspace-panel { height: auto; overflow: visible; }
+.app-shell--view-mobile .inventory-stock-grid > .erp-panel,
+.app-shell--view-mobile .inventory-workspace-body > .erp-panel { height: auto; min-height: 360px; }
+.app-shell--view-mobile .dashboard-live { overflow-y: auto !important; }
+
+@media (max-width: 780px) {
+  .app-shell--has-view-switch .layout-view-switch > span { display: none; }
+
+  .app-viewport,
+  .app-shell--has-view-switch .app-viewport {
+    height: auto;
+    min-height: 0;
+    grid-row: 2;
+  }
+
+  .workspace-page,
+  .workspace-page.erp-page,
+  .workspace-page.admin-page,
+  .workspace-page.agent-page,
+  .workspace-page.customer-detail-page,
+  .workspace-page.project-timeline-page,
+  .workspace-page.approval-page,
+  .workspace-page.finance-page,
+  .workspace-page.security-page {
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    scrollbar-gutter: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .workspace-scroll-surface,
+  .role-grid,
+  .agent-page__body,
+  .agent-summary-layout,
+  .agent-tables-grid,
+  .workspace-page .workspace-tab-panel,
+  .workspace-page .finance-tab-panel {
+    flex: 0 0 auto;
+    height: auto;
+    max-height: none;
+    overflow: visible;
+  }
+
+  .workspace-page .customer-detail-layout,
+  .workspace-page .project-timeline-layout,
+  .workspace-page .approval-split-layout,
+  .inventory-stock-grid,
+  .agent-summary-layout,
+  .agent-tables-grid {
+    flex: 0 0 auto;
+    height: auto;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto;
+    overflow: visible;
+  }
+
+  .workspace-page :is(.customer-directory, .customer-workspace, .timeline-projects-panel, .timeline-detail-panel, .approval-split-layout > *) {
+    width: 100%;
+    height: auto;
+    max-height: none;
+  }
+
+  .workspace-page :is(.customer-workspace, .timeline-detail-panel) { overflow: visible; }
+  .customer-directory { min-height: 260px; max-height: 320px !important; }
+  .admin-page > .data-panel { flex: 0 0 auto; min-height: 420px; }
+  .role-grid { display: grid; grid-template-columns: 1fr; }
+  .inventory-workspace-body,
+  .pricing-workspace-panel { height: auto; overflow: visible; }
+  .inventory-stock-grid > .erp-panel,
+  .inventory-workspace-body > .erp-panel { height: auto; min-height: 360px; }
+  .dashboard-live { overflow-y: auto !important; }
+
+  .workspace-kpi-grid,
+  .workspace-page > :is(.erp-kpi-grid, .admin-stats, .agent-kpi-grid, .customer-kpis, .finance-kpis),
+  .dashboard-operation-grid,
+  .poster-grid,
+  .poster-grid--persistent {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: stretch;
+  }
+
+  .workspace-kpi-grid > *,
+  .workspace-page > :is(.erp-kpi-grid, .admin-stats, .agent-kpi-grid, .customer-kpis, .finance-kpis) > *,
+  .dashboard-operation-grid > *,
+  .poster-grid > * {
+    width: 100%;
+    height: 100%;
+  }
+}
+
+@media (max-width: 380px) {
+  .layout-view-switch button { padding-inline: 8px; }
+  .layout-view-switch button span { display: none; }
+
+  .workspace-kpi-grid,
+  .workspace-page > :is(.erp-kpi-grid, .admin-stats, .agent-kpi-grid, .customer-kpis, .finance-kpis),
+  .dashboard-operation-grid,
+  .poster-grid,
+  .poster-grid--persistent {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Pricing controls share one desktop row: name on the left, search and action
+   grouped on the right. */
+.workspace-page .pricing-book-head {
+  display: grid !important;
+  grid-template-columns: minmax(240px, 480px) minmax(340px, 1fr);
+  align-items: end !important;
+  gap: 12px;
+}
+
+.workspace-page .pricing-book-head > label {
+  width: 100%;
+  min-width: 0;
+}
+
+.workspace-page .pricing-book-actions {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: nowrap;
+  gap: 8px;
+}
+
+.workspace-page .pricing-row-search {
+  width: min(360px, 100%);
+  min-width: 220px;
+  flex: 0 1 360px;
+}
+
+.workspace-page .pricing-book-actions > button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+@media (max-width: 700px) {
+  .workspace-page .pricing-book-head,
+  .app-shell--view-mobile .workspace-page .pricing-book-head {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .workspace-page .pricing-book-actions {
+    width: 100%;
+  }
+
+  .workspace-page .pricing-row-search {
+    width: auto;
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+}
+
+.app-shell--view-mobile .workspace-page .pricing-book-head {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* Let the pricing table use the full card surface while keeping the toolbar
+   controls comfortably inset. */
+.workspace-page .pricing-workspace-panel {
+  padding: 13px 0 0;
+}
+
+.workspace-page .pricing-workspace-panel > .pricing-book-head {
+  padding-inline: 13px;
+}
+
+.workspace-page .pricing-workspace-panel > .erp-table-wrap {
+  width: 100%;
+  max-width: 100%;
+  border-right: 0;
+  border-bottom: 0;
+  border-left: 0;
+  border-radius: 0 0 12px 12px;
+}
+
+/* Project timeline: the simulated phone shell must receive the same stacking
+   behavior as a physically narrow viewport. Keep the actionable admin panel
+   first and give both cards the full available width. */
+.app-shell--view-mobile .timeline-detail-panel {
+  padding: 12px;
+  overflow: visible;
+}
+
+.app-shell--view-mobile .timeline-content-grid,
+.app-shell--view-mobile .timeline-content-grid--read-only {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow: visible;
+}
+
+.app-shell--view-mobile .timeline-admin-panel,
+.app-shell--view-mobile .timeline-view-panel {
+  position: static;
+  order: -1;
+}
+
+.app-shell--view-mobile .project-timeline-card,
+.app-shell--view-mobile .timeline-admin-panel,
+.app-shell--view-mobile .timeline-view-panel {
+  width: 100%;
+  min-width: 0;
+}
+
+@media (max-width: 780px) {
+  .workspace-page .timeline-content-grid,
+  .workspace-page .timeline-content-grid--read-only {
+    width: 100%;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    overflow: visible;
+  }
+
+  .workspace-page .timeline-admin-panel,
+  .workspace-page .timeline-view-panel {
+    position: static;
+    order: -1;
+  }
+
+  .workspace-page .project-timeline-card,
+  .workspace-page .timeline-admin-panel,
+  .workspace-page .timeline-view-panel {
+    width: 100%;
+    min-width: 0;
+  }
+}
+
+/* This override must follow the shared phone layout, which otherwise restores
+   the old fixed-height directory and clips the final customer rows. */
+.app-shell--view-mobile .customer-directory {
+  min-height: 0;
+  max-height: none !important;
+}
+
+@media (max-width: 780px) {
+  .workspace-page .customer-directory {
+    min-height: 0;
+    max-height: none !important;
+  }
+}
+
+/* Approval center phone layout. Desktop tables become readable, full-width
+   records instead of retaining five compressed columns inside the preview. */
+.app-shell--view-mobile .approval-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.app-shell--view-mobile .approval-kpis {
+  width: 100%;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.app-shell--view-mobile .approval-kpis article {
+  min-height: 64px;
+  padding: 10px 11px;
+}
+
+.app-shell--view-mobile .approval-refresh {
+  width: 100%;
+  grid-column: auto;
+  min-height: 40px;
+  align-self: auto;
+}
+
+.app-shell--view-mobile .approval-panel,
+.app-shell--view-mobile .approval-table-wrap {
+  height: auto;
+  max-height: none;
+  overflow: visible;
+  scrollbar-gutter: auto;
+}
+
+.app-shell--view-mobile .approval-table {
+  width: 100%;
+  min-width: 0 !important;
+  display: block;
+  table-layout: auto;
+}
+
+.app-shell--view-mobile .approval-table thead {
+  display: none;
+}
+
+.app-shell--view-mobile .approval-table tbody {
+  width: 100%;
+  display: grid;
+}
+
+.app-shell--view-mobile .approval-table tr {
+  width: 100%;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px 12px;
+  padding: 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.app-shell--view-mobile .approval-table tbody tr:last-child {
+  border-bottom: 0;
+}
+
+.app-shell--view-mobile .approval-table td {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  overflow-wrap: normal;
+}
+
+.app-shell--view-mobile .approval-table td::before {
+  display: block;
+  margin-bottom: 3px;
+  color: #8a929d;
+  font-size: 7px;
+  font-weight: 850;
+  letter-spacing: .6px;
+  text-transform: uppercase;
+}
+
+.app-shell--view-mobile .approval-table--quotations td:nth-child(1) { grid-column: 1; grid-row: 1; }
+.app-shell--view-mobile .approval-table--quotations td:nth-child(4) { grid-column: 2; grid-row: 1; align-self: start; }
+.app-shell--view-mobile .approval-table--quotations td:nth-child(2),
+.app-shell--view-mobile .approval-table--quotations td:nth-child(3),
+.app-shell--view-mobile .approval-table--quotations td:nth-child(5) { grid-column: 1 / -1; }
+.app-shell--view-mobile .approval-table--quotations td:nth-child(2)::before { content: "Requirement"; }
+.app-shell--view-mobile .approval-table--quotations td:nth-child(3)::before { content: "Quote"; }
+
+.app-shell--view-mobile .approval-customer-cell {
+  min-width: 0;
+}
+
+.app-shell--view-mobile .approval-quote-summary > strong {
+  white-space: normal;
+}
+
+.app-shell--view-mobile .approval-row-actions {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(88px, 1fr));
+  gap: 7px;
+}
+
+.app-shell--view-mobile .approval-row-actions button {
+  width: 100%;
+  min-height: 36px;
+  justify-content: center;
+}
+
+.app-shell--view-mobile .approval-table--transactions td:nth-child(1) { grid-column: 1; grid-row: 1; }
+.app-shell--view-mobile .approval-table--transactions td:nth-child(2) { grid-column: 2; grid-row: 1; justify-self: end; }
+.app-shell--view-mobile .approval-table--transactions td:nth-child(3),
+.app-shell--view-mobile .approval-table--transactions td:nth-child(5) { grid-column: 1 / -1; }
+.app-shell--view-mobile .approval-table--transactions td:nth-child(4) { grid-column: 1 / -1; }
+.app-shell--view-mobile .approval-table--transactions td:nth-child(3)::before { content: "Details"; }
+.app-shell--view-mobile .approval-table--transactions td:nth-child(4)::before { content: "Amount"; }
+
+@media (max-width: 780px) {
+  .approval-toolbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+
+  .approval-kpis {
+    width: 100%;
+    min-width: 0;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .approval-kpis article {
+    min-height: 64px;
+    padding: 10px 11px;
+  }
+
+  .approval-refresh {
+    width: 100%;
+    grid-column: auto;
+    min-height: 40px;
+    align-self: auto;
+  }
+
+  .approval-panel,
+  .approval-table-wrap {
+    height: auto;
+    max-height: none;
+    overflow: visible;
+    scrollbar-gutter: auto;
+  }
+
+  .approval-table {
+    width: 100%;
+    min-width: 0 !important;
+    display: block;
+    table-layout: auto;
+  }
+
+  .approval-table thead {
+    display: none;
+  }
+
+  .approval-table tbody {
+    width: 100%;
+    display: grid;
+  }
+
+  .approval-table tr {
+    width: 100%;
+    min-width: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px 12px;
+    padding: 12px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .approval-table tbody tr:last-child {
+    border-bottom: 0;
+  }
+
+  .approval-table td {
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    overflow-wrap: normal;
+  }
+
+  .approval-table td::before {
+    display: block;
+    margin-bottom: 3px;
+    color: #8a929d;
+    font-size: 7px;
+    font-weight: 850;
+    letter-spacing: .6px;
+    text-transform: uppercase;
+  }
+
+  .approval-table--quotations td:nth-child(1) { grid-column: 1; grid-row: 1; }
+  .approval-table--quotations td:nth-child(4) { grid-column: 2; grid-row: 1; align-self: start; }
+  .approval-table--quotations td:nth-child(2),
+  .approval-table--quotations td:nth-child(3),
+  .approval-table--quotations td:nth-child(5) { grid-column: 1 / -1; }
+  .approval-table--quotations td:nth-child(2)::before { content: "Requirement"; }
+  .approval-table--quotations td:nth-child(3)::before { content: "Quote"; }
+
+  .approval-customer-cell {
+    min-width: 0;
+  }
+
+  .approval-quote-summary > strong {
+    white-space: normal;
+  }
+
+  .approval-row-actions {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(88px, 1fr));
+    gap: 7px;
+  }
+
+  .approval-row-actions button {
+    width: 100%;
+    min-height: 36px;
+    justify-content: center;
+  }
+
+  .approval-table--transactions td:nth-child(1) { grid-column: 1; grid-row: 1; }
+  .approval-table--transactions td:nth-child(2) { grid-column: 2; grid-row: 1; justify-self: end; }
+  .approval-table--transactions td:nth-child(3),
+  .approval-table--transactions td:nth-child(5) { grid-column: 1 / -1; }
+  .approval-table--transactions td:nth-child(4) { grid-column: 1 / -1; }
+  .approval-table--transactions td:nth-child(3)::before { content: "Details"; }
+  .approval-table--transactions td:nth-child(4)::before { content: "Amount"; }
+}
+
+/* Phone workspaces start with their controls and content. Hide only the
+   route-level heading copy; record names, panel headings and modal titles stay
+   visible because they carry active context. */
+.app-shell--view-mobile .workspace-page > .workspace-header > .workspace-header__copy,
+.app-shell--view-mobile .workspace-page > .workspace-header > div:first-child:has(> h1) {
+  display: none;
+}
+
+.app-shell--view-mobile .workspace-page > .workspace-header {
+  gap: 0;
+}
+
+@media (max-width: 780px) {
+  .workspace-page > .workspace-header > .workspace-header__copy,
+  .workspace-page > .workspace-header > div:first-child:has(> h1) {
+    display: none;
+  }
+
+  .workspace-page > .workspace-header {
+    gap: 0;
+  }
+}
+
+/* Finance phone containment. The simulated mobile shell does not trigger
+   viewport media queries, so mirror the real-phone toolbar layout explicitly. */
+.app-shell--view-mobile .workspace-page.finance-page {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: hidden;
+}
+
+.app-shell--view-mobile .finance-page > *,
+.app-shell--view-mobile .finance-tab-panel > * {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.app-shell--view-mobile .finance-page-header > div:last-child {
+  width: 100%;
+  margin-left: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 7px;
+}
+
+.app-shell--view-mobile .finance-page-header > div:last-child button {
+  width: 100%;
+  min-width: 0;
+  justify-content: center;
+}
+
+.app-shell--view-mobile .finance-tabs {
+  width: 100%;
+  max-width: 100%;
+  display: flex;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.app-shell--view-mobile .finance-tabs button {
+  flex: 0 0 auto;
+}
+
+.app-shell--view-mobile .finance-overview-grid,
+.app-shell--view-mobile .account-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.app-shell--view-mobile .finance-tab-panel :is(.finance-kpis, .mini-kpis, .finance-bill-kpis, .finance-expense-kpis, .finance-ledger-kpis) {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.app-shell--view-mobile .finance-tab-panel :is(.finance-ledger-toolbar, .finance-expense-toolbar, .finance-bills-toolbar) {
+  width: 100%;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: end;
+  gap: 7px;
+}
+
+.app-shell--view-mobile .finance-tab-panel :is(.finance-ledger-heading, .finance-expense-heading, .finance-bills-heading, .finance-ledger-search, .finance-expense-presets) {
+  width: 100%;
+  min-width: 0;
+  grid-column: 1 / -1;
+}
+
+.app-shell--view-mobile .finance-tab-panel :is(.finance-ledger-field, .finance-ledger-direction, .finance-expense-date, .finance-bill-type) {
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  flex: none;
+}
+
+.app-shell--view-mobile .finance-expense-presets {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  overflow: visible;
+}
+
+.app-shell--view-mobile .finance-expense-presets button,
+.app-shell--view-mobile :is(.finance-ledger-apply, .finance-expense-apply, .finance-expense-create, .finance-bill-apply, .finance-bill-create) {
+  width: 100%;
+  min-width: 0;
+}
+
+.app-shell--view-mobile .finance-ledger-export {
+  width: 100%;
+  min-width: 0;
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.app-shell--view-mobile .finance-ledger-export button {
+  width: 100%;
+  min-width: 0;
+}
+
+.app-shell--view-mobile .finance-bill-create {
+  grid-column: 1 / -1;
+}
+
+.app-shell--view-mobile .finance-tab-panel .tab-toolbar {
+  width: 100%;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 7px;
+}
+
+.app-shell--view-mobile .finance-tab-panel .tab-toolbar > :last-child:not(:first-child) {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+}
+
+.app-shell--view-mobile .finance-tab-panel .tab-toolbar button {
+  width: 100%;
+  min-width: 0;
+  justify-content: center;
+}
+
+.app-shell--view-mobile .finance-tab-panel .erp-table-wrap {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: visible;
+}
+
+@media (max-width: 780px) {
+  .workspace-page.finance-page {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: hidden;
+  }
+
+  .finance-page > *,
+  .finance-tab-panel > * {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+
+  .finance-page-header > div:last-child {
+    width: 100%;
+    margin-left: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 7px;
+  }
+
+  .finance-page-header > div:last-child button {
+    width: 100%;
+    min-width: 0;
+    justify-content: center;
+  }
+
+  .finance-tabs {
+    width: 100%;
+    max-width: 100%;
+    display: flex;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .finance-tabs button {
+    flex: 0 0 auto;
+  }
+
+  .finance-overview-grid,
+  .account-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .finance-tab-panel :is(.finance-kpis, .mini-kpis, .finance-bill-kpis, .finance-expense-kpis, .finance-ledger-kpis) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .finance-tab-panel :is(.finance-ledger-toolbar, .finance-expense-toolbar, .finance-bills-toolbar) {
+    width: 100%;
+    min-width: 0;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: end;
+    gap: 7px;
+  }
+
+  .finance-tab-panel :is(.finance-ledger-heading, .finance-expense-heading, .finance-bills-heading, .finance-ledger-search, .finance-expense-presets) {
+    width: 100%;
+    min-width: 0;
+    grid-column: 1 / -1;
+  }
+
+  .finance-tab-panel :is(.finance-ledger-field, .finance-ledger-direction, .finance-expense-date, .finance-bill-type) {
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    flex: none;
+  }
+
+  .finance-expense-presets {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    overflow: visible;
+  }
+
+  .finance-expense-presets button,
+  :is(.finance-ledger-apply, .finance-expense-apply, .finance-expense-create, .finance-bill-apply, .finance-bill-create) {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .finance-ledger-export {
+    width: 100%;
+    min-width: 0;
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .finance-ledger-export button {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .finance-bill-create {
+    grid-column: 1 / -1;
+  }
+
+  .finance-tab-panel .tab-toolbar {
+    width: 100%;
+    min-width: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 7px;
+  }
+
+  .finance-tab-panel .tab-toolbar > :last-child:not(:first-child) {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+  }
+
+  .finance-tab-panel .tab-toolbar button {
+    width: 100%;
+    min-width: 0;
+    justify-content: center;
+  }
+
+  .finance-tab-panel .erp-table-wrap {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: visible;
+  }
+}
+
+/* Dialogs are portalled to <body>, outside the simulated phone shell. Mirror
+   the 430px preview frame on the portal so forms cannot size against the full
+   desktop browser viewport. */
+body.app-preview-mobile :is(.modal-layer, .alert-dialog-layer) {
+  inset: 0 auto 0 50%;
+  width: min(430px, 100vw);
+  max-width: 100vw;
+  padding: 8px;
+  place-items: end center;
+  overflow: hidden;
+  transform: translateX(-50%);
+}
+
+body.app-preview-mobile .modal-layer .modal-card,
+body.app-preview-mobile .modal-layer .modal-card:is(.quotation-request-modal, .quotation-builder-modal, .quotation-preview-modal, .document-template-modal, .finance-modal, .inventory-movement-modal),
+body.app-preview-mobile .alert-dialog {
+  width: 100%;
+  max-width: 100%;
+  max-height: calc(100dvh - 16px);
+  border-radius: 16px 16px 0 0;
+}
+
+body.app-preview-mobile .modal-layer .modal-card {
+  min-width: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: hidden;
+}
+
+body.app-preview-mobile .modal-card__header {
+  min-width: 0;
+  padding: 11px 12px;
+}
+
+body.app-preview-mobile .modal-card__header > div {
+  min-width: 0;
+}
+
+body.app-preview-mobile .modal-card__header h2,
+body.app-preview-mobile .modal-card__header p {
+  overflow-wrap: anywhere;
+}
+
+body.app-preview-mobile .modal-card__body {
+  min-width: 0;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: auto;
+}
+
+body.app-preview-mobile .modal-card__body > *,
+body.app-preview-mobile .modal-card__body .erp-form {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+body.app-preview-mobile .modal-card :is(.admin-form__grid, .erp-form-grid, .quotation-request-fields) {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+body.app-preview-mobile .finance-modal .erp-form {
+  padding: 12px;
+}
+
+body.app-preview-mobile .modal-card__body :is(.erp-form-actions, .modal-actions, .dialog-actions) {
+  width: auto;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-inline: -12px;
+  padding-inline: 12px;
+}
+
+body.app-preview-mobile .modal-card__body :is(.erp-form-actions, .modal-actions, .dialog-actions) button {
+  width: 100%;
+  min-width: 0;
+}
+
+@media (max-width: 780px) {
+  .modal-layer .finance-modal {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    max-height: calc(100dvh - 16px);
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    overflow: hidden;
+    border-radius: 16px 16px 0 0;
+  }
+
+  .finance-modal .modal-card__body {
+    min-width: 0;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .finance-modal .modal-card__body > *,
+  .finance-modal .modal-card__body .erp-form {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+
+  .finance-modal .erp-form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .finance-modal .modal-card__body :is(.erp-form-actions, .modal-actions, .dialog-actions) {
+    width: auto;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .finance-modal .modal-card__body :is(.erp-form-actions, .modal-actions, .dialog-actions) button {
+    width: 100%;
+    min-width: 0;
+  }
+}
+
+/* Keep finance summaries visible on phones in a compact, scannable grid. */
+.app-shell--view-mobile .finance-tab-panel > :is(.finance-kpis, .mini-kpis) {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (max-width: 780px) {
+  .finance-tab-panel > :is(.finance-kpis, .mini-kpis) {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Customer documents: the generated pack is a desktop editor/preview split.
+   On phones it becomes one contained vertical workspace with no page overflow. */
+body.app-preview-mobile .workspace-page.document-page {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: hidden;
+}
+
+body.app-preview-mobile .document-page > *,
+body.app-preview-mobile .document-page__body > *,
+body.app-preview-mobile .generated-pack-panel > * {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+body.app-preview-mobile .document-page > .workspace-header .workspace-header__actions,
+body.app-preview-mobile .document-page > .workspace-header .workspace-header__actions button {
+  width: 100%;
+}
+
+body.app-preview-mobile .document-kpi-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+body.app-preview-mobile .document-kpi-grid > .document-customer-kpi {
+  grid-column: 1 / -1;
+}
+
+body.app-preview-mobile .generated-pack-panel {
+  padding: 10px;
+  overflow: hidden;
+}
+
+body.app-preview-mobile .generated-pack-toolbar {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 7px;
+  padding: 7px;
+}
+
+body.app-preview-mobile .generated-pack-actions {
+  width: 100%;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  overflow: visible;
+}
+
+body.app-preview-mobile .generated-pack-actions button {
+  width: 100%;
+  min-width: 0;
+  padding-inline: 8px;
+  white-space: normal;
+}
+
+body.app-preview-mobile .generated-pack-version {
+  width: 100%;
+  min-width: 0;
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+body.app-preview-mobile .generated-pack-version select {
+  width: 100%;
+  min-width: 0;
+}
+
+body.app-preview-mobile .generated-pack-workspace {
+  width: 100%;
+  min-width: 0;
+  height: auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+}
+
+body.app-preview-mobile .generated-pack-form {
+  width: 100%;
+  min-width: 0;
+  height: auto;
+  max-height: none;
+  padding: 11px;
+  overflow: visible;
+  scrollbar-gutter: auto;
+}
+
+body.app-preview-mobile .generated-pack-approved-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+body.app-preview-mobile .generated-pack-fields {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+body.app-preview-mobile .generated-pack-fields .erp-form-wide {
+  grid-column: auto;
+}
+
+body.app-preview-mobile .generated-pack-preview {
+  width: 100%;
+  min-width: 0;
+  height: min(620px, 72dvh);
+}
+
+body.app-preview-mobile .generated-pack-preview__head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 7px;
+}
+
+body.app-preview-mobile .generated-pack-zoom {
+  max-width: 100%;
+  justify-self: end;
+}
+
+body.app-preview-mobile .generated-pack-preview__scroll {
+  width: 100%;
+  min-width: 0;
+  padding: 8px;
+  overflow: auto;
+}
+
+body.app-preview-mobile .document-workspace-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+body.app-preview-mobile .document-data-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+body.app-preview-mobile .document-data-grid__wide {
+  grid-column: 1 / -1;
+}
+
+body.app-preview-mobile .document-template-preview {
+  align-items: stretch;
+  flex-direction: column;
+}
+
+body.app-preview-mobile .document-template-preview > button {
+  width: 100%;
+}
+
+body.app-preview-mobile .document-checklist {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+body.app-preview-mobile .document-checklist article {
+  width: 100%;
+  min-width: 0;
+}
+
+@media (max-width: 780px) {
+  .workspace-page.document-page {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: hidden;
+  }
+
+  .document-page > *,
+  .document-page__body > *,
+  .generated-pack-panel > * {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+
+  .document-page > .workspace-header .workspace-header__actions,
+  .document-page > .workspace-header .workspace-header__actions button {
+    width: 100%;
+  }
+
+  .document-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .document-kpi-grid > .document-customer-kpi {
+    grid-column: 1 / -1;
+  }
+
+  .generated-pack-panel {
+    padding: 10px;
+    overflow: hidden;
+  }
+
+  .generated-pack-toolbar {
+    width: 100%;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 7px;
+    padding: 7px;
+  }
+
+  .generated-pack-actions {
+    width: 100%;
+    min-width: 0;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+    overflow: visible;
+  }
+
+  .generated-pack-actions button {
+    width: 100%;
+    min-width: 0;
+    padding-inline: 8px;
+    white-space: normal;
+  }
+
+  .generated-pack-version {
+    width: 100%;
+    min-width: 0;
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .generated-pack-version select {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .generated-pack-workspace {
+    width: 100%;
+    min-width: 0;
+    height: auto;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .generated-pack-form {
+    width: 100%;
+    min-width: 0;
+    height: auto;
+    max-height: none;
+    padding: 11px;
+    overflow: visible;
+    scrollbar-gutter: auto;
+  }
+
+  .generated-pack-approved-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .generated-pack-approved-field.is-wide {
+    grid-column: 1 / -1;
+  }
+
+  .generated-pack-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .generated-pack-fields .erp-form-wide {
+    grid-column: auto;
+  }
+
+  .generated-pack-preview {
+    width: 100%;
+    min-width: 0;
+    height: min(620px, 72dvh);
+  }
+
+  .generated-pack-preview__head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 7px;
+  }
+
+  .generated-pack-zoom {
+    max-width: 100%;
+    justify-self: end;
+  }
+
+  .generated-pack-preview__scroll {
+    width: 100%;
+    min-width: 0;
+    padding: 8px;
+    overflow: auto;
+  }
+
+  .document-workspace-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .document-data-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .document-data-grid__wide {
+    grid-column: 1 / -1;
+  }
+
+  .document-template-preview {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .document-template-preview > button {
+    width: 100%;
+  }
+
+  .document-checklist {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .document-checklist article {
+    width: 100%;
+    min-width: 0;
+  }
+}
+
+/* Inventory phone workspace --------------------------------------------
+ * The page owns vertical scrolling. Dense desktop tables become labelled
+ * records so stock, locations and movement history remain usable at 320px.
+ */
+:is(.app-shell--view-mobile, body.app-preview-mobile) .workspace-page.erp-page > .erp-page-head > div:first-child {
+  display: none;
+}
+
+:is(.app-shell--view-mobile, body.app-preview-mobile) .workspace-page.erp-page > .erp-page-head {
+  margin: 0;
+  padding: 0;
+}
+
+:is(.app-shell--view-mobile, body.app-preview-mobile) .workspace-page.erp-page > .erp-page-head .erp-head-actions {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+:is(.app-shell--view-mobile, body.app-preview-mobile) .workspace-page.erp-page > .erp-page-head .erp-head-actions button {
+  width: 100%;
+  min-width: 0;
+  min-height: 40px;
+  justify-content: center;
+  padding-inline: 8px;
+  white-space: normal;
+}
+
+:is(.app-shell--view-mobile, body.app-preview-mobile) .inventory-main-tabs {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  overflow: visible;
+}
+
+:is(.app-shell--view-mobile, body.app-preview-mobile) .inventory-main-tabs button,
+:is(.app-shell--view-mobile, body.app-preview-mobile) .inventory-history-tabs button {
+  width: 100%;
+  min-width: 0;
+  white-space: normal;
+}
+
+:is(.app-shell--view-mobile, body.app-preview-mobile) :is(
+  .inventory-workspace-body,
+  .inventory-stock-grid,
+  .inventory-stock-grid > .erp-panel,
+  .inventory-workspace-body > .erp-panel
+) {
+  width: 100%;
+  height: auto;
+  max-height: none;
+  min-height: 0;
+  overflow: visible;
+}
+
+:is(.app-shell--view-mobile, body.app-preview-mobile) .inventory-stock-grid {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto;
+}
+
+:is(.app-shell--view-mobile, body.app-preview-mobile) .inventory-items-panel .erp-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 112px;
+  align-items: stretch;
+}
+
+:is(.app-shell--view-mobile, body.app-preview-mobile) .inventory-items-panel .erp-toolbar > * {
+  width: 100%;
+  min-width: 0;
+}
+
+:is(.app-shell--view-mobile, body.app-preview-mobile) .inventory-history-panel > header {
+  align-items: stretch;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+:is(.app-shell--view-mobile, body.app-preview-mobile) .inventory-history-tabs {
+  width: 100%;
+  margin-left: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  overflow: visible;
+}
+
+:is(.app-shell--view-mobile, body.app-preview-mobile) :is(.inventory-table, .inventory-table tbody, .inventory-table tr, .inventory-table td) {
+  width: 100%;
+  min-width: 0 !important;
+  display: block;
+}
+
+:is(.app-shell--view-mobile, body.app-preview-mobile) .inventory-table thead {
+  display: none;
+}
+
+:is(.app-shell--view-mobile, body.app-preview-mobile) .inventory-table tbody {
+  display: grid;
+  gap: 8px;
+  padding: 8px;
+  background: #f6f7f7;
+}
+
+:is(.app-shell--view-mobile, body.app-preview-mobile) .inventory-table tr {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: #fff;
+}
+
+:is(.app-shell--view-mobile, body.app-preview-mobile) .inventory-table td {
+  display: grid;
+  grid-template-columns: minmax(82px, .42fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
+  padding: 9px 10px;
+  border-top: 1px solid rgba(35, 46, 61, .07);
+  overflow-wrap: anywhere;
+}
+
+:is(.app-shell--view-mobile, body.app-preview-mobile) .inventory-table td:first-child {
+  border-top: 0;
+}
+
+:is(.app-shell--view-mobile, body.app-preview-mobile) .inventory-table td::before {
+  content: attr(data-label);
+  color: #818b96;
+  font-size: 8px;
+  font-weight: 850;
+  letter-spacing: .55px;
+  text-transform: uppercase;
+}
+
+:is(.app-shell--view-mobile, body.app-preview-mobile) .inventory-table td > * {
+  min-width: 0;
+}
+
+:is(.app-shell--view-mobile, body.app-preview-mobile) .inventory-table .table-row-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+:is(.app-shell--view-mobile, body.app-preview-mobile) .inventory-table .table-row-actions button,
+:is(.app-shell--view-mobile, body.app-preview-mobile) .inventory-table td[data-label='Actions'] > button {
+  width: 100%;
+  min-width: 0;
+  justify-content: center;
+}
+
+:is(.app-shell--view-mobile, body.app-preview-mobile) :is(.inventory-stock-grid, .inventory-history-panel) .erp-table-wrap {
+  border: 0;
+  border-radius: 0;
+  overflow: visible;
+}
+
+@media (max-width: 780px) {
+  .workspace-page.erp-page > .erp-page-head > div:first-child { display: none; }
+  .workspace-page.erp-page > .erp-page-head { margin: 0; padding: 0; }
+  .workspace-page.erp-page > .erp-page-head .erp-head-actions {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 7px;
+  }
+  .workspace-page.erp-page > .erp-page-head .erp-head-actions button {
+    width: 100%;
+    min-width: 0;
+    min-height: 40px;
+    justify-content: center;
+    padding-inline: 8px;
+    white-space: normal;
+  }
+  .inventory-main-tabs {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    overflow: visible;
+  }
+  .inventory-main-tabs button,
+  .inventory-history-tabs button { width: 100%; min-width: 0; white-space: normal; }
+  :is(.inventory-workspace-body, .inventory-stock-grid, .inventory-stock-grid > .erp-panel, .inventory-workspace-body > .erp-panel) {
+    width: 100%;
+    height: auto;
+    max-height: none;
+    min-height: 0;
+    overflow: visible;
+  }
+  .inventory-stock-grid { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto; }
+  .inventory-items-panel .erp-toolbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 112px;
+    align-items: stretch;
+  }
+  .inventory-items-panel .erp-toolbar > * { width: 100%; min-width: 0; }
+  .inventory-history-panel > header {
+    align-items: stretch;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .inventory-history-tabs {
+    width: 100%;
+    margin-left: 0;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    overflow: visible;
+  }
+  :is(.inventory-table, .inventory-table tbody, .inventory-table tr, .inventory-table td) {
+    width: 100%;
+    min-width: 0 !important;
+    display: block;
+  }
+  .inventory-table thead { display: none; }
+  .inventory-table tbody { display: grid; gap: 8px; padding: 8px; background: #f6f7f7; }
+  .inventory-table tr {
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: 11px;
+    background: #fff;
+  }
+  .inventory-table td {
+    display: grid;
+    grid-template-columns: minmax(82px, .42fr) minmax(0, 1fr);
+    align-items: center;
+    gap: 9px;
+    padding: 9px 10px;
+    border-top: 1px solid rgba(35, 46, 61, .07);
+    overflow-wrap: anywhere;
+  }
+  .inventory-table td:first-child { border-top: 0; }
+  .inventory-table td::before {
+    content: attr(data-label);
+    color: #818b96;
+    font-size: 8px;
+    font-weight: 850;
+    letter-spacing: .55px;
+    text-transform: uppercase;
+  }
+  .inventory-table td > * { min-width: 0; }
+  .inventory-table .table-row-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+  }
+  .inventory-table .table-row-actions button,
+  .inventory-table td[data-label='Actions'] > button {
+    width: 100%;
+    min-width: 0;
+    justify-content: center;
+  }
+  :is(.inventory-stock-grid, .inventory-history-panel) .erp-table-wrap {
+    border: 0;
+    border-radius: 0;
+    overflow: visible;
+  }
 }

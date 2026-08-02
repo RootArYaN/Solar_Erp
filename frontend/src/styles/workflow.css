@@ -65,6 +65,10 @@ button:disabled,input:disabled,select:disabled,textarea:disabled{cursor:not-allo
 .approval-panel > header strong { font-size: 13px; }
 .approval-panel > header small, .approval-panel > header em { color: var(--muted); font-size: 9px; font-style: normal; }
 .approval-panel > header em { display: grid; place-items: center; min-width: 25px; height: 25px; padding: 0 7px; border-radius: 999px; background: #f3f2ef; font-weight: 800; }
+.approval-search { min-width: 0; min-height: 38px; flex: 0 0 auto; display: flex; align-items: center; gap: 8px; margin: 10px 12px 8px; padding: 0 10px; border: 1px solid var(--line); border-radius: 9px; color: #77818c; background: #fff; }
+.approval-search:focus-within { border-color: #d0a354; box-shadow: 0 0 0 3px rgba(196,139,43,.1); }
+.approval-search input { width: 100%; min-width: 0; min-height: 36px; padding: 0; border: 0; outline: 0; color: #303944; background: transparent; font: inherit; font-size: 9px; }
+.approval-search input::placeholder { color: #8b939c; }
 .approval-empty { min-height: 0; flex: 1 1 auto; display: grid; place-items: center; padding: 24px 16px; color: var(--muted); text-align: center; font-size: 11px; }
 .approval-table-wrap { width: 100%; min-height: 0; flex: 1 1 auto; overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
 .approval-table { width: 100%; border-collapse: collapse; table-layout: auto; }
@@ -275,4 +279,3 @@ button:disabled,input:disabled,select:disabled,textarea:disabled{cursor:not-allo
 .spin{animation:spin 1s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
 
 /* Persisted customer documents */
-

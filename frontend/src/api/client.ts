@@ -1,6 +1,7 @@
 import type { ApiErrorBody, FieldErrors, IdempotentRequestOptions } from '../contracts/api-contracts'
 import type { AuthSessionResponse, Session } from '../types'
 import { AUTH_SESSION_EVENT, clearSession, getAccessToken, replaceSession, type SessionEndReason } from '../lib/auth-storage'
+import { apiErrorMessage } from '../lib/error-messages'
 
 const DEFAULT_TIMEOUT_MS = 30_000
 const UNSAFE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
@@ -27,14 +28,21 @@ export class ApiError extends Error {
   readonly code: string
   readonly fieldErrors: FieldErrors
   readonly requestId: string | null
+  readonly technicalMessage: string
 
   constructor(input: { status: number; body: ApiErrorBody }) {
-    super(input.body.message)
+    super(apiErrorMessage({
+      status: input.status,
+      code: input.body.code,
+      message: input.body.message,
+      hasFieldErrors: Object.keys(input.body.field_errors).length > 0,
+    }))
     this.name = 'ApiError'
     this.status = input.status
     this.code = input.body.code
     this.fieldErrors = input.body.field_errors
     this.requestId = input.body.request_id
+    this.technicalMessage = input.body.message
   }
 }
 

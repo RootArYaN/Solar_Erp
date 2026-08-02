@@ -49,14 +49,13 @@ export function AgentWorkspaceControls({
     <WorkspaceHeader
       eyebrow="Sales network"
       title="Agent overview"
-      description="Review assigned customers, agent balances and transaction history from one workspace."
       actions={<div className="agent-page__actions">
         <button type="button" className="secondary-button secondary-button--icon" onClick={onRefresh} disabled={loading} aria-label="Refresh agent overview">
-          <RefreshCw className={loading ? 'spin' : ''} size={16} /> Refresh
+          <RefreshCw className={loading ? 'spin' : ''} size={16} /><span className="agent-action-label agent-action-label--full">Refresh</span><span className="agent-action-label agent-action-label--compact">Refresh</span>
         </button>
-        {overview && canEditProfile && <button type="button" className="secondary-button secondary-button--icon" onClick={onEditProfile}><Edit3 size={16} /> Edit profile</button>}
-        {overview && canRegisterCustomers && <button type="button" className="secondary-button secondary-button--icon" onClick={onRegisterCustomer}><Plus size={16} /> Register customer</button>}
-        {overview && canPostTransactions && <button type="button" className="primary-button primary-button--compact" onClick={onAddTransaction}><Plus size={17} /> Add transaction</button>}
+        {overview && canEditProfile && <button type="button" className="secondary-button secondary-button--icon" onClick={onEditProfile}><Edit3 size={16} /><span className="agent-action-label agent-action-label--full">Edit profile</span><span className="agent-action-label agent-action-label--compact">Edit</span></button>}
+        {overview && canRegisterCustomers && <button type="button" className="secondary-button secondary-button--icon" onClick={onRegisterCustomer}><Plus size={16} /><span className="agent-action-label agent-action-label--full">Register customer</span><span className="agent-action-label agent-action-label--compact">Customer</span></button>}
+        {overview && canPostTransactions && <button type="button" className="primary-button primary-button--compact" onClick={onAddTransaction}><Plus size={17} /><span className="agent-action-label agent-action-label--full">Add transaction</span><span className="agent-action-label agent-action-label--compact">Transaction</span></button>}
       </div>}
     />
 

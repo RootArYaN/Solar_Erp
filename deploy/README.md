@@ -15,4 +15,4 @@ Internet → Hostinger Traefik → unprivileged Nginx frontend → FastAPI
 
 Only Traefik owns public ports 80/443. PostgreSQL, FastAPI, ClamAV, and document
 storage remain private to Docker networks or volumes. Do not deploy the old
-Render, Cloudflare, Caddy, or public object-storage topology.
+multi-provider or public object-storage topology.

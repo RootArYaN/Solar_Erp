@@ -296,7 +296,6 @@ export function CustomerDataUploadPage({ session }: { session: Session }) {
     <WorkspaceHeader
       eyebrow="Customer records"
       title="Documents and generated packs"
-      description="Manage the approved customer data, mandatory uploads, templates, versions and final document pack."
       actions={<button type="button" className="secondary-button" onClick={() => void load()} disabled={loading || working}><RefreshCw className={loading ? 'spin' : ''} size={14} /> Refresh</button>}
     />
     <KpiGrid columns={snapshot ? 5 : 1} className="erp-kpi-grid document-kpi-grid">

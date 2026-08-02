@@ -19,6 +19,7 @@
 .agent-toolbar-picker > span { color: #8a9098; font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: .8px; }
 .agent-toolbar-picker select { width: 100%; min-width: 140px; border: 0; outline: 0; color: var(--ink); background: transparent; font: inherit; font-size: 11px; }
 .agent-page__actions { display: flex; align-items: center; justify-content: flex-end; gap: 9px; }
+.agent-action-label--compact { display: none; }
 .agent-workspace-toolbar .agent-page__actions { flex: 0 0 auto; }
 .agent-workspace-toolbar .secondary-button,
 .agent-workspace-toolbar .primary-button--compact { min-height: 36px; height: 36px; padding: 0 12px; border-radius: 8px; }

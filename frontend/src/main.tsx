@@ -13,6 +13,7 @@ import './styles/feedback.css'
 import './styles/workflow.css'
 import './styles/finance.css'
 import './styles/workspace.css'
+import './styles/ui-system.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from app.core.config import Settings
+from app.core.config import BACKEND_ENV_FILE, BACKEND_ROOT, Settings
 
 
 def _production_settings(**overrides):
@@ -117,6 +117,23 @@ def test_storage_write_probe_interval_is_bounded():
         match="STORAGE_WRITE_PROBE_INTERVAL_SECONDS must be between 60 and 86400",
     ):
         Settings(_env_file=None, storage_write_probe_interval_seconds=30)
+
+
+def test_storage_type_is_case_insensitive():
+    configured = Settings(
+        _env_file=None,
+        storage_type=" S3 ",
+        s3_bucket="private-solar-erp-test",
+    )
+
+    assert configured.storage_type == "s3"
+
+
+def test_default_environment_file_is_backend_local_and_absolute():
+    assert BACKEND_ENV_FILE == BACKEND_ROOT / ".env"
+    assert BACKEND_ENV_FILE.is_absolute()
+    assert BACKEND_ENV_FILE.name == ".env"
+    assert "hostinger" not in BACKEND_ENV_FILE.as_posix().lower()
 
 
 def test_bootstrap_identifiers_are_normalized():

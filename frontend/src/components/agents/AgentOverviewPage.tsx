@@ -373,7 +373,6 @@ export function AgentOverviewPage({ session }: { session: Session }) {
               <div className="agent-profile-card__header">
                 <div className="agent-avatar">{overview.profile.full_name.split(' ').map((part) => part[0]).join('').slice(0, 2)}</div>
                 <div>
-                  <span className={`status-badge ${overview.profile.is_active ? 'status-badge--active' : ''}`}>{overview.profile.is_active ? 'Active agent' : 'Inactive agent'}</span>
                   <h2>{overview.profile.full_name}</h2>
                 </div>
               </div>

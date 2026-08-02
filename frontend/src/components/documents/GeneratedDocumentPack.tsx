@@ -159,8 +159,8 @@ export function GeneratedDocumentPackPanel({
     if (!viewport || !autoFitPreview) return
 
     const fit = () => {
-      const availableWidth = Math.max(320, viewport.clientWidth - 40)
-      const nextZoom = Math.min(1, Math.max(0.55, availableWidth / 720))
+      const availableWidth = Math.max(240, viewport.clientWidth - 24)
+      const nextZoom = Math.min(1, Math.max(0.35, availableWidth / 720))
       setPreviewZoom(Number(nextZoom.toFixed(2)))
     }
 
