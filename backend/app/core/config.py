@@ -49,6 +49,7 @@ class Settings(BaseSettings):
     storage_type: str = "local"
     storage_path: str = "./storage"
     storage_temp_path: str = "./storage/temp"
+    allow_local_storage_production: bool = False
     s3_provider: str = "aws"
     s3_bucket: str = ""
     s3_prefix: str = "solar-erp"
@@ -298,12 +299,23 @@ class Settings(BaseSettings):
                     "RATE_LIMIT_MODE must be gateway in production, except for an explicitly "
                     "configured single-worker deployment that is kept at one instance"
                 )
-            if self.storage_type != "s3":
-                raise ValueError("STORAGE_TYPE must be s3 in production")
-            if not self.normalized_s3_prefix:
-                raise ValueError("S3_PREFIX must not be empty in production")
-            if self.s3_endpoint_url and not self.s3_endpoint_url.startswith("https://"):
-                raise ValueError("S3_ENDPOINT_URL must use HTTPS in production")
+            private_single_host_storage = (
+                self.storage_type == "local"
+                and self.allow_local_storage_production
+                and self.single_instance_deployment
+                and Path(self.storage_path).is_absolute()
+                and self.storage_root != Path("/")
+            )
+            if self.storage_type != "s3" and not private_single_host_storage:
+                raise ValueError(
+                    "STORAGE_TYPE must be s3 in production, except for explicitly approved "
+                    "persistent local storage on a single-host deployment"
+                )
+            if self.storage_type == "s3":
+                if not self.normalized_s3_prefix:
+                    raise ValueError("S3_PREFIX must not be empty in production")
+                if self.s3_endpoint_url and not self.s3_endpoint_url.startswith("https://"):
+                    raise ValueError("S3_ENDPOINT_URL must use HTTPS in production")
         return self
 
 

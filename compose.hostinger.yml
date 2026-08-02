@@ -12,7 +12,10 @@ x-api-environment: &api-environment
   WEB_CONCURRENCY: "1"
   MALWARE_SCAN_COMMAND: python /app/scripts/clamd_scan.py --host malware-scanner --port 3310 {path}
   REQUIRE_MALWARE_SCAN: "true"
+  STORAGE_TYPE: local
+  STORAGE_PATH: /app/storage
   STORAGE_TEMP_PATH: /tmp/solar-erp
+  ALLOW_LOCAL_STORAGE_PRODUCTION: "true"
 
 services:
   database:
@@ -59,6 +62,8 @@ services:
       database:
         condition: service_healthy
     read_only: true
+    volumes:
+      - document-storage:/app/storage
     tmpfs:
       - /tmp/solar-erp:rw,noexec,nosuid,nodev,uid=10001,gid=10001,mode=0700
     cap_drop: [ALL]
@@ -104,6 +109,8 @@ services:
       malware-scanner:
         condition: service_started
     read_only: true
+    volumes:
+      - document-storage:/app/storage
     tmpfs:
       - /tmp/solar-erp:rw,noexec,nosuid,nodev,uid=10001,gid=10001,mode=0700
     cap_drop: [ALL]
@@ -164,6 +171,7 @@ networks:
 
 volumes:
   postgres-data:
+  document-storage:
   malware-signatures:
   caddy-data:
   caddy-config:

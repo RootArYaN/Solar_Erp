@@ -29,7 +29,7 @@ ENV PATH="/opt/venv/bin:${PATH}" \
 
 RUN groupadd --system --gid 10001 solarerp \
     && useradd --system --uid 10001 --gid solarerp --home-dir /app --shell /usr/sbin/nologin solarerp \
-    && mkdir -p /app /tmp/solar-erp \
+    && mkdir -p /app/storage/active /tmp/solar-erp \
     && chown -R solarerp:solarerp /app /tmp/solar-erp
 
 COPY --from=dependencies /opt/venv /opt/venv

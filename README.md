@@ -61,11 +61,11 @@ Open `http://localhost:5173`.
 
 ## Customer document storage
 
-Local development uses the private `backend/storage` directory. Production
-uses a private Cloudflare R2 bucket through its S3-compatible API. R2 encrypts
-objects automatically; the application deliberately omits unsupported AWS SSE
-headers. Use `backend/.env.production.example` and
-`backend/docs/R2_SETUP.md` as the configuration checklist.
+Local development uses the private `backend/storage` directory. Managed
+production deployments use a private Cloudflare R2 bucket through its
+S3-compatible API. The single-server Hostinger topology instead uses a private
+persistent Docker volume with independent off-server backups. Use the matching
+provider deployment guide and never expose either storage backend publicly.
 
 The static frontend uses a different R2 bucket and a small Cloudflare Worker
 for React route fallback. Never make the private document bucket public. See

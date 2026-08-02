@@ -143,6 +143,27 @@ def test_production_requires_object_storage():
         _production_settings(storage_type="local")
 
 
+def test_single_host_production_local_storage_is_accepted():
+    configured = _production_settings(
+        storage_type="local",
+        storage_path="/app/storage",
+        allow_local_storage_production=True,
+        single_instance_deployment=True,
+    )
+    assert configured.storage_type == "local"
+    assert configured.storage_root.as_posix() == "/app/storage"
+
+
+def test_production_local_storage_requires_an_absolute_bounded_path():
+    with pytest.raises(ValidationError, match="persistent local storage"):
+        _production_settings(
+            storage_type="local",
+            storage_path="./storage",
+            allow_local_storage_production=True,
+            single_instance_deployment=True,
+        )
+
+
 def test_production_rejects_unverified_database_tls():
     with pytest.raises(ValidationError, match="verify the database certificate"):
         _production_settings(database_sslmode="require")

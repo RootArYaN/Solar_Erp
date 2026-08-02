@@ -30,9 +30,10 @@ openssl rand -hex 32
 ```
 
 Edit `.env.hostinger`. Use the two generated values for `POSTGRES_PASSWORD` and
-`JWT_SECRET`, set the real domain/email/admin values, and add the private
-Cloudflare R2 bucket credentials. The PostgreSQL password must remain URL-safe;
-the hexadecimal command above provides a safe value.
+`JWT_SECRET`, then set the real domain, email and initial administrator values.
+Documents are stored in the private `document-storage` Docker volume on the
+VPS. The PostgreSQL password must remain URL-safe; the hexadecimal command
+above provides a safe value.
 
 ## 3. Validate and initialize
 
@@ -82,12 +83,17 @@ limiting to a trusted gateway before adding API replicas.
 
 ## Database backup
 
-Hostinger snapshots are useful for whole-server recovery, but also keep an
-independent encrypted PostgreSQL export outside the VPS:
+Hostinger snapshots are useful for whole-server recovery, but also keep
+independent encrypted PostgreSQL and document exports outside the VPS:
 
 ```bash
 docker compose --env-file .env.hostinger -f compose.hostinger.yml exec -T database pg_dump -U solar_erp -d solar_erp -Fc > solar-erp-$(date +%F).dump
+mkdir -p backups
+docker run --rm -v solar-erp-hostinger_document-storage:/data:ro -v "$PWD/backups:/backup" alpine:3.21 tar -czf /backup/solar-erp-documents-$(date +%F).tar.gz -C /data .
 ```
 
-Download the dump securely, verify that it can be restored, and remove the VPS
-copy after transfer. Never commit dumps or `.env.hostinger`.
+Download both exports securely, verify that they can be restored, and remove
+the VPS copies after transfer. Database records and document files form one
+recovery point and must be backed up together. Never commit backups or
+`.env.hostinger`, and never run `docker compose down -v` because `-v` deletes
+the persistent database and document volumes.
