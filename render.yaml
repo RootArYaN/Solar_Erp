@@ -21,7 +21,7 @@ services:
     healthCheckPath: /api/v1/ready
     maxShutdownDelaySeconds: 30
     preDeployCommand: scripts/run_production_migrations.sh
-    initialDeployHook: python scripts/bootstrap_admin.py
+    initialDeployHook: python -m scripts.bootstrap_admin
     envVars:
       - key: APP_NAME
         value: Shree Enterprise API

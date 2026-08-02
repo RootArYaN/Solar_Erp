@@ -3,9 +3,12 @@ from __future__ import annotations
 import os
 import sys
 
+from sqlalchemy import select
+
 from app.core.config import settings
 from app.db.seed import bootstrap_super_admin
 from app.db.session import SessionLocal
+from app.models.auth import User
 
 
 def main() -> int:
@@ -16,17 +19,29 @@ def main() -> int:
         print("Production administrator bootstrap is not enabled.", file=sys.stderr)
         return 64
 
-    password = settings.seed_admin_password
-    if password == "ChangeMe123!" or len(password) < 12:
-        print(
-            "SEED_ADMIN_PASSWORD must be a non-default password with at least 12 characters.",
-            file=sys.stderr,
-        )
-        return 64
-
-    with SessionLocal() as db:
-        bootstrap_super_admin(db, allow_production=True)
-    print(f"Initial administrator '{settings.seed_admin_username}' is ready.")
+    try:
+        with SessionLocal() as db:
+            username = settings.seed_admin_username.strip().lower()
+            email = str(settings.seed_admin_email).strip().lower()
+            username_user = db.scalar(select(User).where(User.username == username))
+            email_user = db.scalar(select(User).where(User.email == email))
+            password = settings.seed_admin_password
+            if username_user is None and email_user is None and (
+                password == "ChangeMe123!" or len(password) < 12
+            ):
+                print(
+                    "SEED_ADMIN_PASSWORD must be a non-default password with at least 12 characters.",
+                    file=sys.stderr,
+                )
+                return 64
+            bootstrap_super_admin(db, allow_production=True)
+    except RuntimeError as exc:
+        print(str(exc), file=sys.stderr)
+        return 65
+    print(
+        f"Identity defaults and initial administrator "
+        f"'{settings.seed_admin_username}' are ready."
+    )
     return 0
 
 

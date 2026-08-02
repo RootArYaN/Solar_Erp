@@ -190,3 +190,29 @@ def test_storage_write_probe_interval_is_bounded():
         match="STORAGE_WRITE_PROBE_INTERVAL_SECONDS must be between 60 and 86400",
     ):
         Settings(_env_file=None, storage_write_probe_interval_seconds=30)
+
+
+def test_bootstrap_identifiers_are_normalized():
+    configured = Settings(
+        _env_file=None,
+        seed_company_name="  Example   Solar  ",
+        seed_company_code=" ex_01 ",
+        seed_admin_name="  Primary   Admin ",
+        seed_admin_username=" ADMIN.User ",
+    )
+    assert configured.seed_company_name == "Example Solar"
+    assert configured.seed_company_code == "EX_01"
+    assert configured.seed_admin_name == "Primary Admin"
+    assert configured.seed_admin_username == "admin.user"
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("seed_company_code", "bad code", "SEED_COMPANY_CODE"),
+        ("seed_admin_username", "admin user", "SEED_ADMIN_USERNAME"),
+    ],
+)
+def test_invalid_bootstrap_identifiers_are_rejected(field, value, message):
+    with pytest.raises(ValidationError, match=message):
+        Settings(_env_file=None, **{field: value})

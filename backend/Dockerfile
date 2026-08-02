@@ -36,7 +36,15 @@ COPY --from=dependencies /opt/venv /opt/venv
 
 WORKDIR /app
 COPY --chown=solarerp:solarerp app ./app
-COPY --chown=solarerp:solarerp scripts ./scripts
+# Copy only scripts required by production runtime/release jobs. Test resets,
+# demo fixtures, and performance seeders must not exist in the deployed image.
+COPY --chown=solarerp:solarerp \
+    scripts/start-production.sh \
+    scripts/container_healthcheck.py \
+    scripts/clamd_scan.py \
+    scripts/run_production_migrations.sh \
+    scripts/bootstrap_admin.py \
+    ./scripts/
 
 USER 10001:10001
 EXPOSE 8000

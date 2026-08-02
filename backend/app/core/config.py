@@ -109,6 +109,34 @@ class Settings(BaseSettings):
                 return value.replace("postgres://", "postgresql+psycopg://", 1)
         return value
 
+    @field_validator("seed_company_name", "seed_admin_name")
+    @classmethod
+    def normalize_bootstrap_names(cls, value: str) -> str:
+        normalized = " ".join(value.split())
+        if len(normalized) < 2:
+            raise ValueError("Bootstrap names must contain at least 2 characters")
+        return normalized
+
+    @field_validator("seed_company_code")
+    @classmethod
+    def normalize_bootstrap_company_code(cls, value: str) -> str:
+        normalized = value.strip().upper()
+        if not re.fullmatch(r"[A-Z][A-Z0-9_-]{1,31}", normalized):
+            raise ValueError(
+                "SEED_COMPANY_CODE must be 2-32 uppercase letters, numbers, underscores or hyphens"
+            )
+        return normalized
+
+    @field_validator("seed_admin_username")
+    @classmethod
+    def normalize_bootstrap_username(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if not re.fullmatch(r"[a-z0-9._-]{3,50}", normalized):
+            raise ValueError(
+                "SEED_ADMIN_USERNAME must be 3-50 letters, numbers, dots, underscores or hyphens"
+            )
+        return normalized
+
     @property
     def cors_origins(self) -> list[str]:
         return [origin.strip().rstrip("/") for origin in self.frontend_origins.split(",") if origin.strip()]

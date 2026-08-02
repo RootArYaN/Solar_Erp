@@ -16,7 +16,6 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.security import hash_password
 from app.db.migrate import run_migrations
-from app.db.seed import seed_demo_data
 from app.db.session import SessionLocal, engine
 from app.models import (
     AgentCustomer,
@@ -42,6 +41,7 @@ from app.models import (
     TransactionApproval,
     User,
 )
+from scripts.demo_seed import seed_demo_data
 
 PERF_PREFIX = "PERF"
 

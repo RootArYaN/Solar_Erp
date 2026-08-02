@@ -35,14 +35,17 @@ cp .env.example .env
 uvicorn app.main:app --reload --port 8000
 ```
 
-The local super administrator is created from `.env` only when no user with
-the configured username or email exists:
+The local super administrator is created from `.env` only when neither the
+configured username nor email exists. If either identifier belongs to a
+different record, bootstrap stops with a conflict instead of changing data:
 
 - Username: `admin`
 - Password: `ChangeMe123!`
 
-Later startups do not modify existing users, roles, permissions, agent data, or
-business data. Change these values before sharing or deploying the application.
+Later development startups create only missing permissions, built-in roles,
+and required role-permission links. They do not overwrite existing labels,
+extra permissions, users, agent data, or business data. Change these values
+before sharing or deploying the application.
 
 API documentation: `http://localhost:8000/docs`
 

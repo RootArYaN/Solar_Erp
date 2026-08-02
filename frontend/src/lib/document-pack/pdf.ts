@@ -119,7 +119,7 @@ export class DocumentPackPdfLayout {
   private newPage(continued = false) {
     this.page = { commands: [], documentTitle: this.currentTitle }
     this.pages.push(this.page)
-    const company = this.template.company_name || this.template.brand_name || 'Shree Enterprise'
+    const company = this.template.company_name || this.template.brand_name || 'Company'
     const contact = [this.template.phone, this.template.email, this.template.gstin && `GSTIN ${this.template.gstin}`].filter(Boolean).join(' - ')
     this.text(PDF_MARGIN_X, 29, company, 18, true, PDF_NAVY)
     if (this.template.address) this.text(PDF_MARGIN_X, 51, this.template.address, 7.6, false, PDF_MUTED)
@@ -273,7 +273,7 @@ export class DocumentPackPdfLayout {
     this.text(PDF_MARGIN_X, this.cursorTop + 31, this.input.customerSignatureName || this.input.customerName, 9, true, PDF_INK)
     this.text(PDF_MARGIN_X, this.cursorTop + 48, this.template.customer_signature_line || 'Signature: ____________________', 7.6, false, PDF_MUTED)
     this.text(vendorX, this.cursorTop + 14, this.template.vendor_signature_label || 'Vendor', 7.6, false, PDF_MUTED)
-    this.text(vendorX, this.cursorTop + 31, this.template.vendor_signatory_name || this.template.company_name || 'Shree Enterprise', 9, true, PDF_INK)
+    this.text(vendorX, this.cursorTop + 31, this.template.vendor_signatory_name || this.template.company_name || 'Company', 9, true, PDF_INK)
     this.text(vendorX, this.cursorTop + 48, this.template.vendor_signatory_title || 'Authorized signatory', 7.6, false, PDF_MUTED)
     this.cursorTop += height
   }
@@ -326,7 +326,7 @@ export function buildDocumentPackPdfStreams(input: DocumentPackInput, template: 
     layout.kvTable(commonRows)
     layout.kvTable([
       ['OEM / Panel Brand', input.panelBrand],
-      ['Channel Partner', template.company_name || 'Shree Enterprise'],
+      ['Channel Partner', template.company_name || 'Company'],
       ['EPC Contractor Address', template.address],
       ['EPC Bank Details', template.bank_details],
       ['Vendor Registered in MNRE Portal?', 'YES'],
@@ -385,7 +385,7 @@ export function buildDocumentPackPdfStreams(input: DocumentPackInput, template: 
     layout.paragraph(`This agreement is executed on ${input.agreementDate || new Date().toLocaleDateString('en-IN')} for ${template.agreement_intro}.`)
     layout.twoBoxes([
       { title: 'First Party (Consumer)', lines: [input.customerName, input.address] },
-      { title: 'Second Party (Vendor)', lines: [template.company_name || 'Shree Enterprise', template.address] },
+      { title: 'Second Party (Vendor)', lines: [template.company_name || 'Company', template.address] },
     ])
     layout.section('The First Party Undertakes to Perform')
     layout.numberedList(configuredFirstPartyActivities)

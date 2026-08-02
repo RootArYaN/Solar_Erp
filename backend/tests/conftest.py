@@ -28,15 +28,16 @@ os.environ.setdefault("TRUSTED_HOSTS", "127.0.0.1,localhost,testserver")
 os.environ.setdefault("FRONTEND_ORIGINS", "http://127.0.0.1:5173,http://localhost:5173")
 os.environ.setdefault("RATE_LIMIT_LOGIN_PER_MINUTE", "500")
 os.environ.setdefault("LOGIN_LIMIT", "500")
-os.environ.setdefault("STORAGE_PATH", "./storage-test")
+os.environ["STORAGE_TYPE"] = "local"
+os.environ["STORAGE_PATH"] = "./storage-test"
 
 from fastapi.testclient import TestClient  # noqa: E402
 
 from app.core.config import settings  # noqa: E402
 from app.db.migrate import run_migrations  # noqa: E402
-from app.db.seed import seed_demo_data  # noqa: E402
 from app.db.session import SessionLocal, engine  # noqa: E402
 from app.main import app  # noqa: E402
+from scripts.demo_seed import seed_demo_data  # noqa: E402
 
 
 @dataclass

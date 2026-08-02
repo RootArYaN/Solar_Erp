@@ -53,8 +53,10 @@ docker compose --env-file .env.hostinger -f compose.hostinger.yml --profile rele
 docker compose --env-file .env.hostinger -f compose.hostinger.yml up -d
 ```
 
-The bootstrap command is safe to run again: it creates the configured admin
-only if that username or email does not already exist. Remove the
+The bootstrap command is safe to run again: it creates missing identity
+requirements and creates the configured admin only if neither its username nor
+email exists. If the identifiers point to different records, it stops without
+overwriting them. Remove the
 `SEED_ADMIN_PASSWORD` value from `.env.hostinger` after the first successful
 login and password change.
 

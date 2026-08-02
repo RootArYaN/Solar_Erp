@@ -613,25 +613,10 @@ def set_poster_status(db: Session, actor: CurrentSession, poster_id: str, status
 
 def _default_document_template_settings(actor: CurrentSession, template_type: str) -> dict[str, str]:
     company_name = actor.membership.company.name
-    base = {
+    return {
         'company_name': company_name, 'brand_name': company_name, 'address': '', 'gstin': '',
         'phone': '', 'email': '', 'bank_details': '', 'quotation_notes': '',
         'agreement_wording': '', 'footer': '', 'terms': '',
-    }
-    if template_type != 'customer_pack' or 'shree' not in company_name.lower():
-        return base
-    return {
-        **base,
-        'company_name': 'Shree Enterprise',
-        'brand_name': 'Shree Enterprise',
-        'address': 'KOLI PATI, AJAB, KESHOD, JUNAGADH, GUJARAT - 362229',
-        'gstin': '24BUFPK8840N1Z5',
-        'phone': '+91 9574572672',
-        'bank_details': 'Account Holder: Shree Enterprise\nAccount No.: 44699708736\nBank: SBI BANK, SBI AJAB BRANCH\nIFSC: SBIN0060163',
-        'quotation_notes': 'For quotation assistance contact +91 9574572672 | JAY KESHVALA. Thank you for your business.',
-        'agreement_wording': 'Design, supply, installation, commissioning and five-year comprehensive maintenance of the rooftop solar project/system under PM Surya Ghar: Muft Bijli Yojana, in accordance with the approved quotation and applicable MNRE/DISCOM requirements.',
-        'terms': 'The supplied system shall follow applicable MNRE, DISCOM, BIS/IS/IEC and safety requirements. Standard plant warranty, documentation, grid-connectivity assistance and five-year comprehensive operation and maintenance apply as stated in the consumer-vendor agreement.',
-        'footer': 'Shree Enterprise | Authorized Solar EPC Vendor',
     }
 
 
@@ -644,13 +629,6 @@ def get_template(db: Session, actor: CurrentSession, template_type: str)->Docume
     except json.JSONDecodeError: settings={}
     if not isinstance(settings, dict):
         settings = {}
-    # Backfill the legacy blank customer-pack template once so the integrated
-    # generator starts with the same company details as the supplied tool.
-    if template_type == 'customer_pack' and not any(str(settings.get(key, '')).strip() for key in ('address', 'gstin', 'phone', 'bank_details')):
-        settings = {**defaults, **{key: value for key, value in settings.items() if str(value).strip()}}
-        row.settings_json = json.dumps(settings, separators=(',', ':'))
-        row.updated_by = actor.membership.id
-        db.commit(); db.refresh(row)
     return DocumentTemplateSummary(id=row.id,template_type=row.template_type,name=row.name,settings=settings,is_active=row.is_active,updated_at=row.updated_at)
 
 
