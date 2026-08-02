@@ -1,0 +1,169 @@
+name: solar-erp-hostinger
+
+x-api-environment: &api-environment
+  DATABASE_URL: postgresql+psycopg://solar_erp:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@database:5432/solar_erp
+  DATABASE_SSLMODE: disable
+  ALLOW_PRIVATE_DATABASE_NO_TLS: "true"
+  FRONTEND_ORIGINS: https://${ERP_DOMAIN:?Set ERP_DOMAIN}
+  TRUSTED_HOSTS: ${ERP_DOMAIN:?Set ERP_DOMAIN}
+  FORWARDED_ALLOW_IPS: "*"
+  RATE_LIMIT_MODE: local
+  SINGLE_INSTANCE_DEPLOYMENT: "true"
+  WEB_CONCURRENCY: "1"
+  MALWARE_SCAN_COMMAND: python /app/scripts/clamd_scan.py --host malware-scanner --port 3310 {path}
+  REQUIRE_MALWARE_SCAN: "true"
+  STORAGE_TEMP_PATH: /tmp/solar-erp
+
+services:
+  database:
+    image: postgres:16.9-bookworm
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: solar_erp
+      POSTGRES_USER: solar_erp
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./backend/infra/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    shm_size: 256mb
+    networks:
+      - services
+
+  malware-scanner:
+    image: ${CLAMAV_IMAGE:-clamav/clamav:stable}
+    restart: unless-stopped
+    volumes:
+      - malware-signatures:/var/lib/clamav
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - services
+      - egress
+
+  migrate:
+    build:
+      context: ./backend
+    profiles: [release]
+    env_file:
+      - ${HOSTINGER_ENV_FILE:-.env.hostinger}
+    environment:
+      <<: *api-environment
+      BACKUP_REFERENCE: ${BACKUP_REFERENCE:-}
+    entrypoint: ["/app/scripts/run_production_migrations.sh"]
+    depends_on:
+      database:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp/solar-erp:rw,noexec,nosuid,nodev,uid=10001,gid=10001,mode=0700
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - services
+      - egress
+
+  bootstrap-admin:
+    build:
+      context: ./backend
+    profiles: [release]
+    env_file:
+      - ${HOSTINGER_ENV_FILE:-.env.hostinger}
+    environment:
+      <<: *api-environment
+      BOOTSTRAP_ADMIN_ENABLED: "true"
+    entrypoint: ["python", "/app/scripts/bootstrap_admin.py"]
+    depends_on:
+      database:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp/solar-erp:rw,noexec,nosuid,nodev,uid=10001,gid=10001,mode=0700
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - services
+
+  api:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    env_file:
+      - ${HOSTINGER_ENV_FILE:-.env.hostinger}
+    environment:
+      <<: *api-environment
+    depends_on:
+      database:
+        condition: service_healthy
+      malware-scanner:
+        condition: service_started
+    read_only: true
+    tmpfs:
+      - /tmp/solar-erp:rw,noexec,nosuid,nodev,uid=10001,gid=10001,mode=0700
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - edge
+      - services
+      - egress
+
+  frontend:
+    build:
+      context: ./frontend
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,uid=101,gid=101,mode=0700
+      - /var/cache/nginx:rw,noexec,nosuid,nodev,uid=101,gid=101,mode=0700
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - edge
+
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    environment:
+      ERP_DOMAIN: ${ERP_DOMAIN:?Set ERP_DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL:?Set ACME_EMAIL}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./deploy/hostinger/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      frontend:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - edge
+      - egress
+
+networks:
+  edge:
+    internal: true
+  services:
+    internal: true
+  egress:
+
+volumes:
+  postgres-data:
+  malware-signatures:
+  caddy-data:
+  caddy-config:

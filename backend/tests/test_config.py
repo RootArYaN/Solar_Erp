@@ -48,11 +48,42 @@ def test_render_single_instance_production_configuration_is_accepted():
 
 
 def test_render_local_rate_limiting_requires_one_worker():
-    with pytest.raises(ValidationError, match="single-worker Render service"):
+    with pytest.raises(ValidationError, match="single-worker deployment"):
         _production_settings(
             render=True,
             database_sslmode="disable",
             rate_limit_mode="local",
+            web_concurrency=2,
+        )
+
+
+def test_private_single_host_production_configuration_is_accepted():
+    configured = _production_settings(
+        database_url="postgresql://solar_erp:password@database/solar_erp",
+        database_sslmode="disable",
+        allow_private_database_no_tls=True,
+        rate_limit_mode="local",
+        single_instance_deployment=True,
+        web_concurrency=1,
+    )
+    assert configured.allow_private_database_no_tls
+    assert configured.single_instance_deployment
+
+
+def test_private_database_no_tls_is_restricted_to_container_service_names():
+    with pytest.raises(ValidationError, match="explicitly approved private container database"):
+        _production_settings(
+            database_url="postgresql://solar_erp:password@db.example.com/solar_erp",
+            database_sslmode="disable",
+            allow_private_database_no_tls=True,
+        )
+
+
+def test_single_host_local_rate_limiting_requires_one_worker():
+    with pytest.raises(ValidationError, match="single-worker deployment"):
+        _production_settings(
+            rate_limit_mode="local",
+            single_instance_deployment=True,
             web_concurrency=2,
         )
 

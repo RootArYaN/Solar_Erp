@@ -80,6 +80,9 @@ for React route fallback. Never make the private document bucket public. See
 - Allow only the deployed Cloudflare frontend origin in the Render API CORS
   configuration.
 
+For a single-server Hostinger deployment, use the Ubuntu 24.04 Docker VPS
+template and follow [`deploy/HOSTINGER_VPS.md`](deploy/HOSTINGER_VPS.md).
+
 ## ERP expansion sequence
 
 1. Identity, companies, branches, roles, permissions, audit events

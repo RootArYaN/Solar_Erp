@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     web_concurrency: int = 1
     database_url: str = "postgresql+psycopg://postgres:postgres@localhost:5432/solar_erp"
     database_sslmode: str = "prefer"
+    allow_private_database_no_tls: bool = False
 
     jwt_secret: str = "replace-this-development-secret-with-at-least-32-characters"
     jwt_algorithm: str = "HS256"
@@ -36,6 +37,7 @@ class Settings(BaseSettings):
     # Use local for one API process. Use gateway when a reverse proxy/API gateway
     # is the shared source of truth for multiple API instances.
     rate_limit_mode: str = "local"
+    single_instance_deployment: bool = False
     rate_limit_login_per_minute: int = 20
     rate_limit_read_per_minute: int = 180
     rate_limit_write_per_minute: int = 60
@@ -270,24 +272,31 @@ class Settings(BaseSettings):
                 raise ValueError("TRUSTED_HOSTS must be explicit in production")
             if not self.require_malware_scan:
                 raise ValueError("REQUIRE_MALWARE_SCAN must be true in production")
+            database_hostname = (urlparse(self.database_url).hostname or "").lower()
+            private_container_database = (
+                self.allow_private_database_no_tls
+                and self.database_sslmode == "disable"
+                and database_hostname in {"database", "postgres"}
+            )
             render_private_database = self.render and self.database_sslmode == "disable"
             if (
                 self.database_sslmode not in {"verify-ca", "verify-full"}
                 and not render_private_database
+                and not private_container_database
             ):
                 raise ValueError(
                     "DATABASE_SSLMODE must verify the database certificate in production "
-                    "(Render services may use disable only for same-region private Postgres)"
+                    "(TLS may be disabled only for an explicitly approved private container database)"
                 )
-            render_single_instance_limit = (
-                self.render
+            single_instance_limit = (
+                (self.render or self.single_instance_deployment)
                 and self.rate_limit_mode == "local"
                 and self.web_concurrency == 1
             )
-            if self.rate_limit_mode != "gateway" and not render_single_instance_limit:
+            if self.rate_limit_mode != "gateway" and not single_instance_limit:
                 raise ValueError(
-                    "RATE_LIMIT_MODE must be gateway in production, except for a single-worker "
-                    "Render service that is kept at one instance"
+                    "RATE_LIMIT_MODE must be gateway in production, except for an explicitly "
+                    "configured single-worker deployment that is kept at one instance"
                 )
             if self.storage_type != "s3":
                 raise ValueError("STORAGE_TYPE must be s3 in production")
