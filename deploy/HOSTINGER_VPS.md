@@ -1,9 +1,10 @@
 # Hostinger VPS deployment
 
-This deployment runs the React frontend, FastAPI API, PostgreSQL, ClamAV and
-the HTTPS proxy on one Hostinger VPS. Use the **Ubuntu 24.04 with Docker** VPS
-template. A VPS with at least 4 GB RAM is recommended because ClamAV and
-PostgreSQL run alongside the application.
+This deployment runs the React frontend, FastAPI API, PostgreSQL and ClamAV on
+one Hostinger VPS. Hostinger's Traefik Docker project owns ports 80/443, routes
+the public domain to the frontend and manages Let's Encrypt certificates. Use
+the **Ubuntu 24.04 with Docker** VPS template. A VPS with at least 4 GB RAM is
+recommended because ClamAV and PostgreSQL run alongside the application.
 
 ## 1. Prepare Hostinger
 
@@ -13,9 +14,12 @@ PostgreSQL run alongside the application.
    port. Do not expose PostgreSQL port `5432` or API port `8000`.
 3. Enable Hostinger daily backups if available. Create a manual snapshot before
    every application or database migration.
+4. In hPanel, open **VPS → Manage → Docker Manager** and deploy the Traefik
+   project if it is not already running. Enter a valid email for Let's Encrypt.
 
-HTTPS is issued automatically after DNS resolves to the VPS and ports 80/443
-reach Caddy.
+The Traefik project must create the external `traefik-proxy` Docker network.
+HTTPS is issued automatically after DNS resolves to the VPS and Traefik sees
+the frontend container labels.
 
 ## 2. Copy and configure the project
 
@@ -57,7 +61,7 @@ login and password change.
 
 ```bash
 docker compose --env-file .env.hostinger -f compose.hostinger.yml ps
-docker compose --env-file .env.hostinger -f compose.hostinger.yml logs --tail=100 api frontend caddy
+docker compose --env-file .env.hostinger -f compose.hostinger.yml logs --tail=100 api frontend
 curl -fsS https://erp.example.com/api/v1/health
 curl -fsS https://erp.example.com/api/v1/ready
 ```

@@ -136,31 +136,18 @@ services:
     cap_drop: [ALL]
     security_opt:
       - no-new-privileges:true
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik-proxy"
+      - "traefik.http.routers.solar-erp.rule=Host(`${ERP_DOMAIN:?Set ERP_DOMAIN}`)"
+      - "traefik.http.routers.solar-erp.entrypoints=websecure"
+      - "traefik.http.routers.solar-erp.tls=true"
+      - "traefik.http.routers.solar-erp.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.solar-erp.service=solar-erp"
+      - "traefik.http.services.solar-erp.loadbalancer.server.port=8080"
     networks:
       - edge
-
-  caddy:
-    image: caddy:2.10-alpine
-    restart: unless-stopped
-    environment:
-      ERP_DOMAIN: ${ERP_DOMAIN:?Set ERP_DOMAIN}
-      ACME_EMAIL: ${ACME_EMAIL:?Set ACME_EMAIL}
-    ports:
-      - "80:80"
-      - "443:443"
-      - "443:443/udp"
-    volumes:
-      - ./deploy/hostinger/Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy-data:/data
-      - caddy-config:/config
-    depends_on:
-      frontend:
-        condition: service_healthy
-    security_opt:
-      - no-new-privileges:true
-    networks:
-      - edge
-      - egress
+      - traefik-proxy
 
 networks:
   edge:
@@ -168,10 +155,11 @@ networks:
   services:
     internal: true
   egress:
+  traefik-proxy:
+    external: true
+    name: traefik-proxy
 
 volumes:
   postgres-data:
   document-storage:
   malware-signatures:
-  caddy-data:
-  caddy-config:

@@ -1,8 +1,0 @@
-{
-	email {$ACME_EMAIL}
-}
-
-{$ERP_DOMAIN} {
-	encode zstd gzip
-	reverse_proxy frontend:8080
-}
