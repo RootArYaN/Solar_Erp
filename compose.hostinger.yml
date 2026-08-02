@@ -81,7 +81,7 @@ services:
     environment:
       <<: *api-environment
       BOOTSTRAP_ADMIN_ENABLED: "true"
-    entrypoint: ["python", "/app/scripts/bootstrap_admin.py"]
+    entrypoint: ["python", "-m", "scripts.bootstrap_admin"]
     depends_on:
       database:
         condition: service_healthy
