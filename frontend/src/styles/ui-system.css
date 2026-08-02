@@ -569,6 +569,10 @@ body.app-preview-mobile .alert-dialog footer button {
 }
 
 @media (max-width: 780px) {
+  .layout-view-switch {
+    display: none !important;
+  }
+
   .inventory-head-actions {
     width: 100% !important;
     min-width: 0;

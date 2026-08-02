@@ -9,9 +9,21 @@ export function AppShell({ session, onLogout }: { session: Session; onLogout: ()
   const [mobileOpen, setMobileOpen] = useState(false)
   const location = useLocation()
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
-  const [layoutView, setLayoutView] = useState<'desktop' | 'mobile'>(() => window.matchMedia('(max-width: 780px)').matches ? 'mobile' : 'desktop')
+  const [desktopBrowser, setDesktopBrowser] = useState(() => window.matchMedia('(min-width: 781px)').matches)
+  const [layoutView, setLayoutView] = useState<'desktop' | 'mobile'>(() => window.matchMedia('(min-width: 781px)').matches ? 'desktop' : 'mobile')
   const isSuperAdmin = session.user.is_super_admin
   const canViewAdministration = hasAnyPermission(session, [PERMISSIONS.users.view, PERMISSIONS.roles.view])
+
+  useEffect(() => {
+    const query = window.matchMedia('(min-width: 781px)')
+    const syncBrowserWidth = () => {
+      setDesktopBrowser(query.matches)
+      if (!query.matches) setLayoutView('mobile')
+    }
+    syncBrowserWidth()
+    query.addEventListener('change', syncBrowserWidth)
+    return () => query.removeEventListener('change', syncBrowserWidth)
+  }, [])
 
   useEffect(() => {
     const previewingMobile = isSuperAdmin && layoutView === 'mobile'
@@ -59,7 +71,7 @@ export function AppShell({ session, onLogout }: { session: Session; onLogout: ()
       <section className="app-main">
         <header className="app-topbar">
           <button className="icon-button app-menu-button" onClick={() => setMobileOpen(true)} aria-label="Open menu"><Menu size={20} /></button>
-          {isSuperAdmin && (
+          {isSuperAdmin && desktopBrowser && (
             <div className="layout-view-switch" role="group" aria-label="Workspace preview size">
               <span>View</span>
               <button type="button" className={layoutView === 'desktop' ? 'is-active' : ''} aria-pressed={layoutView === 'desktop'} onClick={() => { setLayoutView('desktop'); setMobileOpen(false) }} title="Desktop view">
