@@ -9,7 +9,10 @@ ENV NODE_ENV=production
 WORKDIR /build
 
 COPY package.json package-lock.json ./
-RUN npm ci
+# TypeScript and Vite are build-time devDependencies. NODE_ENV remains
+# production for the bundle, while --include=dev keeps those tools available
+# only in this disposable build stage.
+RUN npm ci --include=dev
 
 COPY . .
 RUN npm run build
