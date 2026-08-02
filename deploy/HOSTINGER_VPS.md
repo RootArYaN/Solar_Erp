@@ -17,9 +17,10 @@ recommended because ClamAV and PostgreSQL run alongside the application.
 4. In hPanel, open **VPS → Manage → Docker Manager** and deploy the Traefik
    project if it is not already running. Enter a valid email for Let's Encrypt.
 
-The Traefik project must create the external `traefik-proxy` Docker network.
-HTTPS is issued automatically after DNS resolves to the VPS and Traefik sees
-the frontend container labels.
+Hostinger's current Traefik template uses host networking and discovers the
+frontend through Docker labels; the application does not publish ports 80 or
+443 itself. HTTPS is issued automatically after DNS resolves to the VPS and
+Traefik sees the frontend container labels.
 
 ## 2. Copy and configure the project
 
