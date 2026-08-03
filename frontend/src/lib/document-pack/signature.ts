@@ -86,7 +86,10 @@ export async function loadCustomerSignature(customerId: string, knownFiles?: Sto
   const files = knownFiles ?? (await getStoredFiles('customer_document', customerId)).data
   const file = files.find(isCustomerSignatureFile)
   if (!file || !isEmbeddableSignatureFile(file)) return null
-  const blob = await getStoredFileBlob(file.id)
+  const downloaded = await getStoredFileBlob(file.id)
+  const blob = downloaded.type === file.mime_type
+    ? downloaded
+    : new Blob([downloaded], { type: file.mime_type })
   const [dataUrl, pdf] = await Promise.all([blobDataUrl(blob), prepareCustomerSignature(blob)])
   return { file, blob, dataUrl, pdf }
 }

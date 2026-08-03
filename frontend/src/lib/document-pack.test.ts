@@ -25,7 +25,6 @@ const input: DocumentPackInput = {
   salesPerson: 'Project Agent',
   agreementDate: '2026-07-28',
   validityDays: '15',
-  customerSignatureName: 'Asha Patel',
   notes: '',
 }
 
@@ -48,7 +47,6 @@ describe('document pack template content', () => {
       agreement_disclaimer: 'Custom agreement disclaimer',
       quotation_title: 'Custom Quotation',
       customer_signature_label: 'Consumer acceptance',
-      customer_signature_line: 'Sign here: __________',
       vendor_signature_label: 'EPC approval',
       vendor_signatory_name: 'Authorized Person',
       vendor_signatory_title: 'Managing Partner',
@@ -72,5 +70,16 @@ describe('document pack template content', () => {
     expect(agreement).toContain('Custom agreement disclaimer')
 
     expect(renderDocumentHtml('quotation', input, template)).toContain('Custom Quotation')
+  })
+
+  it('renders the uploaded customer signature image without generating a typed signature', () => {
+    const template = normalizeDocumentPackTemplate({})
+    const signatureUrl = 'data:image/png;base64,dXBsb2FkZWQtc2lnbmF0dXJl'
+    const html = renderDocumentHtml('quotation', input, template, { customerSignatureUrl: signatureUrl })
+
+    expect(html).toContain(`src="${signatureUrl}"`)
+    expect(html).toContain('Uploaded customer signature')
+    expect(html).not.toContain('Uploaded customer signature unavailable')
+    expect(html).not.toContain('Electronically signed')
   })
 })

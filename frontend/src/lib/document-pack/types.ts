@@ -20,7 +20,6 @@ export type DocumentPackInput = {
   salesPerson: string
   agreementDate: string
   validityDays: string
-  customerSignatureName: string
   notes: string
 }
 
@@ -51,7 +50,6 @@ export type DocumentPackTemplate = {
   agreement_disclaimer: string
   quotation_title: string
   customer_signature_label: string
-  customer_signature_line: string
   vendor_signature_label: string
   vendor_signatory_name: string
   vendor_signatory_title: string

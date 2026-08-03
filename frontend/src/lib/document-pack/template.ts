@@ -95,7 +95,6 @@ export const defaultDocumentPackTemplate: DocumentPackTemplate = {
   agreement_disclaimer: 'This agreement is between vendor and consumer. Any dispute related to it shall not involve MNRE or the Distribution Utility except where required by law or applicable scheme procedure.',
   quotation_title: 'Solar Quotation',
   customer_signature_label: 'Customer',
-  customer_signature_line: 'Signature: ____________________',
   vendor_signature_label: 'Vendor',
   vendor_signatory_name: '',
   vendor_signatory_title: 'Authorized signatory',

@@ -70,7 +70,6 @@ function defaults(snapshot: CustomerFlowSnapshot, pack: GeneratedDocumentPack | 
     salesPerson: agentName,
     agreementDate: todayInput(),
     validityDays: '15',
-    customerSignatureName: customer.display_name,
     notes: '',
   }
   return Object.fromEntries(Object.entries(base).map(([key, value]) => [key, String(existing[key] ?? value)])) as DocumentPackInput

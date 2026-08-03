@@ -110,11 +110,11 @@ export class DocumentPackPdfLayout {
     this.command(`${width} w ${x1.toFixed(2)} ${(PDF_HEIGHT - top1).toFixed(2)} m ${x2.toFixed(2)} ${(PDF_HEIGHT - top2).toFixed(2)} l S`)
   }
 
-  private text(x: number, top: number, value: unknown, size = 9, bold = false, color = PDF_INK, align: PdfAlign = 'left', boxWidth = 0, font?: 'F1' | 'F2' | 'F3') {
+  private text(x: number, top: number, value: unknown, size = 9, bold = false, color = PDF_INK, align: PdfAlign = 'left', boxWidth = 0) {
     const content = printable(value)
     const width = estimatedTextWidth(content, size, bold)
     const effectiveX = align === 'right' ? x + boxWidth - width : align === 'center' ? x + ((boxWidth - width) / 2) : x
-    this.command(`BT /${font ?? (bold ? 'F2' : 'F1')} ${size} Tf ${pdfRgb(color)} rg ${effectiveX.toFixed(2)} ${this.topToPdfY(top, size).toFixed(2)} Td (${content}) Tj ET`)
+    this.command(`BT /${bold ? 'F2' : 'F1'} ${size} Tf ${pdfRgb(color)} rg ${effectiveX.toFixed(2)} ${this.topToPdfY(top, size).toFixed(2)} Td (${content}) Tj ET`)
   }
 
   private newPage(continued = false) {

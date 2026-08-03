@@ -86,7 +86,6 @@ export function DocumentTemplateDialog({
           <p className="document-template-help">Set signature captions for previews and exports.</p>
           <div className="erp-form-grid">
             <label><span>Customer signature label</span><input name="customer_signature_label" defaultValue={settings.customer_signature_label} /></label>
-            <label><span>Customer signature line</span><input name="customer_signature_line" defaultValue={settings.customer_signature_line} /></label>
             <label><span>Vendor signature label</span><input name="vendor_signature_label" defaultValue={settings.vendor_signature_label} /></label>
             <label><span>Vendor signatory name</span><input name="vendor_signatory_name" defaultValue={settings.vendor_signatory_name} placeholder={settings.company_name || 'Company name'} /></label>
             <label className="erp-form-wide"><span>Vendor signatory title</span><input name="vendor_signatory_title" defaultValue={settings.vendor_signatory_title} /></label>

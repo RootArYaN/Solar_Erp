@@ -79,7 +79,6 @@ function layoutInput(data: QuotationDocumentData): DocumentPackInput {
     salesPerson: data.agentName || '',
     agreementDate: quotation.created_at.slice(0, 10),
     validityDays: validityDays(quotation),
-    customerSignatureName: data.customerName,
     notes: data.notes || '',
   }
 }
