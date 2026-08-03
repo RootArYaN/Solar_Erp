@@ -1,5 +1,6 @@
 import { Edit3, Plus, RefreshCw, Search } from 'lucide-react'
 import type { AgentCustomer, AgentListItem, AgentOverview } from '../../types'
+import { Button } from '../ui/Button'
 import { WorkspaceHeader, WorkspaceToolbar } from '../workspace'
 
 type SearchScope = 'all' | 'agents' | 'customers'
@@ -50,12 +51,12 @@ export function AgentWorkspaceControls({
       eyebrow="Sales network"
       title="Agent overview"
       actions={<div className="agent-page__actions">
-        <button type="button" className="secondary-button secondary-button--icon" onClick={onRefresh} disabled={loading} aria-label="Refresh agent overview">
-          <RefreshCw className={loading ? 'spin' : ''} size={16} /><span className="agent-action-label agent-action-label--full">Refresh</span><span className="agent-action-label agent-action-label--compact">Refresh</span>
-        </button>
-        {overview && canEditProfile && <button type="button" className="secondary-button secondary-button--icon" onClick={onEditProfile}><Edit3 size={16} /><span className="agent-action-label agent-action-label--full">Edit profile</span><span className="agent-action-label agent-action-label--compact">Edit</span></button>}
-        {overview && canRegisterCustomers && <button type="button" className="secondary-button secondary-button--icon" onClick={onRegisterCustomer}><Plus size={16} /><span className="agent-action-label agent-action-label--full">Register customer</span><span className="agent-action-label agent-action-label--compact">Customer</span></button>}
-        {overview && canPostTransactions && <button type="button" className="primary-button primary-button--compact" onClick={onAddTransaction}><Plus size={17} /><span className="agent-action-label agent-action-label--full">Add transaction</span><span className="agent-action-label agent-action-label--compact">Transaction</span></button>}
+        <Button variant="secondary" leadingIcon={<RefreshCw className={loading ? 'spin' : ''} size={16} />} onClick={onRefresh} disabled={loading} aria-label="Refresh agent overview">
+          Refresh
+        </Button>
+        {overview && canEditProfile && <Button variant="secondary" leadingIcon={<Edit3 size={16} />} onClick={onEditProfile}>Edit</Button>}
+        {overview && canRegisterCustomers && <Button variant="secondary" leadingIcon={<Plus size={16} />} onClick={onRegisterCustomer}>Customer</Button>}
+        {overview && canPostTransactions && <Button variant="primary" leadingIcon={<Plus size={17} />} onClick={onAddTransaction}>Transaction</Button>}
       </div>}
     />
 

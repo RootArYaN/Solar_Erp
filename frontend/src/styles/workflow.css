@@ -140,11 +140,6 @@ button:disabled,input:disabled,select:disabled,textarea:disabled{cursor:not-allo
 
 /* Approval center compact dashboard refinement */
 .approval-toolbar { display: flex; align-items: stretch; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
-.approval-kpis { display: grid; grid-template-columns: repeat(4, minmax(130px, 1fr)); flex: 1; gap: 8px; }
-.approval-kpis article { min-width: 0; padding: 11px 12px; border: 1px solid var(--line); border-radius: 11px; background: #fff; box-shadow: 0 4px 14px rgba(28,35,43,.025); }
-.approval-kpis span { display: block; color: var(--muted); font-size: 8px; font-weight: 850; letter-spacing: .65px; text-transform: uppercase; }
-.approval-kpis strong { display: block; margin-top: 3px; color: #202833; font-size: 18px; line-height: 1.1; }
-.approval-kpis small { display: block; margin-top: 3px; color: var(--muted); font-size: 8px; }
 .approval-refresh { align-self: stretch; display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-width: 92px; padding: 0 13px; border: 1px solid var(--line); border-radius: 11px; color: #4f5965; background: #fff; font: inherit; font-size: 9px; font-weight: 800; cursor: pointer; box-shadow: 0 4px 14px rgba(28,35,43,.025); }
 .approval-refresh:hover:not(:disabled) { border-color: #d4b77f; color: #8e5e12; background: #fffaf1; }
 .approval-refresh:disabled { cursor: wait; opacity: .65; }
@@ -160,14 +155,12 @@ button:disabled,input:disabled,select:disabled,textarea:disabled{cursor:not-allo
 
 @media (max-width: 1180px) {
   .approval-toolbar { align-items: stretch; }
-  .approval-kpis { grid-template-columns: repeat(2, minmax(130px, 1fr)); }
   .approval-refresh { min-width: 88px; }
   .approval-split-layout { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 620px) {
   .approval-toolbar { display: grid; }
-  .approval-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .approval-refresh { min-height: 40px; }
   .approval-table--quotations { min-width: 680px; }
 }
@@ -251,6 +244,13 @@ button:disabled,input:disabled,select:disabled,textarea:disabled{cursor:not-allo
 .quotation-document__totals dt, .quotation-document__totals dd { margin: 0; }
 .quotation-document__totals dd { color: #28313b; font-weight: 800; }
 .quotation-document__totals div:last-child { margin-top: 4px; padding-top: 9px; border-top: 1px solid #cfd2d5; color: #263550; font-size: 11px; font-weight: 900; }
+.quotation-document__signatures { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; padding: 4px 20px 22px; }
+.quotation-document__signature { min-width: 0; display: grid; align-content: end; gap: 5px; padding-top: 12px; border-top: 1px solid #d9dde2; }
+.quotation-document__signature small { color: #8b9198; font-size: 8px; font-weight: 800; letter-spacing: .65px; text-transform: uppercase; }
+.quotation-document__signature strong { overflow-wrap: anywhere; color: #28313b; font-size: 10px; }
+.quotation-document__signature span { color: #7a838e; font-size: 8px; }
+.quotation-document__signature-image { display: block; width: min(100%, 220px); height: 54px; padding: 3px 5px 5px; border-bottom: 1px solid #9aa6b4; object-fit: contain; object-position: left center; mix-blend-mode: multiply; }
+.quotation-document__signature-missing { display: grid; min-height: 54px; align-items: center; padding: 3px 5px 5px; border-bottom: 1px solid #9aa6b4; color: #8a5960!important; font-style: italic; }
 .quotation-preview-actions { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 16px; border-top: 1px solid var(--line); background: #fff; }
 .quotation-preview-actions > span { color: var(--muted); font-size: 9px; }
 .quotation-preview-actions > div { display: flex; gap: 8px; }
@@ -264,6 +264,7 @@ button:disabled,input:disabled,select:disabled,textarea:disabled{cursor:not-allo
   .quotation-document__meta section:last-child { border-bottom: 0; }
   .quotation-document__contact { max-width: none; text-align: left; }
   .quotation-document__footer { grid-template-columns: 1fr; }
+  .quotation-document__signatures { grid-template-columns: 1fr; gap: 14px; }
   .quotation-preview-actions { align-items: stretch; flex-direction: column; }
   .quotation-preview-actions > div { display: grid; grid-template-columns: 1fr 1fr; }
 }

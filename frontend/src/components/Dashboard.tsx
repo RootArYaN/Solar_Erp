@@ -5,6 +5,8 @@ import { getDashboardSummary } from '../api/dashboard'
 import type { DashboardSummary } from '../erp-types'
 import { hasPermission, PERMISSIONS } from '../lib/permissions'
 import type { Session } from '../types'
+import { Button } from './ui/Button'
+import { KpiCard } from './ui/KpiCard'
 import { useToast } from './ui/ToastProvider'
 import { KpiGrid, ScrollSurface, WorkspaceHeader, WorkspacePage } from './workspace'
 
@@ -25,8 +27,8 @@ export function Dashboard({ session }: { session: Session }) {
 
   useEffect(() => { void load() }, [load])
 
-  if (loading && !summary) return <WorkspacePage className="erp-page"><div className="erp-state"><LoaderCircle className="spin" /><strong>Loading live business summary…</strong></div></WorkspacePage>
-  if (!summary) return <WorkspacePage className="erp-page"><div className="erp-state erp-state--error"><AlertCircle /><strong>{error || 'Dashboard is unavailable'}</strong><button className="secondary-button" onClick={() => void load()}>Retry</button></div></WorkspacePage>
+  if (loading && !summary) return <WorkspacePage className="erp-page"><div className="erp-state"><LoaderCircle className="spin" /><strong>Loading dashboard…</strong></div></WorkspacePage>
+  if (!summary) return <WorkspacePage className="erp-page"><div className="erp-state erp-state--error"><AlertCircle /><strong>{error || 'Dashboard is unavailable'}</strong><Button variant="secondary" onClick={() => void load()}>Retry</Button></div></WorkspacePage>
 
   const operational = [
     ['Customers', summary.total_customers, `${summary.new_customers_month} new this month`, UsersRound, '/app/customers', PERMISSIONS.customers.view],
@@ -48,25 +50,43 @@ export function Dashboard({ session }: { session: Session }) {
   const canViewFinance = hasPermission(session, PERMISSIONS.finance.view)
 
   return <WorkspacePage className="erp-page dashboard-live">
-    <WorkspaceHeader className="erp-page-head">
-      <div><span>Operations overview</span><h1>Good to see you, {session.user.full_name.split(' ')[0]}.</h1></div>
-      <button className="secondary-button" onClick={() => void load()} disabled={loading}><RefreshCw className={loading ? 'spin' : ''} size={15} /> Refresh</button>
-    </WorkspaceHeader>
+    <WorkspaceHeader
+      className="dashboard-header"
+      eyebrow="Operations overview"
+      title={`Good to see you, ${session.user.full_name.split(' ')[0]}.`}
+      actions={
+        <Button
+          variant="ghost"
+          size="icon"
+          leadingIcon={<RefreshCw className={loading ? 'spin' : ''} size={15} />}
+          onClick={() => void load()}
+          disabled={loading}
+          aria-label="Refresh dashboard"
+          title="Refresh dashboard"
+        />
+      }
+    />
 
-    <KpiGrid columns={5} className="erp-kpi-grid erp-kpi-grid--finance">
-      {financial.map(([title, value, note, Icon, to]) => <article className="dashboard-finance-kpi" key={title}>
-        <Icon /><span>{title}</span><strong>{money.format(value)}</strong><small>{note}</small>
-        {canViewFinance && <Link className="dashboard-finance-kpi__link" to={to} aria-label={`Open ${title}`}><ArrowUpRight size={13} /></Link>}
-      </article>)}
+    <KpiGrid columns={5} phoneColumns={1} responsive>
+      {financial.map(([title, value, note, Icon, to]) => (
+        <KpiCard
+          key={title}
+          icon={<Icon />}
+          label={title}
+          value={money.format(value)}
+          note={note}
+          action={canViewFinance ? <Link to={to} aria-label={`Open ${title}`}><ArrowUpRight size={13} /></Link> : undefined}
+        />
+      ))}
     </KpiGrid>
 
     <ScrollSurface className="dashboard-scroll-body">
-      <section className="erp-panel"><header><div><span>Workflow pulse</span><h2>What needs attention</h2></div></header><div className="dashboard-operation-grid">{operational.map(([title, value, note, Icon, to, permission]) => {
+      <section className="erp-panel"><header><div><h2>What needs attention</h2></div></header><div className="dashboard-operation-grid">{operational.map(([title, value, note, Icon, to, permission]) => {
         const allowed = hasPermission(session, permission)
         return <article key={title}><span className="dashboard-operation-icon"><Icon size={18} /></span><div><small>{title}</small><strong>{value}</strong><p>{note}</p></div>{allowed && <Link to={to} aria-label={`Open ${title}`}><ArrowUpRight size={15} /></Link>}</article>
       })}</div></section>
 
-      <div className="erp-two-column"><section className="erp-panel"><header><div><span>Project pipeline</span><h2>Current work</h2></div></header><div className="dashboard-status-list"><div><SunMedium /><span>Installations in progress</span><strong>{summary.installations_in_progress}</strong></div><div><BadgeIndianRupee /><span>DCR pending</span><strong>{summary.dcr_pending}</strong></div><div><IndianRupee /><span>Subsidy pending</span><strong>{summary.subsidy_pending}</strong></div><div><CheckCircle2 /><span>Completed projects</span><strong>{summary.completed_projects}</strong></div></div></section><section className="erp-panel"><header><div><span>Access</span><h2>Your workspace</h2></div></header><div className="dashboard-status-list"><div><UsersRound /><span>Role</span><strong>{session.role.replaceAll('_', ' ')}</strong></div><div><ClipboardCheck /><span>Permissions</span><strong>{session.permissions.length}</strong></div><div><Landmark /><span>Company</span><strong>{session.company.code}</strong></div></div></section></div>
+      <div className="erp-two-column"><section className="erp-panel"><header><div><h2>Current work</h2></div></header><div className="dashboard-status-list"><div><SunMedium /><span>Installations in progress</span><strong>{summary.installations_in_progress}</strong></div><div><BadgeIndianRupee /><span>DCR pending</span><strong>{summary.dcr_pending}</strong></div><div><IndianRupee /><span>Subsidy pending</span><strong>{summary.subsidy_pending}</strong></div><div><CheckCircle2 /><span>Completed projects</span><strong>{summary.completed_projects}</strong></div></div></section><section className="erp-panel"><header><div><h2>Your workspace</h2></div></header><div className="dashboard-status-list"><div><UsersRound /><span>Role</span><strong>{session.role.replaceAll('_', ' ')}</strong></div><div><ClipboardCheck /><span>Permissions</span><strong>{session.permissions.length}</strong></div><div><Landmark /><span>Company</span><strong>{session.company.code}</strong></div></div></section></div>
     </ScrollSurface>
   </WorkspacePage>
 }

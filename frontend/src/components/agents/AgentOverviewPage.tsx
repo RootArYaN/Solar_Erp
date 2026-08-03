@@ -313,10 +313,11 @@ export function AgentOverviewPage({ session }: { session: Session }) {
     }
   }
 
-  function downloadApprovedQuotation(customer: AgentCustomer) {
+  async function downloadApprovedQuotation(customer: AgentCustomer) {
     if (!customer.approved_quotation) return
-    downloadQuotationPdf({
+    const downloaded = await downloadQuotationPdf({
       quotation: customer.approved_quotation,
+      customerId: customer.id,
       customerName: customer.customer_name,
       companyName: '',
       phone: customer.phone,
@@ -325,6 +326,7 @@ export function AgentOverviewPage({ session }: { session: Session }) {
       notes: customer.project_name,
       agentName: overview?.profile.full_name || '',
     })
+    if (!downloaded) toast({ message: 'Upload the customer signature as a JPG, PNG, or WebP image before downloading the approved quotation.', variant: 'warning' })
   }
 
   return (
@@ -385,7 +387,7 @@ export function AgentOverviewPage({ session }: { session: Session }) {
               </div>
             </motion.article>
 
-            <KpiGrid columns={4} className="agent-kpi-grid">
+            <KpiGrid columns={4} phoneColumns={1} responsive className="agent-kpi-grid">
               <motion.article initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.04 }}>
                 <div className="agent-kpi__icon"><UsersRound size={20} /></div>
                 <span>Total customers</span>
@@ -433,7 +435,7 @@ export function AgentOverviewPage({ session }: { session: Session }) {
                           <td data-label="Status"><span className={`customer-status customer-status--${customer.status}`}>{customer.status.replaceAll('_', ' ')}</span></td>
                           <td data-label="Outstanding" className="numeric-cell"><strong>{currency.format(customer.outstanding_balance)}</strong></td>
                           <td data-label="Action"><div className="agent-customer-actions">
-                            {customer.approved_quotation && <button className="table-action-button table-action-button--download" type="button" onClick={() => downloadApprovedQuotation(customer)}><Download size={12} /> Download quote</button>}
+                            {customer.approved_quotation && <button className="table-action-button table-action-button--download" type="button" onClick={() => void downloadApprovedQuotation(customer)}><Download size={12} /> Download quote</button>}
                             {canOpenDocuments && customer.approved_quotation && customer.project_id && <button className="table-action-button table-action-button--neutral" type="button" onClick={() => navigate(`/app/customer-documents?customer=${encodeURIComponent(customer.id)}`)}><FileText size={12} /> Documents</button>}
                             {customer.can_edit && <button className="table-action-button table-action-button--neutral" type="button" onClick={() => setEditingCustomer(customer)}><Edit3 size={12} /> Edit</button>}
                             {canRequestQuotations && !['pending', 'quotation_ready', 'pending_approval', 'approved'].includes(customer.quotation_status || customer.quotation_request_status || '')
@@ -457,7 +459,7 @@ export function AgentOverviewPage({ session }: { session: Session }) {
                     <input value={transactionSearch} onChange={(event) => setTransactionSearch(event.target.value)} placeholder="Search transactions" />
                   </div>
                   <span className="record-count">
-                    {transactionSearch.trim() ? `${filteredTransactions.length} of ` : ''}{overview.transactions.length} entries
+                    {transactionSearch.trim() ? `${filteredTransactions.length} of ` : ''}
                   </span>
                 </div>
               </div>

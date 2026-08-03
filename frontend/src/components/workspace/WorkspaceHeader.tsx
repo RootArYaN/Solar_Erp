@@ -1,10 +1,12 @@
 import type { HTMLAttributes, ReactNode } from 'react'
+import { ActionBar, type ActionBarLayout } from '../ui/ActionBar'
 
 interface WorkspaceHeaderProps extends Omit<HTMLAttributes<HTMLElement>, 'title'> {
   eyebrow?: ReactNode
   title?: ReactNode
   description?: ReactNode
   actions?: ReactNode
+  actionsLayout?: ActionBarLayout
   children?: ReactNode
   className?: string
 }
@@ -14,6 +16,7 @@ export function WorkspaceHeader({
   title,
   description,
   actions,
+  actionsLayout = 'wrap',
   children,
   className = '',
   ...props
@@ -27,7 +30,11 @@ export function WorkspaceHeader({
             {title != null && <h1>{title}</h1>}
             {description != null && <p>{description}</p>}
           </div>
-          {actions != null && <div className="workspace-header__actions">{actions}</div>}
+          {actions != null && (
+            <ActionBar className="workspace-header__actions" layout={actionsLayout}>
+              {actions}
+            </ActionBar>
+          )}
         </>
       )}
     </header>

@@ -2,6 +2,7 @@ import type { DocumentPackInput, DocumentPackTab, DocumentPackTemplate } from '.
 import { documentTabs, firstPartyActivities, secondPartyActivities, templateChecks, templateComponentSpecs, templateLines } from './template'
 import { amount, expiryDate, number, plainAscii, printable } from './format'
 import { documentPackFilePrefix } from './html'
+import type { PdfSignatureImage } from './signature'
 
 export type PdfAlign = 'left' | 'center' | 'right'
 
@@ -80,7 +81,7 @@ export class DocumentPackPdfLayout {
   private currentTitle = ''
   private currentSubtitle = ''
 
-  constructor(private input: DocumentPackInput, private template: DocumentPackTemplate) {}
+  constructor(private input: DocumentPackInput, private template: DocumentPackTemplate, private customerSignature?: PdfSignatureImage) {}
 
   private command(value: string) {
     this.page?.commands.push(value)
@@ -109,11 +110,11 @@ export class DocumentPackPdfLayout {
     this.command(`${width} w ${x1.toFixed(2)} ${(PDF_HEIGHT - top1).toFixed(2)} m ${x2.toFixed(2)} ${(PDF_HEIGHT - top2).toFixed(2)} l S`)
   }
 
-  private text(x: number, top: number, value: unknown, size = 9, bold = false, color = PDF_INK, align: PdfAlign = 'left', boxWidth = 0) {
+  private text(x: number, top: number, value: unknown, size = 9, bold = false, color = PDF_INK, align: PdfAlign = 'left', boxWidth = 0, font?: 'F1' | 'F2' | 'F3') {
     const content = printable(value)
     const width = estimatedTextWidth(content, size, bold)
     const effectiveX = align === 'right' ? x + boxWidth - width : align === 'center' ? x + ((boxWidth - width) / 2) : x
-    this.command(`BT /${bold ? 'F2' : 'F1'} ${size} Tf ${pdfRgb(color)} rg ${effectiveX.toFixed(2)} ${this.topToPdfY(top, size).toFixed(2)} Td (${content}) Tj ET`)
+    this.command(`BT /${font ?? (bold ? 'F2' : 'F1')} ${size} Tf ${pdfRgb(color)} rg ${effectiveX.toFixed(2)} ${this.topToPdfY(top, size).toFixed(2)} Td (${content}) Tj ET`)
   }
 
   private newPage(continued = false) {
@@ -264,14 +265,26 @@ export class DocumentPackPdfLayout {
   }
 
   signatures() {
-    const height = 74
+    const height = 84
     this.ensure(height)
     this.line(PDF_MARGIN_X, this.cursorTop, PDF_MARGIN_X + PDF_CONTENT_WIDTH, this.cursorTop, PDF_BORDER, 0.8)
     const columnWidth = (PDF_CONTENT_WIDTH - 42) / 2
     const vendorX = PDF_MARGIN_X + columnWidth + 42
     this.text(PDF_MARGIN_X, this.cursorTop + 14, this.template.customer_signature_label || 'Customer', 7.6, false, PDF_MUTED)
-    this.text(PDF_MARGIN_X, this.cursorTop + 31, this.input.customerSignatureName || this.input.customerName, 9, true, PDF_INK)
-    this.text(PDF_MARGIN_X, this.cursorTop + 48, this.template.customer_signature_line || 'Signature: ____________________', 7.6, false, PDF_MUTED)
+    if (this.customerSignature) {
+      const maxWidth = columnWidth - 8
+      const maxHeight = 34
+      const scale = Math.min(maxWidth / this.customerSignature.width, maxHeight / this.customerSignature.height)
+      const width = this.customerSignature.width * scale
+      const imageHeight = this.customerSignature.height * scale
+      const x = PDF_MARGIN_X + 4
+      const top = this.cursorTop + 14 + ((maxHeight - imageHeight) / 2)
+      this.command(`q ${width.toFixed(2)} 0 0 ${imageHeight.toFixed(2)} ${x.toFixed(2)} ${(PDF_HEIGHT - top - imageHeight).toFixed(2)} cm /Sig Do Q`)
+    } else {
+      this.text(PDF_MARGIN_X + 4, this.cursorTop + 32, 'Uploaded signature unavailable', 7.5, false, PDF_MUTED)
+    }
+    this.line(PDF_MARGIN_X, this.cursorTop + 50, PDF_MARGIN_X + columnWidth, this.cursorTop + 50, '#9aa6b4', 0.65)
+    this.text(PDF_MARGIN_X, this.cursorTop + 57, 'Uploaded customer signature', 7.2, false, PDF_MUTED)
     this.text(vendorX, this.cursorTop + 14, this.template.vendor_signature_label || 'Vendor', 7.6, false, PDF_MUTED)
     this.text(vendorX, this.cursorTop + 31, this.template.vendor_signatory_name || this.template.company_name || 'Company', 9, true, PDF_INK)
     this.text(vendorX, this.cursorTop + 48, this.template.vendor_signatory_title || 'Authorized signatory', 7.6, false, PDF_MUTED)
@@ -295,7 +308,7 @@ export function pdfMoney(value: number) {
   return `INR ${number.format(value)}`
 }
 
-export function buildDocumentPackPdfStreams(input: DocumentPackInput, template: DocumentPackTemplate, selected: Exclude<DocumentPackTab, 'full'> | 'all') {
+export function buildDocumentPackPdfStreams(input: DocumentPackInput, template: DocumentPackTemplate, selected: Exclude<DocumentPackTab, 'full'> | 'all', layout = new DocumentPackPdfLayout(input, template)) {
   const total = amount(input.quotationAmount)
   const installation = Math.min(total, 40000)
   const systemGross = Math.max(0, total - installation)
@@ -307,7 +320,6 @@ export function buildDocumentPackPdfStreams(input: DocumentPackInput, template: 
   const configuredComponentSpecs = templateComponentSpecs(template.component_specs)
   const configuredFirstPartyActivities = templateLines(template.first_party_activities, firstPartyActivities)
   const configuredSecondPartyActivities = templateLines(template.second_party_activities, secondPartyActivities)
-  const layout = new DocumentPackPdfLayout(input, template)
   const shouldRender = (tab: Exclude<DocumentPackTab, 'full'>) => selected === 'all' || selected === tab
   const commonRows: Array<[string, unknown]> = [
     ['Name of Consumer', input.customerName],
@@ -464,10 +476,10 @@ export function buildDocumentPackPdfStreams(input: DocumentPackInput, template: 
   return layout.finish()
 }
 
-export function buildFormattedPdf(input: DocumentPackInput, template: DocumentPackTemplate, selected: Exclude<DocumentPackTab, 'full'> | 'all') {
-  const streams = buildDocumentPackPdfStreams(input, template, selected)
+export function buildPdfBlobFromStreams(streams: string[], marker = 'ERP-DOCUMENT', customerSignature?: PdfSignatureImage) {
   const objects: string[] = []
   const pageIds = streams.map((_, index) => 6 + (index * 2))
+  const signatureObjectId = customerSignature ? 5 + (streams.length * 2) : null
   objects[1] = '<< /Type /Catalog /Pages 2 0 R >>'
   objects[2] = `<< /Type /Pages /Kids [${pageIds.map((id) => `${id} 0 R`).join(' ')}] /Count ${pageIds.length} >>`
   objects[3] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>'
@@ -476,9 +488,18 @@ export function buildFormattedPdf(input: DocumentPackInput, template: DocumentPa
     const contentId = 5 + (index * 2)
     const pageId = contentId + 1
     objects[contentId] = `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`
-    objects[pageId] = `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${PDF_WIDTH} ${PDF_HEIGHT}] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents ${contentId} 0 R >>`
+    const signatureResource = signatureObjectId ? ` /XObject << /Sig ${signatureObjectId} 0 R >>` : ''
+    objects[pageId] = `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${PDF_WIDTH} ${PDF_HEIGHT}] /Resources << /Font << /F1 3 0 R /F2 4 0 R >>${signatureResource} >> /Contents ${contentId} 0 R >>`
   })
-  let pdf = '%PDF-1.4\n%ERP-DOCUMENT-PACK\n'
+  if (customerSignature && signatureObjectId) {
+    const chunks: string[] = []
+    for (let offset = 0; offset < customerSignature.bytes.length; offset += 8192) {
+      chunks.push(Array.from(customerSignature.bytes.subarray(offset, offset + 8192), (byte) => byte.toString(16).padStart(2, '0')).join(''))
+    }
+    const imageHex = `${chunks.join('')}>`
+    objects[signatureObjectId] = `<< /Type /XObject /Subtype /Image /Width ${customerSignature.width} /Height ${customerSignature.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter [/ASCIIHexDecode /DCTDecode] /Length ${imageHex.length} >>\nstream\n${imageHex}\nendstream`
+  }
+  let pdf = `%PDF-1.4\n%${plainAscii(marker).replace(/\s+/g, '-').toUpperCase()}\n`
   const offsets = [0]
   for (let id = 1; id < objects.length; id += 1) {
     offsets[id] = pdf.length
@@ -491,12 +512,17 @@ export function buildFormattedPdf(input: DocumentPackInput, template: DocumentPa
   return new Blob([pdf], { type: 'application/pdf' })
 }
 
-export async function createDocumentPackPdf(input: DocumentPackInput, template: DocumentPackTemplate, selected: Exclude<DocumentPackTab, 'full'> | 'all' = 'all') {
-  return buildFormattedPdf(input, template, selected)
+export function buildFormattedPdf(input: DocumentPackInput, template: DocumentPackTemplate, selected: Exclude<DocumentPackTab, 'full'> | 'all', customerSignature?: PdfSignatureImage) {
+  const layout = new DocumentPackPdfLayout(input, template, customerSignature)
+  return buildPdfBlobFromStreams(buildDocumentPackPdfStreams(input, template, selected, layout), 'ERP-DOCUMENT-PACK', customerSignature)
 }
 
-export async function downloadDocumentPackPdf(input: DocumentPackInput, template: DocumentPackTemplate, selected: Exclude<DocumentPackTab, 'full'> | 'all', version?: number) {
-  const blob = await createDocumentPackPdf(input, template, selected)
+export async function createDocumentPackPdf(input: DocumentPackInput, template: DocumentPackTemplate, selected: Exclude<DocumentPackTab, 'full'> | 'all' = 'all', customerSignature?: PdfSignatureImage) {
+  return buildFormattedPdf(input, template, selected, customerSignature)
+}
+
+export async function downloadDocumentPackPdf(input: DocumentPackInput, template: DocumentPackTemplate, selected: Exclude<DocumentPackTab, 'full'> | 'all', version?: number, customerSignature?: PdfSignatureImage) {
+  const blob = await createDocumentPackPdf(input, template, selected, customerSignature)
   const url = URL.createObjectURL(blob)
   const anchor = document.createElement('a')
   const part = selected === 'all' ? 'Merged_Document_Pack' : documentTabs.find((item) => item.key === selected)?.file || selected

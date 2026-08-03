@@ -83,7 +83,7 @@ export function DocumentTemplateDialog({
 
         <fieldset>
           <legend>Signature blocks</legend>
-          <p className="document-template-help">These settings control signature captions in the preview and exported files. The customer’s signature image remains customer-specific and is uploaded from the document checklist.</p>
+          <p className="document-template-help">Set signature captions for previews and exports.</p>
           <div className="erp-form-grid">
             <label><span>Customer signature label</span><input name="customer_signature_label" defaultValue={settings.customer_signature_label} /></label>
             <label><span>Customer signature line</span><input name="customer_signature_line" defaultValue={settings.customer_signature_line} /></label>

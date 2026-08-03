@@ -126,7 +126,7 @@ export function RoleDialog({
 
         <section className="permission-editor">
           <div className="permission-editor__heading">
-            <div><strong>Visible tabs</strong><span>Select what this role sees in the menu</span></div>
+            <div><strong>Visible tabs</strong><span>Choose menu access</span></div>
           </div>
           <div className="permission-groups">
             <section className="permission-group">

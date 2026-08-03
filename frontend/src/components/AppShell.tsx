@@ -15,6 +15,11 @@ export function AppShell({ session, onLogout }: { session: Session; onLogout: ()
   const canViewAdministration = hasAnyPermission(session, [PERMISSIONS.users.view, PERMISSIONS.roles.view])
 
   useEffect(() => {
+    document.body.classList.add('app-authenticated')
+    return () => document.body.classList.remove('app-authenticated')
+  }, [])
+
+  useEffect(() => {
     const query = window.matchMedia('(min-width: 781px)')
     const syncBrowserWidth = () => {
       setDesktopBrowser(query.matches)

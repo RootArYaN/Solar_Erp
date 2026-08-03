@@ -530,64 +530,8 @@ body.app-preview-mobile .alert-dialog footer button {
   }
 }
 
-/* Inventory's primary phone actions are one fixed row. This lives in the
- * final UI contract so generic route/header breakpoints cannot re-wrap it. */
-:is(.app-shell--view-mobile, body.app-preview-mobile) .inventory-head-actions {
-  width: 100% !important;
-  min-width: 0;
-  display: grid !important;
-  grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
-  align-items: stretch;
-  gap: 4px;
-}
-
-:is(.app-shell--view-mobile, body.app-preview-mobile) .inventory-head-actions > button {
-  width: 100% !important;
-  min-width: 0 !important;
-  min-height: 40px;
-  gap: 2px;
-  padding-inline: 2px !important;
-  overflow: hidden;
-  font-size: 8px !important;
-  line-height: 1;
-  white-space: nowrap !important;
-}
-
-:is(.app-shell--view-mobile, body.app-preview-mobile) .inventory-head-actions > button > svg {
-  width: 11px;
-  height: 11px;
-  flex: 0 0 auto;
-}
-
 @media (max-width: 780px) {
   .layout-view-switch {
     display: none !important;
-  }
-
-  .inventory-head-actions {
-    width: 100% !important;
-    min-width: 0;
-    display: grid !important;
-    grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
-    align-items: stretch;
-    gap: 4px;
-  }
-
-  .inventory-head-actions > button {
-    width: 100% !important;
-    min-width: 0 !important;
-    min-height: 40px;
-    gap: 2px;
-    padding-inline: 2px !important;
-    overflow: hidden;
-    font-size: 8px !important;
-    line-height: 1;
-    white-space: nowrap !important;
-  }
-
-  .inventory-head-actions > button > svg {
-    width: 11px;
-    height: 11px;
-    flex: 0 0 auto;
   }
 }

@@ -24,6 +24,10 @@ import { getModuleAccess } from '../../lib/permissions'
 import { createCustomerFlowRepository } from '../../lib/repositories/customer-flow-repository'
 import type { Session } from '../../types'
 import { Modal } from '../admin/Modal'
+import { ActionBar } from '../ui/ActionBar'
+import { Button } from '../ui/Button'
+import { Field } from '../ui/Field'
+import { KpiCard } from '../ui/KpiCard'
 import { EmptyState, ErrorState, LoadingSkeleton, ReadOnlyNotice } from '../ui/PageState'
 import { useToast } from '../ui/ToastProvider'
 import { KpiGrid, TabButton, TabStrip, WorkspacePage } from '../workspace'
@@ -244,7 +248,7 @@ export function CustomerWorkspacePage({ session }: { session: Session }) {
         <aside className="customer-directory">
           <header><div><strong>Customers</strong><span>{visibleCustomers.length} B2C records</span></div><button onClick={() => void loadCustomers()} aria-label="Refresh customers"><RefreshCw size={15} /></button></header>
           <div className="customer-directory__filters">
-            <label className="erp-search"><Search size={15} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Name, phone or consumer no." /></label>
+            <Field label="Search customers" hideLabel prefix={<Search size={15} />} className="customer-directory__search"><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Name, phone or consumer no." /></Field>
             <select aria-label="Filter customers by payment" value={paymentFilter} onChange={(event) => setPaymentFilter(event.target.value as PaymentFilter)}>
               <option value="all">All payments</option>
               <option value="loan">Loan</option>
@@ -266,14 +270,14 @@ export function CustomerWorkspacePage({ session }: { session: Session }) {
           {detailLoading || !snapshot ? <LoadingSkeleton rows={7} /> : <>
             <header className="customer-workspace__header">
               <div className="customer-title-block"><span className="customer-title-icon">{snapshot.customer.display_name.slice(0, 1)}</span><div><div className="customer-title-meta"><span>{snapshot.customer.record_number}</span><span>{label(snapshot.customer.customer_type)}</span><span className={`status-badge status-badge--${snapshot.customer.status}`}>{label(snapshot.customer.status)}</span></div><h1>{snapshot.customer.display_name}</h1><p><Phone size={13} /> {snapshot.customer.contacts[0]?.phone || 'No phone'} <MapPin size={13} /> {snapshot.customer.site_address || 'Site address pending'}</p></div></div>
-              <div className="customer-header-actions"><button className="secondary-button" onClick={() => void loadSnapshot()}><RefreshCw size={14} /> Refresh</button>{customerAccess.canEdit && <button className="primary-button primary-button--compact" onClick={() => setEditOpen(true)}><Pencil size={14} /> Edit</button>}</div>
+              <ActionBar className="customer-header-actions" layout="grid"><Button variant="secondary" leadingIcon={<RefreshCw size={14} />} onClick={() => void loadSnapshot()}>Refresh</Button>{customerAccess.canEdit && <Button variant="primary" size="compact" leadingIcon={<Pencil size={14} />} onClick={() => setEditOpen(true)}>Edit</Button>}</ActionBar>
             </header>
 
-            <KpiGrid columns={4} className="customer-kpis">
-              <article><span><FolderKanban size={16} /></span><div><small>Current project</small><strong>{project?.record_number || 'Not created'}</strong><em>{project ? `${project.capacity_kw} kW · ${label(project.payment_mode || 'mode pending')}` : 'Approve quotation to create'}</em></div></article>
-              <article><span><CalendarClock size={16} /></span><div><small>Current stage</small><strong>{snapshot.timeline.find((row) => row.status === 'current')?.name || (project?.status ? label(project.status) : 'Quotation')}</strong><em>{project ? `${Math.round((snapshot.timeline.filter((row) => row.status === 'completed').length / Math.max(1, snapshot.timeline.length)) * 100)}% complete` : 'Project not started'}</em></div></article>
-              <article><span><BadgeIndianRupee size={16} /></span><div><small>Approved value</small><strong>{money.format(approvedValue)}</strong><em>{currentRevision?.record_number || 'No approved quotation'}</em></div></article>
-              <article><span><CheckCircle2 size={16} /></span><div><small>Received / pending</small><strong>{money.format(totalReceived)}</strong><em>{money.format(balance)} pending</em></div></article>
+            <KpiGrid columns={4} phoneColumns={1} responsive className="customer-summary-grid">
+              <KpiCard icon={<FolderKanban />} label="Current project" value={project?.record_number || 'Not created'} note={project ? `${project.capacity_kw} kW · ${label(project.payment_mode || 'mode pending')}` : 'Awaiting approved quotation'} />
+              <KpiCard icon={<CalendarClock />} label="Current stage" value={snapshot.timeline.find((row) => row.status === 'current')?.name || (project?.status ? label(project.status) : 'Quotation')} note={project ? `${Math.round((snapshot.timeline.filter((row) => row.status === 'completed').length / Math.max(1, snapshot.timeline.length)) * 100)}% complete` : 'Project not started'} tone="navy" />
+              <KpiCard icon={<BadgeIndianRupee />} label="Approved value" value={money.format(approvedValue)} note={currentRevision?.record_number || 'No approved quotation'} />
+              <KpiCard icon={<CheckCircle2 />} label="Received / pending" value={money.format(totalReceived)} note={`${money.format(balance)} pending`} tone={balance > 0 ? 'neutral' : 'success'} />
             </KpiGrid>
 
             <TabStrip className="workspace-tabs" label="Customer detail sections">

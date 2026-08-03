@@ -14,7 +14,7 @@ export function Overview({ data }: { data: FinanceOverview }) {
   const maxFlow = Math.max(1, ...data.monthly_flow.flatMap((row) => [row.money_in, row.money_out]))
   const maxExpense = Math.max(1, ...data.expense_by_category.map((row) => row.amount))
   return <>
-    <KpiGrid columns={4} className="finance-kpis">
+    <KpiGrid columns={4} phoneColumns={2} responsive className="finance-kpis">
       {cards.map(([name, value, Icon, tone]) => (
         <article className={`finance-kpi finance-kpi--${tone}`} key={name}>
           <span><Icon size={17} /></span>
@@ -23,23 +23,23 @@ export function Overview({ data }: { data: FinanceOverview }) {
       ))}
     </KpiGrid>
     <div className="finance-overview-grid">
-      <section className="erp-panel finance-overview-card">
-        <header><div><strong>Recent transactions</strong><span>Latest company money movements</span></div></header>
+      <section className="erp-panel finance-overview-card finance-overview-card--table">
+        <header><div><strong>Recent transactions</strong></div></header>
         <TransactionTable rows={data.recent_transactions} compact />
       </section>
       <section className="erp-panel finance-overview-card">
         <header>
-          <div><strong>Monthly cash flow</strong><span>Money in versus money out</span></div>
+          <div><strong>Monthly cash flow</strong></div>
           <div className="cash-flow-legend"><span><i /> Money in</span><span><i /> Money out</span></div>
         </header>
         {!data.monthly_flow.length ? <EmptyState title="No monthly movement yet" /> : <div className="cash-flow-chart">{data.monthly_flow.map((row) => <div key={row.month}><div><i style={{ height: `${Math.max(4, (row.money_in / maxFlow) * 100)}%` }} title={`Money in ${money.format(row.money_in)}`} /><b style={{ height: `${Math.max(4, (row.money_out / maxFlow) * 100)}%` }} title={`Money out ${money.format(row.money_out)}`} /></div><span>{row.month}</span></div>)}</div>}
       </section>
-      <section className="erp-panel finance-overview-card">
-        <header><div><strong>Pending bills</strong><span>Customer receivables and supplier payables</span></div></header>
+      <section className="erp-panel finance-overview-card finance-overview-card--table">
+        <header><div><strong>Pending bills</strong></div></header>
         <BillTable rows={data.pending_bills} compact />
       </section>
       <section className="erp-panel finance-overview-card">
-        <header><div><strong>Expense mix</strong><span>Current month by category</span></div></header>
+        <header><div><strong>Expense mix</strong></div></header>
         {!data.expense_by_category.length ? <EmptyState title="No expenses this month" /> : <div className="expense-breakdown">{data.expense_by_category.map((row) => <div key={row.category}><div><span>{row.category}</span><strong>{money.format(row.amount)}</strong></div><i><b style={{ width: `${(row.amount / maxExpense) * 100}%` }} /></i></div>)}</div>}
       </section>
     </div>
@@ -55,10 +55,6 @@ export function Transactions({ data, rows, search, setSearch, direction, setDire
       <article><span>Entries</span><strong>{data?.total ?? 0}</strong></article>
     </section>
     <div className="finance-ledger-toolbar">
-      <div className="finance-ledger-heading">
-        <strong>{reportMode ? 'Full transaction ledger' : 'Company transactions'}</strong>
-        <span>{reportMode ? 'Printable source report.' : 'Actual money movement only.'}</span>
-      </div>
       <label className="finance-ledger-field"><span>From</span><input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} /></label>
       <label className="finance-ledger-field"><span>To</span><input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} /></label>
       <label className="finance-ledger-field finance-ledger-direction"><span>Direction</span><select value={direction} onChange={(event) => setDirection(event.target.value)}><option value="">All</option><option value="credit">Money in</option><option value="debit">Money out</option></select></label>
@@ -82,10 +78,6 @@ export function Expenses({ data, dateFrom, setDateFrom, dateTo, setDateTo, reloa
       <article><span>Average</span><strong>{money.format((data?.money_out ?? 0) / Math.max(1, data?.total ?? 0))}</strong></article>
     </section>
     <div className="finance-expense-toolbar">
-      <div className="finance-expense-heading">
-        <strong>Company expenses</strong>
-        <span>Filter the shared ledger by date.</span>
-      </div>
       <div className="finance-expense-presets">
         <button onClick={() => { setDateFrom(today()); setDateTo(today()) }}>Today</button>
         <button onClick={() => { const d = new Date(); d.setDate(d.getDate() - 1); const value = d.toISOString().slice(0, 10); setDateFrom(value); setDateTo(value) }}>Yesterday</button>
@@ -109,12 +101,7 @@ export function Bills({ data, billType, setBillType, reload, canEdit, onAdd, onE
       <article><span>Paid</span><strong>{money.format(data?.data.reduce((sum, row) => sum + row.paid_amount, 0) ?? 0)}</strong></article>
     </section>
     <div className="finance-bills-toolbar">
-      <div className="finance-bills-heading">
-        <strong>Sales and purchase bills</strong>
-        <span>Bills and payments stay linked.</span>
-      </div>
       <label className="finance-bill-type">
-        <span>Bill type</span>
         <select value={billType} onChange={(event) => setBillType(event.target.value)}>
           <option value="">All bills</option>
           <option value="sales">Sales</option>
@@ -129,16 +116,16 @@ export function Bills({ data, billType, setBillType, reload, canEdit, onAdd, onE
 }
 
 export function Accounts({ rows, canEdit, onAdd, onTransfer }: { rows: FinancialAccount[]; canEdit: boolean; onAdd: () => void; onTransfer: () => void }) {
-  return <><div className="tab-toolbar"><div><strong>Bank and cash accounts</strong><span>Balance = opening balance + money in − money out.</span></div>{canEdit && <div><button className="secondary-button" onClick={onTransfer}><ArrowRightLeft size={14} /> Transfer</button><button className="primary-button primary-button--compact" onClick={onAdd}><Plus size={14} /> Account</button></div>}</div><section className="account-grid">{rows.map((row) => <article key={row.id}><span className={`account-icon account-icon--${row.account_type}`}><Landmark size={18} /></span><div><small>{label(row.account_type)}</small><strong>{row.name}</strong><p>{row.bank_name || row.masked_account_number || 'Internal account'}</p></div><b>{money.format(row.current_balance)}</b></article>)}{!rows.length && <EmptyState title="No financial accounts" />}</section></>
+  return <><div className="tab-toolbar"><div></div>{canEdit && <div><button className="secondary-button" onClick={onTransfer}><ArrowRightLeft size={14} /> Transfer</button><button className="primary-button primary-button--compact" onClick={onAdd}><Plus size={14} /> Account</button></div>}</div><section className="account-grid">{rows.map((row) => <article key={row.id}><span className={`account-icon account-icon--${row.account_type}`}><Landmark size={18} /></span><div><small>{label(row.account_type)}</small><strong>{row.name}</strong><p>{row.bank_name || row.masked_account_number || 'Internal account'}</p></div><b>{money.format(row.current_balance)}</b></article>)}{!rows.length && <EmptyState title="No financial accounts" />}</section></>
 }
 
 export function Loans({ rows, canEdit, onAdd, onEdit, onPay, onDelete }: { rows: CompanyLoan[]; canEdit: boolean; onAdd: () => void; onEdit: (loan: CompanyLoan) => void; onPay: (loan: CompanyLoan) => void; onDelete: (loan: CompanyLoan) => void }) {
-  return <><div className="tab-toolbar"><div><strong>Company loans</strong><span>Business borrowing only—customer solar loans stay inside customer projects.</span></div>{canEdit && <button className="primary-button primary-button--compact" onClick={onAdd}><Plus size={14} /> Company loan</button>}</div>{!rows.length ? <EmptyState title="No company loans" /> : <div className="erp-table-wrap"><table className="erp-table"><thead><tr><th>Lender</th><th>Principal</th><th>Outstanding</th><th>Interest</th><th>EMI</th><th>Next due</th><th>Status</th><th /></tr></thead><tbody>{rows.map((row) => <tr key={row.id}><td><strong>{row.lender_name}</strong><small>{row.loan_account_number}</small></td><td>{money.format(row.principal_amount)}</td><td>{money.format(row.outstanding_amount)}</td><td>{row.interest_rate}%</td><td>{money.format(row.emi_amount)}</td><td>{row.next_due_date ? shortDate.format(new Date(row.next_due_date)) : '—'}</td><td><span className="soft-badge">{label(row.status)}</span></td><td>{canEdit && <div className="erp-row-actions"><button className="secondary-button secondary-button--compact" onClick={() => onEdit(row)}><Pencil size={13} /> Edit</button>{row.status !== 'closed' && <button className="secondary-button secondary-button--compact" onClick={() => onPay(row)}>Pay</button>}<button type="button" className="danger-icon-button finance-transaction-delete" onClick={() => onDelete(row)} aria-label={`Delete loan from ${row.lender_name}`} title="Delete loan"><Trash2 size={14} /></button></div>}</td></tr>)}</tbody></table></div>}</>
+  return <><div className="tab-toolbar"><div></div>{canEdit && <button className="primary-button primary-button--compact" onClick={onAdd}><Plus size={14} /> Company loan</button>}</div>{!rows.length ? <EmptyState title="No company loans" /> : <div className="erp-table-wrap"><table className="erp-table"><thead><tr><th>Lender</th><th>Principal</th><th>Outstanding</th><th>Interest</th><th>EMI</th><th>Next due</th><th>Status</th><th /></tr></thead><tbody>{rows.map((row) => <tr key={row.id}><td><strong>{row.lender_name}</strong><small>{row.loan_account_number}</small></td><td>{money.format(row.principal_amount)}</td><td>{money.format(row.outstanding_amount)}</td><td>{row.interest_rate}%</td><td>{money.format(row.emi_amount)}</td><td>{row.next_due_date ? shortDate.format(new Date(row.next_due_date)) : '—'}</td><td><span className="soft-badge">{label(row.status)}</span></td><td>{canEdit && <div className="erp-row-actions"><button className="secondary-button secondary-button--compact" onClick={() => onEdit(row)}><Pencil size={13} /> Edit</button>{row.status !== 'closed' && <button className="secondary-button secondary-button--compact" onClick={() => onPay(row)}>Pay</button>}<button type="button" className="danger-icon-button finance-transaction-delete" onClick={() => onDelete(row)} aria-label={`Delete loan from ${row.lender_name}`} title="Delete loan"><Trash2 size={14} /></button></div>}</td></tr>)}</tbody></table></div>}</>
 }
 
 export function ProfitabilityPanel({ data }: { data: Profitability | null }) {
   if (!data) return <EmptyState title="No profitability data" />
-  return <><section className="finance-kpis"><article className="finance-kpi"><span><BadgeIndianRupee size={17} /></span><div><small>Sales value</small><strong>{money.format(data.sales_value)}</strong></div></article><article className="finance-kpi"><span><ArrowDownLeft size={17} /></span><div><small>Money received</small><strong>{money.format(data.money_received)}</strong></div></article><article className="finance-kpi"><span><ReceiptText size={17} /></span><div><small>Material + project cost</small><strong>{money.format(data.material_cost + data.project_expenses)}</strong></div></article><article className="finance-kpi"><span><BarChart3 size={17} /></span><div><small>Estimated gross profit</small><strong>{money.format(data.estimated_gross_profit)}</strong></div></article></section><div className="tab-toolbar"><div><strong>Project profitability</strong><span>Calculated from linked quotation value and project expenses.</span></div></div>{!data.projects.length ? <EmptyState title="No project profitability yet" /> : <div className="erp-table-wrap"><table className="erp-table"><thead><tr><th>Project</th><th>Sales value</th><th>Money received</th><th>Cost</th><th>Gross profit</th></tr></thead><tbody>{data.projects.map((row) => <tr key={row.project_id}><td><strong>{row.project_number}</strong><small>{row.project_name}</small></td><td>{money.format(row.sales_value)}</td><td>{money.format(row.money_received)}</td><td>{money.format(row.cost)}</td><td className={row.gross_profit >= 0 ? 'money-in' : 'money-out'}>{money.format(row.gross_profit)}</td></tr>)}</tbody></table></div>}</>
+  return <><section className="finance-kpis"><article className="finance-kpi"><span><BadgeIndianRupee size={17} /></span><div><small>Sales value</small><strong>{money.format(data.sales_value)}</strong></div></article><article className="finance-kpi"><span><ArrowDownLeft size={17} /></span><div><small>Money received</small><strong>{money.format(data.money_received)}</strong></div></article><article className="finance-kpi"><span><ReceiptText size={17} /></span><div><small>Material + project cost</small><strong>{money.format(data.material_cost + data.project_expenses)}</strong></div></article><article className="finance-kpi"><span><BarChart3 size={17} /></span><div><small>Estimated gross profit</small><strong>{money.format(data.estimated_gross_profit)}</strong></div></article></section><div className="tab-toolbar"><div></div></div>{!data.projects.length ? <EmptyState title="No project profitability yet" /> : <div className="erp-table-wrap"><table className="erp-table"><thead><tr><th>Project</th><th>Sales value</th><th>Money received</th><th>Cost</th><th>Gross profit</th></tr></thead><tbody>{data.projects.map((row) => <tr key={row.project_id}><td><strong>{row.project_number}</strong><small>{row.project_name}</small></td><td>{money.format(row.sales_value)}</td><td>{money.format(row.money_received)}</td><td>{money.format(row.cost)}</td><td className={row.gross_profit >= 0 ? 'money-in' : 'money-out'}>{money.format(row.gross_profit)}</td></tr>)}</tbody></table></div>}</>
 }
 
 export function TransactionTable({ rows, compact = false, canEdit = false, onEdit, onReverse, onDelete }: { rows: FinanceTransactionList['data']; compact?: boolean; canEdit?: boolean; onEdit?: (row: FinanceTransaction) => void; onReverse?: (row: FinanceTransaction) => void; onDelete?: (row: FinanceTransaction) => void }) {

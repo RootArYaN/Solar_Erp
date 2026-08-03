@@ -264,7 +264,7 @@ export function ProjectTimelinePage() {
 
                 <div className="timeline-progress-track"><i style={{ width: `${timeline.progress}%` }} /></div>
 
-                <KpiGrid columns={4} className="timeline-summary-grid">
+                <KpiGrid columns={4} phoneColumns={2} responsive className="timeline-summary-grid">
                   <article><WalletCards size={16} /><span><small>Payment mode</small><strong>{timeline.payment_mode ? timeline.payment_mode : 'Not selected'}</strong></span></article>
                   <article><IndianRupee size={16} /><span><small>Approved value</small><strong>{money.format(timeline.approved_value)}</strong></span></article>
                   <article><CheckCircle2 size={16} /><span><small>Plant capacity</small><strong>{timeline.capacity_kw} kW</strong></span></article>

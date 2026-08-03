@@ -171,11 +171,57 @@ def _account_summary(db: Session, row: FinancialAccount) -> FinancialAccountSumm
 
 
 def list_accounts(db: Session, actor: CurrentSession) -> list[FinancialAccountSummary]:
-    rows = list(db.scalars(select(FinancialAccount).where(
-        FinancialAccount.company_id == actor.membership.company_id,
-        FinancialAccount.is_active.is_(True),
-    ).order_by(FinancialAccount.account_type, FinancialAccount.name)).all())
-    return [_account_summary(db, row) for row in rows]
+    company_id = actor.membership.company_id
+    movement_totals = (
+        select(
+            FinanceTransaction.account_id.label('account_id'),
+            func.coalesce(func.sum(case(
+                (FinanceTransaction.direction == 'credit', FinanceTransaction.amount),
+                else_=0,
+            )), 0).label('credits'),
+            func.coalesce(func.sum(case(
+                (FinanceTransaction.direction == 'debit', FinanceTransaction.amount),
+                else_=0,
+            )), 0).label('debits'),
+        )
+        .where(
+            FinanceTransaction.company_id == company_id,
+            FinanceTransaction.status == 'posted',
+        )
+        .group_by(FinanceTransaction.account_id)
+        .subquery()
+    )
+    rows = db.execute(
+        select(
+            FinancialAccount,
+            func.coalesce(movement_totals.c.credits, 0),
+            func.coalesce(movement_totals.c.debits, 0),
+        )
+        .outerjoin(movement_totals, movement_totals.c.account_id == FinancialAccount.id)
+        .where(
+            FinancialAccount.company_id == company_id,
+            FinancialAccount.is_active.is_(True),
+        )
+        .order_by(FinancialAccount.account_type, FinancialAccount.name)
+    ).all()
+    return [
+        FinancialAccountSummary(
+            id=account.id,
+            name=account.name,
+            account_type=account.account_type,
+            bank_name=account.bank_name,
+            masked_account_number=account.masked_account_number,
+            opening_balance=_float(account.opening_balance),
+            current_balance=_float(
+                Decimal(account.opening_balance or 0)
+                + Decimal(credits or 0)
+                - Decimal(debits or 0)
+            ),
+            is_active=account.is_active,
+            updated_at=account.updated_at,
+        )
+        for account, credits, debits in rows
+    ]
 
 
 def create_account(db: Session, actor: CurrentSession, payload: CreateFinancialAccountRequest) -> FinancialAccountSummary:
@@ -1022,17 +1068,106 @@ def overview(db: Session, actor: CurrentSession) -> FinanceOverview:
 
 
 def profitability(db: Session, actor: CurrentSession) -> ProfitabilitySummary:
-    sales_value = db.scalar(select(func.coalesce(func.sum(Bill.total_amount), 0)).where(Bill.company_id == actor.membership.company_id, Bill.bill_type == 'sales', Bill.status != 'cancelled')) or 0
-    purchase_value = db.scalar(select(func.coalesce(func.sum(Bill.total_amount), 0)).where(Bill.company_id == actor.membership.company_id, Bill.bill_type == 'purchase', Bill.status != 'cancelled')) or 0
-    tx = list_transactions(db, actor, page=1, page_size=1)
-    subsidy = db.scalar(select(func.coalesce(func.sum(FinanceTransaction.amount), 0)).where(FinanceTransaction.company_id == actor.membership.company_id, FinanceTransaction.source_type == 'subsidy_received', FinanceTransaction.direction == 'credit', FinanceTransaction.status == 'posted')) or 0
-    project_expenses = db.scalar(select(func.coalesce(func.sum(FinanceTransaction.amount), 0)).where(FinanceTransaction.company_id == actor.membership.company_id, FinanceTransaction.direction == 'debit', FinanceTransaction.project_id.is_not(None), FinanceTransaction.status == 'posted')) or 0
-    operating = db.scalar(select(func.coalesce(func.sum(FinanceTransaction.amount), 0)).where(FinanceTransaction.company_id == actor.membership.company_id, FinanceTransaction.direction == 'debit', FinanceTransaction.project_id.is_(None), FinanceTransaction.status == 'posted')) or 0
-    projects = list(db.scalars(select(CustomerProject).where(CustomerProject.company_id == actor.membership.company_id).order_by(CustomerProject.created_at.desc()).limit(100)).all())
-    project_rows = []
-    for project in projects:
-        received = db.scalar(select(func.coalesce(func.sum(FinanceTransaction.amount), 0)).where(FinanceTransaction.project_id == project.id, FinanceTransaction.direction == 'credit', FinanceTransaction.status == 'posted')) or 0
-        cost = db.scalar(select(func.coalesce(func.sum(FinanceTransaction.amount), 0)).where(FinanceTransaction.project_id == project.id, FinanceTransaction.direction == 'debit', FinanceTransaction.status == 'posted')) or 0
-        project_rows.append({'project_id': project.id, 'project_number': project.project_number, 'project_name': project.name, 'sales_value': _float(project.approved_value), 'money_received': _float(received), 'cost': _float(cost), 'gross_profit': _float(project.approved_value) - _float(cost)})
+    company_id = actor.membership.company_id
+    sales_value, purchase_value = db.execute(
+        select(
+            func.coalesce(func.sum(case(
+                (Bill.bill_type == 'sales', Bill.total_amount),
+                else_=0,
+            )), 0),
+            func.coalesce(func.sum(case(
+                (Bill.bill_type == 'purchase', Bill.total_amount),
+                else_=0,
+            )), 0),
+        ).where(
+            Bill.company_id == company_id,
+            Bill.status != 'cancelled',
+        )
+    ).one()
+
+    money_in, money_out, subsidy, project_expenses, operating = db.execute(
+        select(
+            func.coalesce(func.sum(case(
+                (FinanceTransaction.direction == 'credit', FinanceTransaction.amount),
+                else_=0,
+            )), 0),
+            func.coalesce(func.sum(case(
+                (FinanceTransaction.direction == 'debit', FinanceTransaction.amount),
+                else_=0,
+            )), 0),
+            func.coalesce(func.sum(case((
+                (FinanceTransaction.direction == 'credit')
+                & (FinanceTransaction.source_type == 'subsidy_received'),
+                FinanceTransaction.amount,
+            ), else_=0)), 0),
+            func.coalesce(func.sum(case((
+                (FinanceTransaction.direction == 'debit')
+                & FinanceTransaction.project_id.is_not(None),
+                FinanceTransaction.amount,
+            ), else_=0)), 0),
+            func.coalesce(func.sum(case((
+                (FinanceTransaction.direction == 'debit')
+                & FinanceTransaction.project_id.is_(None),
+                FinanceTransaction.amount,
+            ), else_=0)), 0),
+        ).where(
+            FinanceTransaction.company_id == company_id,
+            FinanceTransaction.status == 'posted',
+        )
+    ).one()
+
+    project_totals = (
+        select(
+            FinanceTransaction.project_id.label('project_id'),
+            func.coalesce(func.sum(case(
+                (FinanceTransaction.direction == 'credit', FinanceTransaction.amount),
+                else_=0,
+            )), 0).label('received'),
+            func.coalesce(func.sum(case(
+                (FinanceTransaction.direction == 'debit', FinanceTransaction.amount),
+                else_=0,
+            )), 0).label('cost'),
+        )
+        .where(
+            FinanceTransaction.company_id == company_id,
+            FinanceTransaction.status == 'posted',
+            FinanceTransaction.project_id.is_not(None),
+        )
+        .group_by(FinanceTransaction.project_id)
+        .subquery()
+    )
+    projects = db.execute(
+        select(
+            CustomerProject,
+            func.coalesce(project_totals.c.received, 0),
+            func.coalesce(project_totals.c.cost, 0),
+        )
+        .outerjoin(project_totals, project_totals.c.project_id == CustomerProject.id)
+        .where(CustomerProject.company_id == company_id)
+        .order_by(CustomerProject.created_at.desc())
+        .limit(100)
+    ).all()
+    project_rows = [
+        {
+            'project_id': project.id,
+            'project_number': project.project_number,
+            'project_name': project.name,
+            'sales_value': _float(project.approved_value),
+            'money_received': _float(received),
+            'cost': _float(cost),
+            'gross_profit': _float(project.approved_value) - _float(cost),
+        }
+        for project, received, cost in projects
+    ]
     gross = _float(sales_value) - _float(purchase_value) - _float(project_expenses)
-    return ProfitabilitySummary(sales_value=_float(sales_value), money_received=tx.money_in, subsidy_received=_float(subsidy), material_cost=_float(purchase_value), project_expenses=_float(project_expenses), operating_expenses=_float(operating), net_cash_flow=tx.money_in - tx.money_out, estimated_gross_profit=gross, projects=project_rows)
+    return ProfitabilitySummary(
+        sales_value=_float(sales_value),
+        money_received=_float(money_in),
+        subsidy_received=_float(subsidy),
+        material_cost=_float(purchase_value),
+        project_expenses=_float(project_expenses),
+        operating_expenses=_float(operating),
+        net_cash_flow=_float(money_in) - _float(money_out),
+        estimated_gross_profit=gross,
+        projects=project_rows,
+    )

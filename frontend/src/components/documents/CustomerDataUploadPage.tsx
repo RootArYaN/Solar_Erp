@@ -8,13 +8,17 @@ import type { Customer, CustomerFlowSnapshot } from '../../contracts/domain-cont
 import type { DocumentTemplate, GeneratedDocumentPack } from '../../erp-types'
 import { getModuleAccess, hasPermission, PERMISSIONS } from '../../lib/permissions'
 import { createCustomerFlowRepository } from '../../lib/repositories/customer-flow-repository'
-import { createDocumentPackPdf, documentPackFilePrefix, normalizeDocumentPackTemplate, type DocumentPackInput } from '../../lib/document-pack'
+import { createDocumentPackPdf, documentPackFilePrefix, isCustomerSignatureFile, isEmbeddableSignatureFile, loadCustomerSignature, normalizeDocumentPackTemplate, type DocumentPackInput, type LoadedCustomerSignature } from '../../lib/document-pack'
 import { fileUploadRules, validateUploadFile } from '../../lib/file-validation'
 import type { Session, StoredFile } from '../../types'
 import { Modal } from '../admin/Modal'
 import { GeneratedDocumentPackPanel } from './GeneratedDocumentPack'
 import { DocumentTemplateDialog } from './DocumentTemplateDialog'
 import { AlertDialog } from '../ui/AlertDialog'
+import { Button } from '../ui/Button'
+import { Card } from '../ui/Card'
+import { Field } from '../ui/Field'
+import { KpiCard } from '../ui/KpiCard'
 import { EmptyState, ErrorState, LoadingSkeleton } from '../ui/PageState'
 import { useToast } from '../ui/ToastProvider'
 import { KpiGrid, WorkspaceHeader, WorkspacePage } from '../workspace'
@@ -73,6 +77,7 @@ export function CustomerDataUploadPage({ session }: { session: Session }) {
   const [packs, setPacks] = useState<GeneratedDocumentPack[]>([])
   const [selectedPack, setSelectedPack] = useState<GeneratedDocumentPack | null>(null)
   const [packFiles, setPackFiles] = useState<StoredFile[]>([])
+  const [customerSignature, setCustomerSignature] = useState<LoadedCustomerSignature | null>(null)
   const packFileRequest = useRef('')
   const [modal, setModal] = useState<'upload' | 'template' | null>(null)
   const [uploadType, setUploadType] = useState<DocumentTypeKey>('aadhaar')
@@ -84,6 +89,22 @@ export function CustomerDataUploadPage({ session }: { session: Session }) {
   const access = getModuleAccess(session, 'documents')
   const canManageTemplate = hasPermission(session, PERMISSIONS.documents.manage)
   const { toast } = useToast()
+  const customerSignatureFile = useMemo(() => files.find(isCustomerSignatureFile), [files])
+
+  useEffect(() => {
+    let active = true
+    setCustomerSignature(null)
+    if (!selectedId || !customerSignatureFile || !isEmbeddableSignatureFile(customerSignatureFile)) return () => { active = false }
+    void loadCustomerSignature(selectedId, files).then((loaded) => {
+      if (!loaded) return
+      if (active) setCustomerSignature(loaded)
+    }).catch(() => {
+      if (active) setCustomerSignature(null)
+    })
+    return () => {
+      active = false
+    }
+  }, [customerSignatureFile?.id, files, selectedId])
 
   const loadCustomer = useCallback(async (customerId: string) => {
     if (!customerId) { packFileRequest.current = ''; setSnapshot(null); setFiles([]); setPacks([]); setSelectedPack(null); setPackFiles([]); return }
@@ -151,6 +172,12 @@ export function CustomerDataUploadPage({ session }: { session: Session }) {
     event.preventDefault(); if (!snapshot) return
     const form = event.currentTarget; const values = new FormData(form); const file = values.get('file')
     if (!(file instanceof File) || !file.size) return
+    const requestedType = String(values.get('document_type') || uploadType)
+    const type = (documentTypes.some(([key]) => key === requestedType) ? requestedType : uploadType) as DocumentTypeKey
+    if (type === 'customer_signature' && !['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      toast({ message: 'Customer signature must be uploaded as a JPG, PNG, or WebP image so it can appear inside documents.', variant: 'warning' })
+      return
+    }
     const validation = await validateUploadFile(file, fileUploadRules.customerVerificationDocument)
     if ('message' in validation) {
       toast({ message: validation.message, variant: 'warning' })
@@ -158,8 +185,6 @@ export function CustomerDataUploadPage({ session }: { session: Session }) {
     }
     setWorking(true)
     try {
-      const requestedType = String(values.get('document_type') || uploadType)
-      const type = (documentTypes.some(([key]) => key === requestedType) ? requestedType : uploadType) as DocumentTypeKey
       const previousFile = files.find((stored) => matchesDocumentType(stored, type))
       await uploadStoredFile({ file, ownerType: `customer_document:${type}`, ownerId: snapshot.customer.id, customerId: snapshot.customer.id, projectId: snapshot.project?.id })
       if (previousFile && access.canEdit) await removeStoredFile(previousFile.id)
@@ -200,12 +225,16 @@ export function CustomerDataUploadPage({ session }: { session: Session }) {
 
   async function savePack(input: DocumentPackInput, status: 'draft' | 'generated') {
     if (!snapshot?.project) return null
+    if (status === 'generated' && !customerSignature) {
+      toast({ message: 'Upload a valid customer signature image before generating the document pack.', variant: 'warning' })
+      return null
+    }
     setWorking(true)
     try {
       const pack = await saveGeneratedDocumentPack(snapshot.customer.id, { input_snapshot: input, status })
       if (status === 'generated') {
         const settings = settingsFrom(template)
-        const blob = await createDocumentPackPdf(input, settings, 'all')
+        const blob = await createDocumentPackPdf(input, settings, 'all', customerSignature?.pdf)
         const fileName = `${documentPackFilePrefix(input, pack.version)}_Full_Document_Pack.pdf`
         await uploadStoredFile({
           file: new File([blob], fileName, { type: 'application/pdf' }),
@@ -276,7 +305,9 @@ export function CustomerDataUploadPage({ session }: { session: Session }) {
     const file = activeFiles.find((candidate) => matchesDocumentType(candidate, key))
     return { key, label, file, required: requiredDocumentTypes.has(key) }
   })
-  const missingRequiredDocuments = checklistEntries.filter((entry) => entry.required && !entry.file).map((entry) => entry.label)
+  const missingRequiredDocuments: string[] = checklistEntries.filter((entry) => entry.required && !entry.file).map((entry) => entry.label)
+  if (customerSignatureFile && !isEmbeddableSignatureFile(customerSignatureFile)) missingRequiredDocuments.push('Customer signature image (JPG, PNG, or WebP)')
+  else if (customerSignatureFile && !customerSignature) missingRequiredDocuments.push('Customer signature image is still loading')
 
   function fileActions(key: DocumentTypeKey, label: string, file?: StoredFile) {
     return <div className="document-checklist__actions">
@@ -296,18 +327,20 @@ export function CustomerDataUploadPage({ session }: { session: Session }) {
     <WorkspaceHeader
       eyebrow="Customer records"
       title="Documents and generated packs"
-      actions={<button type="button" className="secondary-button" onClick={() => void load()} disabled={loading || working}><RefreshCw className={loading ? 'spin' : ''} size={14} /> Refresh</button>}
+      actions={<Button variant="secondary" leadingIcon={<RefreshCw className={loading ? 'spin' : ''} size={14} />} onClick={() => void load()} disabled={loading || working}>Refresh</Button>}
     />
-    <KpiGrid columns={snapshot ? 5 : 1} className="erp-kpi-grid document-kpi-grid">
-      <article className="document-customer-kpi">
-        <label><span>Customer</span><select value={selectedId} onChange={(event) => void select(event.target.value)}><option value="">Select customer</option>{customers.map((row) => <option key={row.id} value={row.id}>{row.display_name} · {row.record_number}</option>)}</select></label>
-        <small>{customer ? `${customer.consumer_number || 'No consumer number'} · ${project?.record_number || 'No active project'}` : 'Choose a customer workspace'}</small>
-      </article>
+    <KpiGrid columns={snapshot ? 5 : 1} phoneColumns={1} responsive className="document-summary-grid">
+      <Card className="document-customer-selector">
+        <Field label="Customer" compact>
+          <select value={selectedId} onChange={(event) => void select(event.target.value)}><option value="">Select customer</option>{customers.map((row) => <option key={row.id} value={row.id}>{row.display_name} · {row.record_number}</option>)}</select>
+        </Field>
+        <small className="document-customer-selector__note">{customer ? `${customer.consumer_number || 'No consumer number'} · ${project?.record_number || 'No active project'}` : 'Choose a customer workspace'}</small>
+      </Card>
       {snapshot && <>
-        <article><FileText /><span>Customer</span><strong>{customer?.display_name}</strong><small>{customer?.customer_type} · {customer?.electricity_provider || 'DISCOM not set'}</small></article>
-        <article><FileCheck2 /><span>Documents</span><strong>{activeFiles.length}</strong><small>Uploaded customer files</small></article>
-        <article><FileText /><span>Project</span><strong>{project?.record_number || 'Not created'}</strong><small>{project ? `${project.capacity_kw} kW · ${project.payment_mode || 'Payment mode pending'}` : 'Quotation approval creates project'}</small></article>
-        <article className="document-status-kpi"><FileText /><span>Status</span><strong>{project?.documentation_status.replaceAll('_', ' ') || 'Customer registered'}</strong><small>{project?.registration_status.replaceAll('_', ' ') || 'Registration pending'}</small><button type="button" onClick={() => void refreshStatus()} disabled={refreshing || working} aria-label="Refresh customer status" title="Refresh status, checklist and document versions"><RefreshCw className={refreshing ? 'spin' : ''} size={14} /></button></article>
+        <KpiCard icon={<FileText />} label="Customer" value={customer?.display_name || 'Customer'} note={`${customer?.customer_type || 'B2C'} · ${customer?.electricity_provider || 'DISCOM not set'}`} />
+        <KpiCard icon={<FileCheck2 />} label="Documents" value={activeFiles.length} note="Uploaded files" tone="success" />
+        <KpiCard icon={<FileText />} label="Project" value={project?.record_number || 'Not created'} note={project ? `${project.capacity_kw} kW · ${project.payment_mode || 'Payment mode pending'}` : 'Awaiting approved quotation'} tone="navy" />
+        <KpiCard icon={<FileText />} label="Status" value={project?.documentation_status.replaceAll('_', ' ') || 'Customer registered'} note={project?.registration_status.replaceAll('_', ' ') || 'Registration pending'} action={<button type="button" onClick={() => void refreshStatus()} disabled={refreshing || working} aria-label="Refresh customer status" title="Refresh status"><RefreshCw className={refreshing ? 'spin' : ''} size={14} /></button>} />
       </>}
     </KpiGrid>
 
@@ -324,11 +357,12 @@ export function CustomerDataUploadPage({ session }: { session: Session }) {
         canApprove={access.canApprove}
         working={working}
         packFiles={packFiles}
+        customerSignatureUrl={customerSignature?.dataUrl || ''}
         missingRequiredDocuments={missingRequiredDocuments}
         onSelectPack={(pack) => void selectPack(pack)}
         onSave={savePack}
         onFinalize={finalizePack}
-      /> : <section className="erp-panel generated-pack-gate"><FileText size={20} /><div><strong>Document generator unlocks after approval</strong><span>The approved quotation must create a project before the agent can generate the customer pack.</span></div></section>}
+      /> : <section className="erp-panel generated-pack-gate"><FileText size={20} /><div><strong>Document generator unlocks after approval</strong><span>Create the project from an approved quotation to unlock it.</span></div></section>}
 
       <div className="erp-two-column document-workspace-grid"><section className="erp-panel document-data-pack"><header><div><span>Auto-filled information</span><h2>Customer data pack</h2></div></header><dl className="erp-detail-grid document-data-grid"><div><dt>Customer name</dt><dd>{customer?.display_name}</dd></div><div><dt>Phone</dt><dd>{customer?.contacts[0]?.phone || '—'}</dd></div><div><dt>Consumer number</dt><dd>{customer?.consumer_number || '—'}</dd></div><div><dt>Electricity provider</dt><dd>{customer?.electricity_provider || '—'}</dd></div><div className="document-data-grid__wide"><dt>Site address</dt><dd>{customer?.site_address || customer?.addresses[0]?.line_1 || '—'}</dd></div><div><dt>System capacity</dt><dd>{project ? `${project.capacity_kw} kW` : '—'}</dd></div><div><dt>Approved value</dt><dd>{project ? money.format(Number(project.approved_value || 0)) : '—'}</dd></div><div><dt>Payment mode</dt><dd>{project?.payment_mode || 'Pending'}</dd></div><div><dt>Assigned agent</dt><dd>{customer?.assigned_agent_id ? 'Assigned' : 'Not assigned'}</dd></div></dl><div className="document-template-preview"><div><strong>{templateSettings.company_name || session.company.name}</strong><span>{templateSettings.address || 'Company address not configured'}</span><small>{templateSettings.gstin ? `GSTIN ${templateSettings.gstin}` : 'GSTIN not configured'}</small></div>{canManageTemplate && <button type="button" className="secondary-button secondary-button--compact" onClick={() => setModal('template')}><Settings2 size={13} /> Edit complete template</button>}</div></section>
 
@@ -350,7 +384,7 @@ export function CustomerDataUploadPage({ session }: { session: Session }) {
       </div>
     </>}
 
-    {modal === 'upload' && snapshot && <Modal title="Upload customer document" subtitle={`${snapshot.customer.display_name}${snapshot.project ? ` · ${snapshot.project.record_number}` : ''}`} onClose={() => setModal(null)}><form className="erp-form" onSubmit={upload}><div className="erp-form-grid"><label><span>Document type</span><select name="document_type" defaultValue={uploadType}>{documentTypes.map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label><label className="erp-form-wide"><span>File</span><input type="file" name="file" accept="application/pdf,image/jpeg,image/png,image/webp" required /></label></div><footer className="erp-form-actions"><button type="button" className="secondary-button" onClick={() => setModal(null)}>Cancel</button><button className="primary-button" disabled={working}>{working && <LoaderCircle className="spin" size={14} />} Upload</button></footer></form></Modal>}
+    {modal === 'upload' && snapshot && <Modal title="Upload customer document" subtitle={`${snapshot.customer.display_name}${snapshot.project ? ` · ${snapshot.project.record_number}` : ''}`} onClose={() => setModal(null)}><form className="erp-form" onSubmit={upload}><div className="erp-form-grid"><label><span>Document type</span><select name="document_type" value={uploadType} onChange={(event) => setUploadType(event.target.value as DocumentTypeKey)}>{documentTypes.map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label><label className="erp-form-wide"><span>File</span><input type="file" name="file" accept={uploadType === 'customer_signature' ? 'image/jpeg,image/png,image/webp' : 'application/pdf,image/jpeg,image/png,image/webp'} required /></label></div><footer className="erp-form-actions"><button type="button" className="secondary-button" onClick={() => setModal(null)}>Cancel</button><button className="primary-button" disabled={working}>{working && <LoaderCircle className="spin" size={14} />} Upload</button></footer></form></Modal>}
 
     {modal === 'template' && template && <DocumentTemplateDialog template={template} settings={templateSettings} working={working} onClose={() => setModal(null)} onSubmit={saveTemplate} />}
     <AlertDialog open={Boolean(fileToRemove)} title="Remove this document?" description={fileToRemove ? `${fileToRemove.name} will be removed from the customer checklist.` : undefined} confirmLabel="Remove document" icon="delete" loading={working} onCancel={() => setFileToRemove(null)} onConfirm={removeFile} />

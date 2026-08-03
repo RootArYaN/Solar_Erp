@@ -14,6 +14,10 @@ import {
 import { hasPermission, PERMISSIONS } from '../../lib/permissions'
 import type { ManagedUser, Permission, Role, Session } from '../../types'
 import { AlertDialog } from '../ui/AlertDialog'
+import { Button } from '../ui/Button'
+import { Card } from '../ui/Card'
+import { Field } from '../ui/Field'
+import { KpiCard } from '../ui/KpiCard'
 import { useToast } from '../ui/ToastProvider'
 import { KpiGrid, ScrollSurface, TabButton, TabStrip, WorkspaceHeader, WorkspacePage } from '../workspace'
 import { RoleDialog } from './RoleDialog'
@@ -228,19 +232,29 @@ export function AdminPage({
 
   return (
     <WorkspacePage variant="fixed-tabs" className="admin-page">
-      <WorkspaceHeader className="page-heading">
-        <div>
-          <div className="eyebrow">Identity & access</div>
-          <h1>Users and roles</h1>
-        </div>
-        {tab === 'users' && canManageUsers && <button className="primary-button primary-button--compact" onClick={() => setEditingUser(null)}><Plus size={17} /> Create user</button>}
-        {tab === 'roles' && canManageRoles && <button className="primary-button primary-button--compact" onClick={() => setEditingRole(null)}><Plus size={17} /> Create role</button>}
-      </WorkspaceHeader>
+      <WorkspaceHeader
+        eyebrow="Identity & access"
+        title="Users and roles"
+        actions={
+          <>
+            {tab === 'users' && canManageUsers && (
+              <Button variant="primary" leadingIcon={<Plus size={17} />} onClick={() => setEditingUser(null)}>
+                Create user
+              </Button>
+            )}
+            {tab === 'roles' && canManageRoles && (
+              <Button variant="primary" leadingIcon={<Plus size={17} />} onClick={() => setEditingRole(null)}>
+                Create role
+              </Button>
+            )}
+          </>
+        }
+      />
 
-      <KpiGrid columns={canViewUsers ? 3 : 1} className="admin-stats">
-        {canViewUsers && <article><Users size={19} /><span>Users</span><strong>{users.length}</strong></article>}
-        {canViewUsers && <article><UserCheck size={19} /><span>Active</span><strong>{users.filter((user) => user.is_active).length}</strong></article>}
-        <article><ShieldCheck size={19} /><span>Roles</span><strong>{roles.length}</strong></article>
+      <KpiGrid columns={canViewUsers ? 3 : 1} responsive>
+        {canViewUsers && <KpiCard icon={<Users />} label="Users" value={users.length} />}
+        {canViewUsers && <KpiCard icon={<UserCheck />} label="Active" value={users.filter((user) => user.is_active).length} tone="success" />}
+        <KpiCard icon={<ShieldCheck />} label="Roles" value={roles.length} tone="navy" />
       </KpiGrid>
 
       <TabStrip className="segmented-tabs" label="Administration sections">
@@ -251,7 +265,7 @@ export function AdminPage({
       {tab === 'users' && canViewUsers ? (
         <section className="data-panel">
           <div className="data-panel__toolbar">
-            <div className="search-control"><Search size={17} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search users" /></div>
+            <Field label="Search users" hideLabel prefix={<Search size={16} />} className="admin-search-field"><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search users" /></Field>
             <span>{filteredUsers.length}</span>
           </div>
 
@@ -285,17 +299,17 @@ export function AdminPage({
           {roles.map((role) => {
             const editable = canEditRole(role)
             return (
-              <article className="role-card" key={role.id}>
+              <Card as="article" variant="interactive" className="role-card" key={role.id}>
                 <div className="role-card__top"><div className="role-card__icon"><KeyRound size={19} /></div><span>{role.is_system ? 'System' : 'Custom'}</span></div>
                 <h2>{role.name}</h2>
                 <code>{role.code}</code>
                 {role.description && <p>{role.description}</p>}
                 <div className="role-card__meta"><span>{role.member_count} members</span><span>{role.permissions.length} permissions</span></div>
                 <footer>
-                  <button className="secondary-button" onClick={() => setEditingRole(role)}>{editable ? 'Manage' : 'View'}</button>
+                  <Button size="compact" onClick={() => setEditingRole(role)}>{editable ? 'Manage' : 'View'}</Button>
                   {!role.is_system && editable && <button className="danger-icon-button" disabled={busy || role.member_count > 0} onClick={() => setRoleToDelete(role)} aria-label={`Delete ${role.name}`}><Trash2 size={16} /></button>}
                 </footer>
-              </article>
+              </Card>
             )
           })}
         </ScrollSurface>

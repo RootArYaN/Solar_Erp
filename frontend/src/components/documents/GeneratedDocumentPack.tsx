@@ -114,6 +114,7 @@ export function GeneratedDocumentPackPanel({
   canApprove,
   working,
   packFiles,
+  customerSignatureUrl,
   missingRequiredDocuments,
   onSelectPack,
   onSave,
@@ -128,6 +129,7 @@ export function GeneratedDocumentPackPanel({
   canApprove: boolean
   working: boolean
   packFiles: StoredFile[]
+  customerSignatureUrl: string
   missingRequiredDocuments: string[]
   onSelectPack: (pack: GeneratedDocumentPack) => void
   onSave: (input: DocumentPackInput, status: 'draft' | 'generated') => Promise<GeneratedDocumentPack | null>
@@ -146,6 +148,7 @@ export function GeneratedDocumentPackPanel({
     return Object.fromEntries(Object.entries(current).map(([key, value]) => [key, String(selectedPack.template_snapshot[key] ?? value)])) as DocumentPackTemplate
   }, [template, selectedPack])
   const locked = selectedPack?.status === 'final'
+  const renderAssets = useMemo(() => ({ customerSignatureUrl }), [customerSignatureUrl])
 
   useEffect(() => {
     setInput(defaults(snapshot, selectedPack, agentName))
@@ -193,8 +196,8 @@ export function GeneratedDocumentPackPanel({
   }
 
   const preview = activeTab === 'full'
-    ? renderFullDocumentHtml(input, settings)
-    : renderDocumentHtml(activeTab, input, settings)
+    ? renderFullDocumentHtml(input, settings, renderAssets)
+    : renderDocumentHtml(activeTab, input, settings, renderAssets)
   const activeTabLabel = activeTab === 'full'
     ? 'Complete document pack'
     : documentTabs.find((tab) => tab.key === activeTab)?.label || 'Document preview'
@@ -250,8 +253,8 @@ export function GeneratedDocumentPackPanel({
         }}>{packs.map((pack) => <option key={pack.id} value={pack.id}>v{pack.version} · {statusLabel(pack.status)}</option>)}</select></label>}
         <button type="button" className="secondary-button" disabled={working || exportingPdf !== null || !storedPackFile} onClick={() => void downloadStoredPack()} title={storedPackFile ? `Download the stored full pack for version ${selectedPack?.version}` : 'Generate this version to create its full-pack PDF'}>{exportingPdf === 'stored' ? <LoaderCircle className="spin" size={14} /> : <Download size={14} />} {exportingPdf === 'stored' ? 'Downloading' : selectedPack ? `Download v${selectedPack.version}` : 'Download full pack'}</button>
         <button type="button" className="secondary-button" disabled={working || exportingPdf !== null || !storedPackFile} onClick={() => void downloadMergedPack()} title="Download one PDF containing the full pack and all uploaded customer documents">{exportingPdf === 'merged' ? <LoaderCircle className="spin" size={14} /> : <Files size={14} />} {exportingPdf === 'merged' ? 'Merging files' : 'Full pack + attachments'}</button>
-        <button type="button" className="secondary-button" onClick={() => printDocumentPack(input, settings, activeTab)}><Printer size={14} /> Print</button>
-        {activeTab !== 'full' && activeTab !== 'quotation' && <button type="button" className="secondary-button" onClick={() => downloadDocumentWord(input, settings, activeTab)}><FileText size={14} /> Word</button>}
+        <button type="button" className="secondary-button" onClick={() => printDocumentPack(input, settings, activeTab, renderAssets)}><Printer size={14} /> Print</button>
+        {activeTab !== 'full' && activeTab !== 'quotation' && <button type="button" className="secondary-button" onClick={() => downloadDocumentWord(input, settings, activeTab, renderAssets)}><FileText size={14} /> Word</button>}
         {activeTab === 'quotation' && <button type="button" className="secondary-button" onClick={() => downloadQuotationCsv(input)}><FileSpreadsheet size={14} /> Excel CSV</button>}
       </div>
     </div>
@@ -288,7 +291,6 @@ export function GeneratedDocumentPackPanel({
           <label><span>Sales person</span><input value={input.salesPerson} onChange={(event) => update('salesPerson', event.target.value)} readOnly={!canEdit} /></label>
           <label><span>Agreement date</span><input type="date" value={input.agreementDate} onChange={(event) => update('agreementDate', event.target.value)} readOnly={!canEdit} /></label>
           <label><span>Estimate validity <small>days</small></span><input type="number" inputMode="numeric" min="1" value={input.validityDays} onChange={(event) => update('validityDays', event.target.value)} readOnly={!canEdit} /></label>
-          <label className="erp-form-wide"><span>Customer signature name</span><input value={input.customerSignatureName} onChange={(event) => update('customerSignatureName', event.target.value)} readOnly={!canEdit} /></label>
           <label className="erp-form-wide"><span>Document note <small>optional</small></span><textarea value={input.notes} placeholder="Add a note shown in the quotation or document pack." onChange={(event) => update('notes', event.target.value)} readOnly={!canEdit} /></label>
         </div>
       </div>

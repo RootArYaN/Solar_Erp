@@ -34,6 +34,27 @@ def test_dashboard_has_bounded_query_count(admin_auth):
 
 
 @pytest.mark.performance
+def test_finance_aggregate_reads_have_bounded_query_counts(admin_auth):
+    account_count, accounts = _statement_count(
+        admin_auth.client,
+        "/api/v1/finance/accounts",
+        admin_auth.read_headers,
+    )
+    assert accounts.status_code == 200, accounts.text
+    assert account_count <= 5, f"Account list executed {account_count} statements"
+
+    profitability_count, profitability = _statement_count(
+        admin_auth.client,
+        "/api/v1/finance/profitability",
+        admin_auth.read_headers,
+    )
+    assert profitability.status_code == 200, profitability.text
+    assert profitability_count <= 7, (
+        f"Profitability report executed {profitability_count} statements"
+    )
+
+
+@pytest.mark.performance
 def test_customer_list_respects_page_size(admin_auth):
     count, response = _statement_count(
         admin_auth.client,

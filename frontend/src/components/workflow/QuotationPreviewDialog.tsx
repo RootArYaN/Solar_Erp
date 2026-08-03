@@ -1,9 +1,11 @@
 import { CheckCircle2, Download, FileText } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import {
   downloadQuotationPdf,
   formatQuotationMoney,
   type QuotationDocumentData,
 } from '../../lib/quotation-document'
+import { loadCustomerSignature, type PdfSignatureImage } from '../../lib/document-pack'
 import { Modal } from '../admin/Modal'
 
 const dateFormatter = new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium' })
@@ -23,9 +25,13 @@ export function QuotationPreviewDialog({
   capacityKw,
   notes = '',
   agentName = '',
+  customerId = '',
   onClose,
 }: QuotationDocumentData & { onClose: () => void }) {
-  const canDownload = quotation.status === 'approved'
+  const [customerSignature, setCustomerSignature] = useState<{ dataUrl: string; pdf: PdfSignatureImage } | null>(null)
+  const [signatureLoading, setSignatureLoading] = useState(false)
+  const approved = quotation.status === 'approved'
+  const canDownload = approved && Boolean(customerSignature)
   const displayLines = quotation.lines.length > 0 ? quotation.lines : [{
     description: quotation.title,
     quantity: 1,
@@ -35,8 +41,27 @@ export function QuotationPreviewDialog({
     line_total: quotation.grand_total,
   }]
 
+  useEffect(() => {
+    let active = true
+    setCustomerSignature(null)
+    if (!approved || !customerId) return () => { active = false }
+    setSignatureLoading(true)
+    void loadCustomerSignature(customerId).then((loaded) => {
+      if (!loaded) return
+      if (active) setCustomerSignature({ dataUrl: loaded.dataUrl, pdf: loaded.pdf })
+    }).catch(() => {
+      if (active) setCustomerSignature(null)
+    }).finally(() => {
+      if (active) setSignatureLoading(false)
+    })
+    return () => {
+      active = false
+    }
+  }, [approved, customerId])
+
   function download() {
-    downloadQuotationPdf({ quotation, customerName, companyName, phone, email, address, siteAddress, capacityKw, notes, agentName })
+    if (!customerSignature) return
+    void downloadQuotationPdf({ quotation, customerName, companyName, phone, email, address, siteAddress, capacityKw, notes, agentName, customerId, customerSignature: customerSignature.pdf })
   }
 
   return <Modal
@@ -105,11 +130,26 @@ export function QuotationPreviewDialog({
             <div><dt>Grand total</dt><dd>{formatQuotationMoney(quotation.grand_total)}</dd></div>
           </dl>
         </div>
+
+        {approved && <div className="quotation-document__signatures">
+          <div className="quotation-document__signature quotation-document__signature--customer">
+            <small>Customer signature</small>
+            {customerSignature
+              ? <img className="quotation-document__signature-image" src={customerSignature.dataUrl} alt={`Uploaded signature of ${customerName}`} />
+              : <span className="quotation-document__signature-missing">{signatureLoading ? 'Loading uploaded signature…' : 'Upload a customer signature image to enable download.'}</span>}
+            <span>Uploaded customer signature</span>
+          </div>
+          <div className="quotation-document__signature">
+            <small>Approved representative</small>
+            <strong>{agentName || 'Authorized signatory'}</strong>
+            <span>{quotation.approved_at ? `Approved ${dateFormatter.format(new Date(quotation.approved_at))}` : 'Approved through ERP workflow'}</span>
+          </div>
+        </div>}
       </article>
     </div>
 
     <footer className="quotation-preview-actions">
-      <span>{canDownload ? 'Approved quotation is ready for agent download.' : 'Download unlocks after approval.'}</span>
+      <span>{canDownload ? 'Approved quotation and uploaded signature are ready for download.' : approved ? 'Upload a customer signature image to enable download.' : 'Download unlocks after approval.'}</span>
       <div>
         <button type="button" className="secondary-button" onClick={onClose}>Close</button>
         {canDownload && <button type="button" className="primary-button primary-button--compact" onClick={download}><Download size={15} /> Download PDF</button>}

@@ -107,6 +107,9 @@
 .finance-overview-card>header{flex:0 0 auto;margin-bottom:8px}
 .finance-overview-card>header strong{display:block;color:#2b3744;font-size:10px}
 .finance-overview-card>header>div>span{margin-top:2px;font-size:10px}
+.finance-overview-card--table{padding:0;overflow:hidden}
+.finance-overview-card--table>header{margin:0;padding:11px}
+.finance-overview-card--table>.erp-table-wrap{border-right:0;border-bottom:0;border-left:0;border-radius:0}
 .finance-overview-card>.erp-table-wrap{
   width:100%;
   flex:1 1 auto;
@@ -220,15 +223,12 @@
 }
 @media(max-width:780px){
   .finance-page{height:calc(100dvh - 56px);max-height:calc(100dvh - 56px);padding:8px}
-  .finance-page-header>div:last-child .secondary-button{width:33px;padding:0;font-size:0}
-  .finance-page-header>div:last-child .secondary-button svg{margin:0}
 }
 @media(max-width:600px){
   .finance-page-header{align-items:flex-end}
   .finance-page-header>div:first-child{max-width:48%}
   .finance-page-header .module-kicker{font-size:10px}
   .finance-page-header h1{font-size:17px}
-  .finance-page-header>div:last-child .primary-button{padding:0 9px;font-size:10px}
   .finance-kpis,.finance-tab-panel .mini-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
   .finance-tab-panel .tab-toolbar{align-items:stretch;flex-direction:column}
 

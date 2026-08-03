@@ -4,6 +4,7 @@ import { ApiError, getActiveDevices, logoutOtherDevices, type ActiveDevice } fro
 import { getModuleAccess } from '../../lib/permissions'
 import type { Session } from '../../types'
 import { AlertDialog } from '../ui/AlertDialog'
+import { Button } from '../ui/Button'
 import { EmptyState, ErrorState, LoadingSkeleton, ReadOnlyNotice } from '../ui/PageState'
 import { useToast } from '../ui/ToastProvider'
 import { ScrollSurface, WorkspaceHeader, WorkspacePage } from '../workspace'
@@ -48,7 +49,7 @@ export function ActiveDevicesPage({ session }: { session: Session }) {
   }
 
   return <WorkspacePage className="security-page">
-    <WorkspaceHeader className="security-header"><div><span>Account security</span><h1>Active devices</h1><p>Refresh tokens stay in Secure, HttpOnly, SameSite cookies. The access token is held only in memory and is cleared when this tab closes.</p></div><button className="secondary-button" onClick={() => void load()}><RefreshCw size={14} /> Refresh</button></WorkspaceHeader>
+    <WorkspaceHeader className="security-header" eyebrow="Account security" title="Active devices" description="Review and revoke signed-in devices." actions={<Button variant="secondary" leadingIcon={<RefreshCw size={14} />} onClick={() => void load()}>Refresh</Button>} />
     {access.readOnly && <ReadOnlyNotice />}
     <ScrollSurface className="security-device-surface">
     {loading ? <LoadingSkeleton rows={5} /> : error ? <ErrorState message={error} requestId={requestId} onRetry={() => void load()} /> : devices.length === 0 ? <EmptyState title="No active devices" message="The backend has not returned any sessions." /> : <div className="device-list">
@@ -59,7 +60,7 @@ export function ActiveDevicesPage({ session }: { session: Session }) {
       </article>)}
     </div>}
     </ScrollSurface>
-    <footer className="security-actions"><div><strong>Lost a device?</strong><span>Revoke every session except this browser.</span></div><button className="danger-button" disabled={!access.canEdit || devices.filter((device) => !device.is_current).length === 0} onClick={() => setConfirmOpen(true)}><LogOut size={14} /> Log out other devices</button></footer>
+    <footer className="security-actions"><div><strong>Lost a device?</strong><span>Revoke all other sessions.</span></div><Button variant="danger" leadingIcon={<LogOut size={14} />} disabled={!access.canEdit || devices.filter((device) => !device.is_current).length === 0} onClick={() => setConfirmOpen(true)}>Log out other devices</Button></footer>
     <AlertDialog open={confirmOpen} title="Log out other devices?" description="Every other refresh session will be revoked. This browser will stay signed in." confirmLabel="Log out other devices" loading={working} onCancel={() => setConfirmOpen(false)} onConfirm={revokeOthers} />
   </WorkspacePage>
 }

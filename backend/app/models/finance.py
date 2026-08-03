@@ -43,6 +43,13 @@ class FinanceTransaction(TimestampMixin, Base):
         UniqueConstraint("company_id", "transaction_number", name="uq_finance_transaction_company_number"),
         Index("ix_finance_transactions_company_date", "company_id", "transaction_date"),
         Index("ix_finance_transactions_customer_project", "customer_id", "project_id"),
+        Index(
+            "ix_finance_transactions_company_status_project_direction",
+            "company_id",
+            "status",
+            "project_id",
+            "direction",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)

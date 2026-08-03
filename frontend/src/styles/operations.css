@@ -14,8 +14,6 @@
   .agent-search { width: 100%; }
   .agent-summary-layout { grid-template-columns: minmax(0, 1fr); overflow-y: auto; overscroll-behavior: contain; }
   .agent-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .admin-stats { grid-template-columns: 1fr; }
-  .admin-stats article { min-height: 64px; }
   .data-panel__toolbar { align-items: stretch; flex-direction: column; }
   .search-control { width: 100%; }
   .poster-grid { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }

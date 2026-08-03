@@ -23,6 +23,9 @@ import type {
   QuotationRequestSummary,
   TransactionApprovalSummary,
 } from '../../types'
+import { Button } from '../ui/Button'
+import { Field } from '../ui/Field'
+import { KpiCard } from '../ui/KpiCard'
 import { useToast } from '../ui/ToastProvider'
 import { ApprovalDecisionDialog } from './ApprovalDecisionDialog'
 import { QuotationBuilderDialog } from './QuotationBuilderDialog'
@@ -153,28 +156,24 @@ export function ApprovalCenterPage() {
 
   return <WorkspacePage variant="split" className="approval-page">
     <div className="approval-toolbar">
-      <KpiGrid columns={4} className="approval-kpis" aria-label="Approval summary">
-        <article><span>Total requests</span><strong>{quotationCount}</strong></article>
-        <article><span>Pending quotes</span><strong>{pendingQuotationCount}</strong></article>
-        <article><span>Approved</span><strong>{approvedQuotationCount}</strong></article>
-        <article><span>Transactions</span><strong>{data.transactions.length}</strong></article>
+      <KpiGrid columns={4} phoneColumns={2} responsive className="approval-summary-grid" aria-label="Approval summary">
+        <KpiCard icon={<ClipboardCheck />} label="Requests" value={quotationCount} />
+        <KpiCard icon={<FileCheck2 />} label="Pending quotes" value={pendingQuotationCount} tone={pendingQuotationCount > 0 ? 'accent' : 'neutral'} />
+        <KpiCard icon={<Check />} label="Approved" value={approvedQuotationCount} tone="success" />
+        <KpiCard icon={<UserRound />} label="Transactions" value={data.transactions.length} tone="navy" />
       </KpiGrid>
-      <button className="approval-refresh" type="button" onClick={() => void load()} disabled={loading || busy}>
-        <RefreshCw size={14} className={loading ? 'is-spinning' : undefined} />
-        Refresh
-      </button>
+      <Button className="approval-refresh" variant="secondary" leadingIcon={<RefreshCw className={loading ? 'is-spinning' : undefined} />} onClick={() => void load()} disabled={loading || busy}>Refresh</Button>
     </div>
 
     <div className="approval-split-layout">
       <section className="approval-panel approval-panel--quotation">
         <header>
-          <div><FileCheck2 size={18} /><span><strong>Quotations</strong><small>Simple quote review and approval</small></span></div>
+          <div><FileCheck2 size={18} /><span><strong>Quotations</strong><small>Review and approve quotes</small></span></div>
           <em title={`${visibleQuotationRequests.length} visible of ${data.quotation_requests.length}`}>{quotationSearch.trim() ? `${visibleQuotationRequests.length}/${data.quotation_requests.length}` : data.quotation_requests.length}</em>
         </header>
-        {data.quotation_requests.length > 0 && <label className="approval-search">
-          <Search size={15} />
-          <input type="search" value={quotationSearch} onChange={(event) => setQuotationSearch(event.target.value)} placeholder="Search customer, project, quote or status" aria-label="Search quotation approvals" />
-        </label>}
+        {data.quotation_requests.length > 0 && <Field label="Search quotation approvals" hideLabel prefix={<Search size={15} />} className="approval-search">
+          <input type="search" value={quotationSearch} onChange={(event) => setQuotationSearch(event.target.value)} placeholder="Customer, project, quote or status" />
+        </Field>}
         {loading
           ? <div className="approval-empty">Loading quotations…</div>
           : data.quotation_requests.length === 0
@@ -252,6 +251,7 @@ export function ApprovalCenterPage() {
     {builderRequest && <QuotationBuilderDialog request={builderRequest} busy={busy} onClose={() => setBuilderRequest(null)} onSubmit={saveQuotation} />}
     {previewRequest?.quotation && <QuotationPreviewDialog
       quotation={previewRequest.quotation}
+      customerId={previewRequest.customer_id}
       customerName={previewRequest.customer_name}
       companyName={previewRequest.company_name}
       phone={previewRequest.customer_phone}

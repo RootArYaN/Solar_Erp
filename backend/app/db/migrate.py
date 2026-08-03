@@ -18,7 +18,8 @@ MIGRATION_006 = "006_remove_file_soft_delete"
 MIGRATION_007 = "007_backend_performance_indexes"
 MIGRATION_008 = "008_measured_read_path_indexes"
 MIGRATION_009 = "009_transactional_migration_framework"
-CURRENT_MIGRATION_ID = MIGRATION_009
+MIGRATION_010 = "010_finance_aggregate_indexes"
+CURRENT_MIGRATION_ID = MIGRATION_010
 MIGRATION_LOCK_KEY = 7_336_526_977_082_001
 
 # These IDs were written by earlier released versions whose migration logic was
@@ -36,6 +37,7 @@ ACTIVE_MIGRATION_IDS = (
     MIGRATION_007,
     MIGRATION_008,
     MIGRATION_009,
+    MIGRATION_010,
 )
 MIGRATION_IDS = HISTORICAL_MIGRATION_IDS + ACTIVE_MIGRATION_IDS
 MIGRATION_CHECKSUMS = {
@@ -47,6 +49,7 @@ BACKUP_REQUIRED_MIGRATIONS = {
     MIGRATION_006,
     MIGRATION_007,
     MIGRATION_008,
+    MIGRATION_010,
 }
 
 MIGRATED_PERMISSIONS = {
@@ -166,6 +169,12 @@ INDEXES = [
     ("ix_finance_transactions_company_status_date", "finance_transactions", "company_id,status,transaction_date"),
     ("ix_bills_company_type_status", "bills", "company_id,bill_type,status"),
     ("ix_inventory_balances_company_item", "inventory_balances", "company_id,item_id"),
+    # Supports bounded account and project profitability aggregate reads.
+    (
+        "ix_finance_transactions_company_status_project_direction",
+        "finance_transactions",
+        "company_id,status,project_id,direction",
+    ),
 ]
 
 
@@ -495,6 +504,10 @@ def run_migrations(*, backup_reference: str | None = None) -> None:
 
             if MIGRATION_009 not in applied:
                 _record_migration(connection, MIGRATION_009)
+
+            if MIGRATION_010 not in applied:
+                _apply_columns_and_indexes(connection)
+                _record_migration(connection, MIGRATION_010)
     except Exception:
         for staged_path, original_path in reversed(staged_deletes):
             storage.restore_staged_delete(staged_path, original_path)

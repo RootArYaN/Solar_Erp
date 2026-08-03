@@ -14,9 +14,13 @@
   --workspace-background: #f5f3ef;
 }
 
-html,
-body,
-#root {
+html {
+  width: 100%;
+  min-width: 320px;
+}
+
+body.app-authenticated,
+body.app-authenticated #root {
   width: 100%;
   height: 100%;
   min-width: 320px;
@@ -281,7 +285,7 @@ body,
 }
 
 .workspace-kpi-grid,
-.workspace-page > :is(.erp-kpi-grid, .admin-stats, .agent-kpi-grid, .customer-kpis, .finance-kpis) {
+.workspace-page > :is(.erp-kpi-grid, .agent-kpi-grid, .finance-kpis) {
   flex: 0 0 auto;
   min-width: 0;
   display: grid;
@@ -291,7 +295,7 @@ body,
 }
 
 .workspace-kpi-grid > *,
-.workspace-page > :is(.erp-kpi-grid, .admin-stats, .agent-kpi-grid, .customer-kpis, .finance-kpis) > * {
+.workspace-page > :is(.erp-kpi-grid, .agent-kpi-grid, .finance-kpis) > * {
   min-width: 0;
   border-radius: var(--workspace-radius);
 }
@@ -412,6 +416,31 @@ body,
   scrollbar-gutter: stable;
 }
 
+.workspace-page .customer-workspace > .workspace-tab-panel:has(> .customer-tab-table) {
+  --customer-tab-bleed: 22px;
+  --customer-tab-inset: 11px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.workspace-page .workspace-tab-panel > .customer-tab-table {
+  width: calc(100% + var(--customer-tab-bleed));
+  flex: 1 1 auto;
+  min-height: 0;
+  margin-right: calc(-1 * var(--customer-tab-inset));
+  margin-bottom: calc(-1 * var(--customer-tab-inset));
+  margin-left: calc(-1 * var(--customer-tab-inset));
+  border-right: 0;
+  border-bottom: 0;
+  border-left: 0;
+  border-radius: 0;
+}
+
+.workspace-page .workspace-tab-panel > .customer-tab-table:first-child {
+  margin-top: calc(-1 * var(--customer-tab-inset));
+}
+
 .workspace-page .finance-tab-panel {
   flex: 1 1 auto;
   overflow: hidden;
@@ -432,6 +461,20 @@ body,
   display: grid;
   align-content: start;
   gap: var(--workspace-gap);
+}
+
+.workspace-page > .workspace-header.dashboard-header {
+  align-items: flex-end;
+}
+
+.workspace-page > .dashboard-header .workspace-header__actions.ui-action-bar {
+  width: auto;
+  display: flex;
+  flex-wrap: nowrap;
+}
+
+.workspace-page > .dashboard-header .workspace-header__actions > .ui-button--icon {
+  width: 34px;
 }
 
 .agent-page__body,
@@ -483,13 +526,26 @@ body,
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
+  padding: 0;
   overflow: hidden;
+}
+
+.inventory-items-panel > .erp-toolbar,
+.inventory-locations-panel > header,
+.inventory-history-panel > header {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 13px;
 }
 
 .inventory-stock-grid > .erp-panel > .erp-table-wrap,
 .inventory-workspace-body > .erp-panel > .erp-table-wrap {
   flex: 1 1 auto;
   min-height: 0;
+  border-right: 0;
+  border-bottom: 0;
+  border-left: 0;
+  border-radius: 0;
 }
 
 .inventory-locations-panel .erp-table {
@@ -499,12 +555,23 @@ body,
 .pricing-workspace-panel {
   display: flex;
   flex-direction: column;
+  padding: 0;
   overflow: hidden;
+}
+
+.pricing-workspace-panel > .pricing-book-head {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 13px;
 }
 
 .pricing-workspace-panel .erp-table-wrap {
   flex: 1 1 auto;
   min-height: 0;
+  border-right: 0;
+  border-bottom: 0;
+  border-left: 0;
+  border-radius: 0;
 }
 
 .security-device-surface > .device-list {
@@ -605,26 +672,6 @@ body,
   padding-block: 7px;
 }
 
-.dashboard-finance-kpi {
-  position: relative;
-  padding-right: 34px !important;
-}
-
-.dashboard-finance-kpi__link {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  width: 24px;
-  height: 24px;
-  display: grid;
-  place-items: center;
-  border-radius: 6px;
-  color: #9a6815;
-}
-
-.dashboard-finance-kpi__link:hover {
-  background: #fff4dc;
-}
 
 .document-workspace-grid {
   align-items: stretch;
@@ -1000,7 +1047,7 @@ body,
 
 @media (max-width: 1100px) {
   .workspace-kpi-grid,
-  .workspace-page > :is(.erp-kpi-grid, .admin-stats, .agent-kpi-grid, .customer-kpis, .finance-kpis) {
+  .workspace-page > :is(.erp-kpi-grid, .agent-kpi-grid, .finance-kpis) {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -1064,25 +1111,6 @@ body,
   row-gap: 3px;
 }
 
-.app-shell--view-mobile .customer-header-actions {
-  width: 100%;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 7px;
-}
-
-.app-shell--view-mobile .customer-header-actions button {
-  width: 100%;
-  min-width: 0;
-  min-height: 36px;
-  justify-content: center;
-  padding-inline: 10px;
-}
-
-.app-shell--view-mobile .customer-kpis article {
-  padding: 8px;
-}
-
 @media (max-width: 780px) {
   .customer-directory {
     min-height: 0;
@@ -1140,35 +1168,9 @@ body,
     row-gap: 3px;
   }
 
-  .customer-header-actions {
-    width: 100%;
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 7px;
-  }
-
-  .customer-header-actions button {
-    width: 100%;
-    min-width: 0;
-    min-height: 36px;
-    justify-content: center;
-    padding-inline: 10px;
-  }
-
-  .customer-kpis article {
-    padding: 8px;
-  }
 }
 
 /* Compact agent controls for phone mode. */
-.app-shell--view-mobile .agent-page > .workspace-header .workspace-header__copy {
-  display: none;
-}
-
-.app-shell--view-mobile .agent-page > .workspace-header {
-  display: block;
-}
-
 .app-shell--view-mobile .agent-page__actions {
   width: 100%;
   display: grid;
@@ -1190,9 +1192,6 @@ body,
   height: 13px;
 }
 
-.app-shell--view-mobile .agent-action-label--full { display: none; }
-.app-shell--view-mobile .agent-action-label--compact { display: inline; }
-
 .app-shell--view-mobile .agent-workspace-toolbar {
   width: 100%;
   display: grid;
@@ -1213,9 +1212,6 @@ body,
 }
 
 @media (max-width: 780px) {
-  .agent-page > .workspace-header .workspace-header__copy { display: none; }
-  .agent-page > .workspace-header { display: block; }
-
   .agent-page__actions {
     width: 100%;
     display: grid;
@@ -1236,9 +1232,6 @@ body,
     width: 13px;
     height: 13px;
   }
-
-  .agent-action-label--full { display: none; }
-  .agent-action-label--compact { display: inline; }
 
   .agent-workspace-toolbar {
     width: 100%;
@@ -1262,7 +1255,7 @@ body,
 
 @media (max-width: 520px) {
   .workspace-kpi-grid,
-  .workspace-page > :is(.erp-kpi-grid, .admin-stats, .agent-kpi-grid, .customer-kpis, .finance-kpis) {
+  .workspace-page > :is(.erp-kpi-grid, .agent-kpi-grid, .finance-kpis) {
     grid-template-columns: 1fr;
   }
 
@@ -1412,6 +1405,10 @@ body,
 .pack-doc__signatures{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:28px;padding-top:14px;border-top:1px solid #d8dee6}
 .pack-doc__signatures>div{display:grid;gap:3px}
 .pack-doc__signatures span,.pack-doc__signatures small{font-size:7.5px;color:#75808b}
+.pack-doc__signature--customer{position:relative;padding-bottom:3px}
+.pack-doc__signature-image{display:block;width:min(100%,180px);height:34px;padding:2px 4px 4px;border-bottom:1px solid #9aa6b4;object-fit:contain;object-position:left center;mix-blend-mode:multiply}
+.pack-doc__signature-missing{display:grid;min-height:34px;align-items:center;padding:2px 4px 4px;border-bottom:1px solid #9aa6b4;color:#8b95a1!important;font-size:7px!important;font-style:italic}
+.pack-doc__signed-status{margin-top:2px;color:#657488!important;font-size:6.8px!important;font-weight:700;letter-spacing:.15px}
 .pack-doc footer{margin-top:28px;padding-top:7px;border-top:1px solid #dfe4e9;color:#818a94;font-size:7px}
 .pack-doc__subtitle{margin:5px 0 12px;text-align:right;color:#6e7986;font-size:8px}
 .pack-doc__two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
@@ -1645,7 +1642,7 @@ body,
 }
 
 .app-shell--view-mobile .workspace-kpi-grid,
-.app-shell--view-mobile .workspace-page > :is(.erp-kpi-grid, .admin-stats, .agent-kpi-grid, .customer-kpis, .finance-kpis),
+.app-shell--view-mobile .workspace-page > :is(.erp-kpi-grid, .agent-kpi-grid, .finance-kpis),
 .app-shell--view-mobile .dashboard-operation-grid,
 .app-shell--view-mobile .poster-grid,
 .app-shell--view-mobile .poster-grid--persistent {
@@ -1654,11 +1651,15 @@ body,
 }
 
 .app-shell--view-mobile .workspace-kpi-grid > *,
-.app-shell--view-mobile .workspace-page > :is(.erp-kpi-grid, .admin-stats, .agent-kpi-grid, .customer-kpis, .finance-kpis) > *,
+.app-shell--view-mobile .workspace-page > :is(.erp-kpi-grid, .agent-kpi-grid, .finance-kpis) > *,
 .app-shell--view-mobile .dashboard-operation-grid > *,
 .app-shell--view-mobile .poster-grid > * {
   width: 100%;
   height: 100%;
+}
+
+.app-shell--view-mobile .workspace-kpi-grid > * {
+  height: auto;
 }
 
 .app-shell--view-mobile .workspace-page .customer-detail-layout,
@@ -1763,7 +1764,7 @@ body,
   .dashboard-live { overflow-y: auto !important; }
 
   .workspace-kpi-grid,
-  .workspace-page > :is(.erp-kpi-grid, .admin-stats, .agent-kpi-grid, .customer-kpis, .finance-kpis),
+  .workspace-page > :is(.erp-kpi-grid, .agent-kpi-grid, .finance-kpis),
   .dashboard-operation-grid,
   .poster-grid,
   .poster-grid--persistent {
@@ -1772,11 +1773,15 @@ body,
   }
 
   .workspace-kpi-grid > *,
-  .workspace-page > :is(.erp-kpi-grid, .admin-stats, .agent-kpi-grid, .customer-kpis, .finance-kpis) > *,
+  .workspace-page > :is(.erp-kpi-grid, .agent-kpi-grid, .finance-kpis) > *,
   .dashboard-operation-grid > *,
   .poster-grid > * {
     width: 100%;
     height: 100%;
+  }
+
+  .workspace-kpi-grid > * {
+    height: auto;
   }
 }
 
@@ -1785,7 +1790,7 @@ body,
   .layout-view-switch button span { display: none; }
 
   .workspace-kpi-grid,
-  .workspace-page > :is(.erp-kpi-grid, .admin-stats, .agent-kpi-grid, .customer-kpis, .finance-kpis),
+  .workspace-page > :is(.erp-kpi-grid, .agent-kpi-grid, .finance-kpis),
   .dashboard-operation-grid,
   .poster-grid,
   .poster-grid--persistent {
@@ -1848,25 +1853,6 @@ body,
   grid-template-columns: minmax(0, 1fr);
 }
 
-/* Let the pricing table use the full card surface while keeping the toolbar
-   controls comfortably inset. */
-.workspace-page .pricing-workspace-panel {
-  padding: 13px 0 0;
-}
-
-.workspace-page .pricing-workspace-panel > .pricing-book-head {
-  padding-inline: 13px;
-}
-
-.workspace-page .pricing-workspace-panel > .erp-table-wrap {
-  width: 100%;
-  max-width: 100%;
-  border-right: 0;
-  border-bottom: 0;
-  border-left: 0;
-  border-radius: 0 0 12px 12px;
-}
-
 /* Project timeline: the simulated phone shell must receive the same stacking
    behavior as a physically narrow viewport. Keep the actionable admin panel
    first and give both cards the full available width. */
@@ -1926,28 +1912,17 @@ body,
 /* Approval center phone layout. Desktop tables become readable, full-width
    records instead of retaining five compressed columns inside the preview. */
 .app-shell--view-mobile .approval-toolbar {
+  flex: 0 0 auto;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 8px;
   margin-bottom: 10px;
 }
 
-.app-shell--view-mobile .approval-kpis {
-  width: 100%;
-  min-width: 0;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.app-shell--view-mobile .approval-kpis article {
-  min-height: 64px;
-  padding: 10px 11px;
-}
-
 .app-shell--view-mobile .approval-refresh {
   width: 100%;
   grid-column: auto;
-  min-height: 40px;
+  min-height: var(--ui-control-height-touch);
   align-self: auto;
 }
 
@@ -2045,28 +2020,17 @@ body,
 
 @media (max-width: 780px) {
   .approval-toolbar {
+    flex: 0 0 auto;
     display: grid;
     grid-template-columns: minmax(0, 1fr);
     gap: 8px;
     margin-bottom: 10px;
   }
 
-  .approval-kpis {
-    width: 100%;
-    min-width: 0;
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .approval-kpis article {
-    min-height: 64px;
-    padding: 10px 11px;
-  }
-
   .approval-refresh {
     width: 100%;
     grid-column: auto;
-    min-height: 40px;
+    min-height: var(--ui-control-height-touch);
     align-self: auto;
   }
 
@@ -2163,26 +2127,113 @@ body,
   .approval-table--transactions td:nth-child(4)::before { content: "Amount"; }
 }
 
-/* Phone workspaces start with their controls and content. Hide only the
-   route-level heading copy; record names, panel headings and modal titles stay
-   visible because they carry active context. */
-.app-shell--view-mobile .workspace-page > .workspace-header > .workspace-header__copy,
-.app-shell--view-mobile .workspace-page > .workspace-header > div:first-child:has(> h1) {
-  display: none;
-}
-
+/* Mobile workspaces prioritize controls and content. Hide only route-level
+   heading copy; record names, tabs, card headings and dialog titles remain. */
 .app-shell--view-mobile .workspace-page > .workspace-header {
+  width: 100%;
+  align-items: stretch;
+  justify-content: stretch;
+  grid-template-columns: minmax(0, 1fr);
+  flex-direction: column;
   gap: 0;
 }
 
+.app-shell--view-mobile .workspace-page > .workspace-header > .workspace-header__copy,
+.app-shell--view-mobile .workspace-page > .workspace-header > div:first-child:has(> h1) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.app-shell--view-mobile .workspace-page > .workspace-header.dashboard-header {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 8px;
+}
+
+.app-shell--view-mobile .workspace-page > .workspace-header.dashboard-header > .workspace-header__copy {
+  position: static;
+  width: auto;
+  height: auto;
+  padding: 0;
+  margin: 0;
+  overflow: visible;
+  clip: auto;
+  white-space: normal;
+  display: block;
+}
+
+.app-shell--view-mobile .dashboard-header .workspace-header__eyebrow {
+  display: none;
+}
+
+.app-shell--view-mobile .dashboard-header h1 {
+  font-size: 18px;
+}
+
+.app-shell--view-mobile .dashboard-header .ui-button--icon {
+  width: var(--ui-control-height-touch);
+  min-width: var(--ui-control-height-touch);
+}
+
 @media (max-width: 780px) {
+  .workspace-page > .workspace-header {
+    width: 100%;
+    align-items: stretch;
+    justify-content: stretch;
+    grid-template-columns: minmax(0, 1fr);
+    flex-direction: column;
+    gap: 0;
+  }
+
   .workspace-page > .workspace-header > .workspace-header__copy,
   .workspace-page > .workspace-header > div:first-child:has(> h1) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .workspace-page > .workspace-header.dashboard-header {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: end;
+    gap: 8px;
+  }
+
+  .workspace-page > .workspace-header.dashboard-header > .workspace-header__copy {
+    position: static;
+    width: auto;
+    height: auto;
+    padding: 0;
+    margin: 0;
+    overflow: visible;
+    clip: auto;
+    white-space: normal;
+    display: block;
+  }
+
+  .dashboard-header .workspace-header__eyebrow {
     display: none;
   }
 
-  .workspace-page > .workspace-header {
-    gap: 0;
+  .dashboard-header h1 {
+    font-size: 18px;
+  }
+
+  .dashboard-header .ui-button--icon {
+    width: var(--ui-control-height-touch);
+    min-width: var(--ui-control-height-touch);
   }
 }
 
@@ -2573,8 +2624,9 @@ body.app-preview-mobile .generated-pack-preview {
 
 body.app-preview-mobile .generated-pack-preview__head {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 7px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
 }
 
 body.app-preview-mobile .generated-pack-zoom {
@@ -2734,8 +2786,9 @@ body.app-preview-mobile .document-checklist article {
 
   .generated-pack-preview__head {
     display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    gap: 7px;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 6px;
   }
 
   .generated-pack-zoom {
@@ -2781,12 +2834,20 @@ body.app-preview-mobile .document-checklist article {
   }
 }
 
-/* Inventory phone workspace --------------------------------------------
- * The page owns vertical scrolling. Dense desktop tables become labelled
- * records so stock, locations and movement history remain usable at 320px.
+/* ERP phone workspaces --------------------------------------------------
+ * Route titles remain semantic but visually collapse. Inventory tables become
+ * labelled records so stock and movement history remain usable at 320px.
  */
 :is(.app-shell--view-mobile, body.app-preview-mobile) .workspace-page.erp-page > .erp-page-head > div:first-child {
-  display: none;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 :is(.app-shell--view-mobile, body.app-preview-mobile) .workspace-page.erp-page > .erp-page-head {
@@ -2804,7 +2865,7 @@ body.app-preview-mobile .document-checklist article {
 :is(.app-shell--view-mobile, body.app-preview-mobile) .workspace-page.erp-page > .erp-page-head .erp-head-actions button {
   width: 100%;
   min-width: 0;
-  min-height: 40px;
+  min-height: var(--ui-control-height-touch);
   justify-content: center;
   padding-inline: 8px;
   white-space: normal;
@@ -2938,7 +2999,17 @@ body.app-preview-mobile .document-checklist article {
 }
 
 @media (max-width: 780px) {
-  .workspace-page.erp-page > .erp-page-head > div:first-child { display: none; }
+  .workspace-page.erp-page > .erp-page-head > div:first-child {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
   .workspace-page.erp-page > .erp-page-head { margin: 0; padding: 0; }
   .workspace-page.erp-page > .erp-page-head .erp-head-actions {
     width: 100%;
@@ -2949,7 +3020,7 @@ body.app-preview-mobile .document-checklist article {
   .workspace-page.erp-page > .erp-page-head .erp-head-actions button {
     width: 100%;
     min-width: 0;
-    min-height: 40px;
+    min-height: var(--ui-control-height-touch);
     justify-content: center;
     padding-inline: 8px;
     white-space: normal;
@@ -3035,5 +3106,39 @@ body.app-preview-mobile .document-checklist article {
     border: 0;
     border-radius: 0;
     overflow: visible;
+  }
+}
+
+/* Inventory owns this exception to the generic two-column ERP action layout:
+   all five stock actions remain on one row in both real and simulated phones. */
+@container workspace (max-width: 780px) {
+  .workspace-page.erp-page.inventory-page > .erp-page-head .erp-head-actions.inventory-head-actions {
+    width: 100%;
+    min-width: 0;
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    align-items: center;
+    gap: clamp(2px, 1cqi, 4px);
+    padding-bottom: 2px;
+    overflow: hidden;
+  }
+
+  .workspace-page.erp-page.inventory-page > .erp-page-head .erp-head-actions.inventory-head-actions > button {
+    width: 100%;
+    min-width: 0;
+    min-height: var(--ui-control-height-touch);
+    gap: clamp(2px, .8cqi, 4px);
+    padding-inline: 2px;
+    overflow: hidden;
+    font-size: clamp(8px, 2.1cqi, 10px);
+    line-height: 1.1;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .workspace-page.erp-page.inventory-page > .erp-page-head .erp-head-actions.inventory-head-actions > button > svg {
+    width: 12px;
+    height: 12px;
+    flex: 0 0 auto;
   }
 }

@@ -3,3 +3,5 @@ export { documentTabs, defaultDocumentPackTemplate, normalizeDocumentPackTemplat
 export { documentPackFilePrefix, renderDocumentHtml, renderFullDocumentHtml, validateDocumentPack } from './document-pack/html'
 export { createDocumentPackPdf, downloadDocumentPackPdf } from './document-pack/pdf'
 export { downloadDocumentWord, downloadQuotationCsv, printDocumentPack } from './document-pack/exporters'
+export { isCustomerSignatureFile, isEmbeddableSignatureFile, loadCustomerSignature, prepareCustomerSignature } from './document-pack/signature'
+export type { DocumentPackRenderAssets, LoadedCustomerSignature, PdfSignatureImage } from './document-pack/signature'

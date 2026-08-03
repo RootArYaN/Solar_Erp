@@ -45,6 +45,7 @@ import { getProjectTimelines } from '../../api/workflow'
 import type { ProjectTimelineListItem, Session } from '../../types'
 import { Modal } from '../admin/Modal'
 import { AlertDialog } from '../ui/AlertDialog'
+import { Button } from '../ui/Button'
 import { ErrorState, LoadingSkeleton, ReadOnlyNotice } from '../ui/PageState'
 import { useToast } from '../ui/ToastProvider'
 import { TabButton, TabStrip, WorkspaceHeader, WorkspacePage } from '../workspace'
@@ -353,16 +354,16 @@ export function FinancePage({ session }: { session: Session }) {
 
   return <WorkspacePage variant="fixed-tabs" className="finance-page">
     {access.readOnly && <ReadOnlyNotice />}
-    <WorkspaceHeader className="module-page-header finance-page-header">
-      <div>
-        <span className="module-kicker">Company finance</span>
-        <h1>Finance workspace</h1>
-      </div>
-      <div>
-        <button className="secondary-button" onClick={() => void refreshAll()} disabled={loading}><RefreshCw className={loading ? 'spin' : ''} size={14} /> Refresh</button>
-        {access.canEdit && <button className="primary-button" onClick={() => setDialog('transaction')}><Plus size={14} /> Add transaction</button>}
-      </div>
-    </WorkspaceHeader>
+    <WorkspaceHeader
+      className="module-page-header finance-page-header"
+      eyebrow="Company finance"
+      title="Finance workspace"
+      actionsLayout="grid"
+      actions={<>
+        <Button variant="secondary" leadingIcon={<RefreshCw className={loading ? 'spin' : ''} size={14} />} onClick={() => void refreshAll()} disabled={loading}>Refresh</Button>
+        {access.canEdit && <Button variant="primary" leadingIcon={<Plus size={14} />} onClick={() => setDialog('transaction')}>Add transaction</Button>}
+      </>}
+    />
 
     <TabStrip className="finance-tabs" label="Company finance sections">{([
       ['overview', WalletCards, 'Overview'], ['transactions', ArrowRightLeft, 'Transactions'], ['expenses', ReceiptText, 'Expenses'], ['bills', FileText, 'Bills'],
