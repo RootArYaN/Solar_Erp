@@ -2,18 +2,36 @@ import { ArrowDownLeft, ArrowRightLeft, ArrowUpRight, BadgeIndianRupee, Banknote
 import type { Bill, BillList, CompanyLoan, FinanceOverview, FinanceTransaction, FinanceTransactionList, FinancialAccount, Profitability } from '../../erp-types'
 import { EmptyState } from '../ui/PageState'
 import { KpiGrid } from '../workspace'
-import { exportLedgerCsv, label, money, monthStart, shortDate, today } from './finance-utils'
+import { exportLedgerCsv, label, money, monthStart, shortDate, today, toDateInputValue } from './finance-utils'
 
-export function Overview({ data }: { data: FinanceOverview }) {
+type DateRangeProps = {
+  dateFrom: string
+  setDateFrom: (value: string) => void
+  dateTo: string
+  setDateTo: (value: string) => void
+}
+
+function DateRangeFields({ dateFrom, setDateFrom, dateTo, setDateTo }: DateRangeProps) {
+  return <>
+    <label className="finance-date-field"><input type="date" value={dateFrom} max={dateTo} onChange={(event) => setDateFrom(event.target.value)} required /></label>
+    <label className="finance-date-field"><input type="date" value={dateTo} min={dateFrom} onChange={(event) => setDateTo(event.target.value)} required /></label>
+  </>
+}
+
+export function Overview({ data, dateFrom, setDateFrom, dateTo, setDateTo, reload }: { data: FinanceOverview; reload: () => void } & DateRangeProps) {
   const cards = [
-    ['Money in this month', data.money_in_month, ArrowDownLeft, 'positive'], ['Money out this month', data.money_out_month, ArrowUpRight, 'negative'],
+    ['Money in', data.money_in_month, ArrowDownLeft, 'positive'], ['Money out', data.money_out_month, ArrowUpRight, 'negative'],
     ['Bank balance', data.bank_balance, Landmark, 'neutral'], ['Cash balance', data.cash_balance, Banknote, 'neutral'],
     ['Customer receivables', data.customer_receivables, BadgeIndianRupee, 'warning'], ['Supplier payables', data.supplier_payables, ReceiptText, 'warning'],
-    ['Expenses this month', data.expenses_month, CalendarDays, 'negative'], ['Net cash flow', data.net_cash_flow, BarChart3, data.net_cash_flow >= 0 ? 'positive' : 'negative'],
+    ['Expenses', data.expenses_month, CalendarDays, 'negative'], ['Net cash flow', data.net_cash_flow, BarChart3, data.net_cash_flow >= 0 ? 'positive' : 'negative'],
   ] as const
   const maxFlow = Math.max(1, ...data.monthly_flow.flatMap((row) => [row.money_in, row.money_out]))
   const maxExpense = Math.max(1, ...data.expense_by_category.map((row) => row.amount))
   return <>
+    <div className="finance-range-toolbar">
+      <DateRangeFields dateFrom={dateFrom} setDateFrom={setDateFrom} dateTo={dateTo} setDateTo={setDateTo} />
+      <button className="secondary-button finance-range-apply" onClick={reload}>Apply</button>
+    </div>
     <KpiGrid columns={4} phoneColumns={2} responsive className="finance-kpis">
       {cards.map(([name, value, Icon, tone]) => (
         <article className={`finance-kpi finance-kpi--${tone}`} key={name}>
@@ -40,7 +58,7 @@ export function Overview({ data }: { data: FinanceOverview }) {
       </section>
       <section className="erp-panel finance-overview-card">
         <header><div><strong>Expense mix</strong></div></header>
-        {!data.expense_by_category.length ? <EmptyState title="No expenses this month" /> : <div className="expense-breakdown">{data.expense_by_category.map((row) => <div key={row.category}><div><span>{row.category}</span><strong>{money.format(row.amount)}</strong></div><i><b style={{ width: `${(row.amount / maxExpense) * 100}%` }} /></i></div>)}</div>}
+        {!data.expense_by_category.length ? <EmptyState title="No expenses in this period" /> : <div className="expense-breakdown">{data.expense_by_category.map((row) => <div key={row.category}><div><span>{row.category}</span><strong>{money.format(row.amount)}</strong></div><i><b style={{ width: `${(row.amount / maxExpense) * 100}%` }} /></i></div>)}</div>}
       </section>
     </div>
   </>
@@ -55,9 +73,9 @@ export function Transactions({ data, rows, search, setSearch, direction, setDire
       <article><span>Entries</span><strong>{data?.total ?? 0}</strong></article>
     </section>
     <div className="finance-ledger-toolbar">
-      <label className="finance-ledger-field"><span>From</span><input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} /></label>
-      <label className="finance-ledger-field"><span>To</span><input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} /></label>
-      <label className="finance-ledger-field finance-ledger-direction"><span>Direction</span><select value={direction} onChange={(event) => setDirection(event.target.value)}><option value="">All</option><option value="credit">Money in</option><option value="debit">Money out</option></select></label>
+      <label className="finance-ledger-field"><input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} /></label>
+      <label className="finance-ledger-field"><input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} /></label>
+      <label className="finance-ledger-field finance-ledger-direction"><select value={direction} onChange={(event) => setDirection(event.target.value)}><option value="">All</option><option value="credit">Money in</option><option value="debit">Money out</option></select></label>
       <label className="finance-ledger-search"><Search size={13} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search ledger" aria-label="Search ledger" /></label>
       <button className="secondary-button finance-ledger-apply" onClick={reload}>Apply</button>
       {reportMode && <div className="finance-ledger-export">
@@ -80,12 +98,12 @@ export function Expenses({ data, dateFrom, setDateFrom, dateTo, setDateTo, reloa
     <div className="finance-expense-toolbar">
       <div className="finance-expense-presets">
         <button onClick={() => { setDateFrom(today()); setDateTo(today()) }}>Today</button>
-        <button onClick={() => { const d = new Date(); d.setDate(d.getDate() - 1); const value = d.toISOString().slice(0, 10); setDateFrom(value); setDateTo(value) }}>Yesterday</button>
-        <button onClick={() => { const d = new Date(); d.setDate(d.getDate() - 6); setDateFrom(d.toISOString().slice(0, 10)); setDateTo(today()) }}>This week</button>
+        <button onClick={() => { const d = new Date(); d.setDate(d.getDate() - 1); const value = toDateInputValue(d); setDateFrom(value); setDateTo(value) }}>Yesterday</button>
+        <button onClick={() => { const d = new Date(); d.setDate(d.getDate() - 6); setDateFrom(toDateInputValue(d)); setDateTo(today()) }}>This week</button>
         <button onClick={() => { setDateFrom(monthStart()); setDateTo(today()) }}>This month</button>
       </div>
-      <label className="finance-expense-date"><span>From</span><input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} /></label>
-      <label className="finance-expense-date"><span>To</span><input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} /></label>
+      <label className="finance-expense-date"><input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} /></label>
+      <label className="finance-expense-date"><input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} /></label>
       <button className="secondary-button finance-expense-apply" onClick={reload}>Apply</button>
       {canEdit && <button className="primary-button finance-expense-create" onClick={onAdd}><Plus size={14} /> Add expense</button>}
     </div>
@@ -93,7 +111,7 @@ export function Expenses({ data, dateFrom, setDateFrom, dateTo, setDateTo, reloa
   </>
 }
 
-export function Bills({ data, billType, setBillType, reload, canEdit, onAdd, onEdit, onPay, onDelete, onUpload, onDownload }: { data: BillList | null; billType: string; setBillType: (value: string) => void; reload: () => void; canEdit: boolean; onAdd: () => void; onEdit: (bill: Bill) => void; onPay: (bill: Bill) => void; onDelete: (bill: Bill) => void; onUpload: (bill: Bill, file: File) => void; onDownload: (bill: Bill) => void }) {
+export function Bills({ data, billType, setBillType, dateFrom, setDateFrom, dateTo, setDateTo, reload, canEdit, onAdd, onEdit, onPay, onDelete, onUpload, onDownload }: { data: BillList | null; billType: string; setBillType: (value: string) => void; reload: () => void; canEdit: boolean; onAdd: () => void; onEdit: (bill: Bill) => void; onPay: (bill: Bill) => void; onDelete: (bill: Bill) => void; onUpload: (bill: Bill, file: File) => void; onDownload: (bill: Bill) => void } & DateRangeProps) {
   return <>
     <section className="mini-kpis finance-bill-kpis">
       <article><span>Total bills</span><strong>{data?.total ?? 0}</strong></article>
@@ -101,6 +119,7 @@ export function Bills({ data, billType, setBillType, reload, canEdit, onAdd, onE
       <article><span>Paid</span><strong>{money.format(data?.data.reduce((sum, row) => sum + row.paid_amount, 0) ?? 0)}</strong></article>
     </section>
     <div className="finance-bills-toolbar">
+      <DateRangeFields dateFrom={dateFrom} setDateFrom={setDateFrom} dateTo={dateTo} setDateTo={setDateTo} />
       <label className="finance-bill-type">
         <select value={billType} onChange={(event) => setBillType(event.target.value)}>
           <option value="">All bills</option>
@@ -123,9 +142,9 @@ export function Loans({ rows, canEdit, onAdd, onEdit, onPay, onDelete }: { rows:
   return <><div className="tab-toolbar"><div></div>{canEdit && <button className="primary-button primary-button--compact" onClick={onAdd}><Plus size={14} /> Company loan</button>}</div>{!rows.length ? <EmptyState title="No company loans" /> : <div className="erp-table-wrap"><table className="erp-table"><thead><tr><th>Lender</th><th>Principal</th><th>Outstanding</th><th>Interest</th><th>EMI</th><th>Next due</th><th>Status</th><th /></tr></thead><tbody>{rows.map((row) => <tr key={row.id}><td><strong>{row.lender_name}</strong><small>{row.loan_account_number}</small></td><td>{money.format(row.principal_amount)}</td><td>{money.format(row.outstanding_amount)}</td><td>{row.interest_rate}%</td><td>{money.format(row.emi_amount)}</td><td>{row.next_due_date ? shortDate.format(new Date(row.next_due_date)) : '—'}</td><td><span className="soft-badge">{label(row.status)}</span></td><td>{canEdit && <div className="erp-row-actions"><button className="secondary-button secondary-button--compact" onClick={() => onEdit(row)}><Pencil size={13} /> Edit</button>{row.status !== 'closed' && <button className="secondary-button secondary-button--compact" onClick={() => onPay(row)}>Pay</button>}<button type="button" className="danger-icon-button finance-transaction-delete" onClick={() => onDelete(row)} aria-label={`Delete loan from ${row.lender_name}`} title="Delete loan"><Trash2 size={14} /></button></div>}</td></tr>)}</tbody></table></div>}</>
 }
 
-export function ProfitabilityPanel({ data }: { data: Profitability | null }) {
+export function ProfitabilityPanel({ data, dateFrom, setDateFrom, dateTo, setDateTo, reload }: { data: Profitability | null; reload: () => void } & DateRangeProps) {
   if (!data) return <EmptyState title="No profitability data" />
-  return <><section className="finance-kpis"><article className="finance-kpi"><span><BadgeIndianRupee size={17} /></span><div><small>Sales value</small><strong>{money.format(data.sales_value)}</strong></div></article><article className="finance-kpi"><span><ArrowDownLeft size={17} /></span><div><small>Money received</small><strong>{money.format(data.money_received)}</strong></div></article><article className="finance-kpi"><span><ReceiptText size={17} /></span><div><small>Material + project cost</small><strong>{money.format(data.material_cost + data.project_expenses)}</strong></div></article><article className="finance-kpi"><span><BarChart3 size={17} /></span><div><small>Estimated gross profit</small><strong>{money.format(data.estimated_gross_profit)}</strong></div></article></section><div className="tab-toolbar"><div></div></div>{!data.projects.length ? <EmptyState title="No project profitability yet" /> : <div className="erp-table-wrap"><table className="erp-table"><thead><tr><th>Project</th><th>Sales value</th><th>Money received</th><th>Cost</th><th>Gross profit</th></tr></thead><tbody>{data.projects.map((row) => <tr key={row.project_id}><td><strong>{row.project_number}</strong><small>{row.project_name}</small></td><td>{money.format(row.sales_value)}</td><td>{money.format(row.money_received)}</td><td>{money.format(row.cost)}</td><td className={row.gross_profit >= 0 ? 'money-in' : 'money-out'}>{money.format(row.gross_profit)}</td></tr>)}</tbody></table></div>}</>
+  return <><div className="finance-range-toolbar"><DateRangeFields dateFrom={dateFrom} setDateFrom={setDateFrom} dateTo={dateTo} setDateTo={setDateTo} /><button className="secondary-button finance-range-apply" onClick={reload}>Apply</button></div><section className="finance-kpis"><article className="finance-kpi"><span><BadgeIndianRupee size={17} /></span><div><small>Sales value</small><strong>{money.format(data.sales_value)}</strong></div></article><article className="finance-kpi"><span><ArrowDownLeft size={17} /></span><div><small>Money received</small><strong>{money.format(data.money_received)}</strong></div></article><article className="finance-kpi"><span><ReceiptText size={17} /></span><div><small>Material + project cost</small><strong>{money.format(data.material_cost + data.project_expenses)}</strong></div></article><article className="finance-kpi"><span><BarChart3 size={17} /></span><div><small>Estimated gross profit</small><strong>{money.format(data.estimated_gross_profit)}</strong></div></article></section>{!data.projects.length ? <EmptyState title="No project profitability for this period" /> : <div className="erp-table-wrap"><table className="erp-table"><thead><tr><th>Project</th><th>Sales value</th><th>Money received</th><th>Cost</th><th>Gross profit</th></tr></thead><tbody>{data.projects.map((row) => <tr key={row.project_id}><td><strong>{row.project_number}</strong><small>{row.project_name}</small></td><td>{money.format(row.sales_value)}</td><td>{money.format(row.money_received)}</td><td>{money.format(row.cost)}</td><td className={row.gross_profit >= 0 ? 'money-in' : 'money-out'}>{money.format(row.gross_profit)}</td></tr>)}</tbody></table></div>}</>
 }
 
 export function TransactionTable({ rows, compact = false, canEdit = false, onEdit, onReverse, onDelete }: { rows: FinanceTransactionList['data']; compact?: boolean; canEdit?: boolean; onEdit?: (row: FinanceTransaction) => void; onReverse?: (row: FinanceTransaction) => void; onDelete?: (row: FinanceTransaction) => void }) {

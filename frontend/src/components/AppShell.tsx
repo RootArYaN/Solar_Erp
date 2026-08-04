@@ -1,7 +1,7 @@
 import { BadgeIndianRupee, Boxes, Building2, ClipboardCheck, ContactRound, FileUp, ImageUp, LayoutDashboard, ListChecks, LogOut, Menu, Monitor, PanelLeftClose, PanelLeftOpen, ShieldCheck, Smartphone, Users, UsersRound, WalletCards, X } from 'lucide-react'
 import { Suspense, useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
-import { hasAnyPermission, hasPermission, PERMISSIONS } from '../lib/permissions'
+import { canAccessWorkspaceRoute, WORKSPACE_ROUTE_ACCESS } from '../lib/workspace-routes'
 import type { Session } from '../types'
 import { BrandMark } from './BrandMark'
 
@@ -12,7 +12,7 @@ export function AppShell({ session, onLogout }: { session: Session; onLogout: ()
   const [desktopBrowser, setDesktopBrowser] = useState(() => window.matchMedia('(min-width: 781px)').matches)
   const [layoutView, setLayoutView] = useState<'desktop' | 'mobile'>(() => window.matchMedia('(min-width: 781px)').matches ? 'desktop' : 'mobile')
   const isSuperAdmin = session.user.is_super_admin
-  const canViewAdministration = hasAnyPermission(session, [PERMISSIONS.users.view, PERMISSIONS.roles.view])
+  const canViewAdministration = canAccessWorkspaceRoute(session, WORKSPACE_ROUTE_ACCESS.administration)
 
   useEffect(() => {
     document.body.classList.add('app-authenticated')
@@ -37,17 +37,17 @@ export function AppShell({ session, onLogout }: { session: Session; onLogout: ()
   }, [isSuperAdmin, layoutView])
 
   const links = [
-    { to: '/app', end: true, label: 'Overview', title: 'Overview', icon: LayoutDashboard, permission: PERMISSIONS.dashboard.view },
-    { to: '/app/customers', label: 'Customers', title: 'Customer workflow', icon: UsersRound, permission: PERMISSIONS.customers.view },
-    { to: '/app/agents', label: 'Agents', title: 'Agents', icon: ContactRound, permission: PERMISSIONS.agents.view },
-    { to: '/app/projects', label: 'Projects', title: 'Project timelines', icon: ListChecks, permission: PERMISSIONS.projects.view },
-    { to: '/app/approvals', label: 'Approvals', title: 'Quotation and transaction approvals', icon: ClipboardCheck, permission: PERMISSIONS.quotations.approve },
-    { to: '/app/finance', label: 'Finance', title: 'Company finance', icon: WalletCards, permission: PERMISSIONS.finance.view },
-    { to: '/app/inventory', label: 'Inventory', title: 'Solar inventory', icon: Boxes, permission: PERMISSIONS.inventory.view },
-    { to: '/app/customer-documents', label: 'Documents', title: 'Customer documents', icon: FileUp, permission: PERMISSIONS.documents.view },
-    { to: '/app/posters', label: 'Posters', title: 'Poster upload', icon: ImageUp, permission: PERMISSIONS.posters.view },
-    { to: '/app/solar-pricing', label: 'Solar pricing', title: 'Solar pricing', icon: BadgeIndianRupee, permission: PERMISSIONS.pricing.view },
-    { to: '/app/security/devices', label: 'Devices', title: 'Active devices', icon: ShieldCheck, permission: PERMISSIONS.security.view },
+    { access: WORKSPACE_ROUTE_ACCESS.overview, end: true, label: 'Overview', title: 'Overview', icon: LayoutDashboard },
+    { access: WORKSPACE_ROUTE_ACCESS.customers, label: 'Customers', title: 'Customer workflow', icon: UsersRound },
+    { access: WORKSPACE_ROUTE_ACCESS.agents, label: 'Agents', title: 'Agents', icon: ContactRound },
+    { access: WORKSPACE_ROUTE_ACCESS.projects, label: 'Projects', title: 'Project timelines', icon: ListChecks },
+    { access: WORKSPACE_ROUTE_ACCESS.approvals, label: 'Approvals', title: 'Quotation and transaction approvals', icon: ClipboardCheck },
+    { access: WORKSPACE_ROUTE_ACCESS.finance, label: 'Finance', title: 'Company finance', icon: WalletCards },
+    { access: WORKSPACE_ROUTE_ACCESS.inventory, label: 'Inventory', title: 'Solar inventory', icon: Boxes },
+    { access: WORKSPACE_ROUTE_ACCESS.documents, label: 'Documents', title: 'Customer documents', icon: FileUp },
+    { access: WORKSPACE_ROUTE_ACCESS.posters, label: 'Posters', title: 'Poster upload', icon: ImageUp },
+    { access: WORKSPACE_ROUTE_ACCESS.pricing, label: 'Solar pricing', title: 'Solar pricing', icon: BadgeIndianRupee },
+    { access: WORKSPACE_ROUTE_ACCESS.devices, label: 'Devices', title: 'Active devices', icon: ShieldCheck },
   ]
 
   return (
@@ -62,10 +62,10 @@ export function AppShell({ session, onLogout }: { session: Session; onLogout: ()
         </div>
 
         <nav className="app-nav" aria-label="Main navigation">
-          {links.filter((link) => hasPermission(session, link.permission)).map(({ icon: Icon, ...link }) => (
-            <NavLink key={link.to} to={link.to} end={link.end} onClick={() => setMobileOpen(false)} title={link.title}><Icon size={19} /><span>{link.label}</span></NavLink>
+          {links.filter((link) => canAccessWorkspaceRoute(session, link.access)).map(({ icon: Icon, access, ...link }) => (
+            <NavLink key={access.path} to={access.path} end={'end' in link ? link.end : undefined} onClick={() => setMobileOpen(false)} title={link.title}><Icon size={19} /><span>{link.label}</span></NavLink>
           ))}
-          {canViewAdministration && <NavLink to="/app/administration" onClick={() => setMobileOpen(false)} title="Users & roles"><Users size={19} /><span>Users & roles</span></NavLink>}
+          {canViewAdministration && <NavLink to={WORKSPACE_ROUTE_ACCESS.administration.path} onClick={() => setMobileOpen(false)} title="Users & roles"><Users size={19} /><span>Users & roles</span></NavLink>}
         </nav>
 
         <section className="sidebar-company"><Building2 size={18} /><div><strong>{session.company.name}</strong><span>{session.company.code}</span></div></section>

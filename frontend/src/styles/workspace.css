@@ -809,15 +809,53 @@ body.app-authenticated #root {
   box-shadow: 0 0 0 3px rgba(217,154,20,.1);
 }
 
+/* The shell can render a phone canvas inside a wide desktop viewport, so its
+   mobile class needs the same document-toolbar layout as a real phone. */
+.app-shell--view-mobile .customer-documents-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: stretch;
+}
+
+.app-shell--view-mobile .customer-documents-toolbar > div.customer-documents-toolbar__actions {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: stretch;
+}
+
+.app-shell--view-mobile .customer-document-search,
+.app-shell--view-mobile .customer-documents-toolbar__actions > .primary-button {
+  width: 100%;
+  min-width: 0;
+}
+
+.app-shell--view-mobile .customer-documents-toolbar__actions > .primary-button {
+  justify-content: center;
+}
+
 @media (max-width: 720px) {
-  .customer-documents-toolbar,
-  .customer-documents-toolbar__actions {
+  .customer-documents-toolbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
     align-items: stretch;
-    flex-direction: column;
   }
 
-  .customer-document-search {
+  .customer-documents-toolbar > div.customer-documents-toolbar__actions {
     width: 100%;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+  }
+
+  .customer-document-search,
+  .customer-documents-toolbar__actions > .primary-button {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .customer-documents-toolbar__actions > .primary-button {
+    justify-content: center;
   }
 }
 
@@ -1050,6 +1088,21 @@ body.app-authenticated #root {
   .workspace-page > :is(.erp-kpi-grid, .agent-kpi-grid, .finance-kpis) {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+}
+
+/* Customer project values can be long IDs or stage names. Keep their type
+   balanced across desktop and phone layouts and show two readable lines. */
+.customer-summary-grid .ui-kpi-card__value {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: clamp(14px, 1.15vw, 16px);
+  line-height: 1.2;
+  letter-spacing: -.15px;
+  overflow-wrap: anywhere;
+  text-overflow: ellipsis;
+  white-space: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 /* Customer workspace on phones: use the page as the only vertical scroll
@@ -2289,7 +2342,7 @@ body.app-authenticated #root {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.app-shell--view-mobile .finance-tab-panel :is(.finance-ledger-toolbar, .finance-expense-toolbar, .finance-bills-toolbar) {
+.app-shell--view-mobile .finance-tab-panel :is(.finance-ledger-toolbar, .finance-expense-toolbar, .finance-bills-toolbar, .finance-range-toolbar) {
   width: 100%;
   min-width: 0;
   display: grid;
@@ -2304,7 +2357,7 @@ body.app-authenticated #root {
   grid-column: 1 / -1;
 }
 
-.app-shell--view-mobile .finance-tab-panel :is(.finance-ledger-field, .finance-ledger-direction, .finance-expense-date, .finance-bill-type) {
+.app-shell--view-mobile .finance-tab-panel :is(.finance-ledger-field, .finance-ledger-direction, .finance-expense-date, .finance-bill-type, .finance-date-field) {
   width: 100%;
   min-width: 0;
   max-width: none;
@@ -2318,7 +2371,7 @@ body.app-authenticated #root {
 }
 
 .app-shell--view-mobile .finance-expense-presets button,
-.app-shell--view-mobile :is(.finance-ledger-apply, .finance-expense-apply, .finance-expense-create, .finance-bill-apply, .finance-bill-create) {
+.app-shell--view-mobile :is(.finance-ledger-apply, .finance-expense-apply, .finance-expense-create, .finance-bill-apply, .finance-bill-create, .finance-range-apply) {
   width: 100%;
   min-width: 0;
 }
@@ -2337,6 +2390,10 @@ body.app-authenticated #root {
 }
 
 .app-shell--view-mobile .finance-bill-create {
+  grid-column: 1 / -1;
+}
+
+.app-shell--view-mobile .finance-range-apply {
   grid-column: 1 / -1;
 }
 

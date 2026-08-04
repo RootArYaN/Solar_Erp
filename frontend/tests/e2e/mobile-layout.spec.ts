@@ -25,6 +25,33 @@ async function loadStyles(page: Page) {
 }
 
 for (const width of phoneWidths) {
+  test(`sidebar menu button stays visible at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 820 })
+    await page.setContent(`
+      <meta name="viewport" content="width=device-width, initial-scale=1" />
+      <main class="app-shell">
+        <section class="app-main">
+          <header class="app-topbar">
+            <button class="icon-button app-menu-button" aria-label="Open menu">☰</button>
+          </header>
+          <div class="app-viewport"><div style="height: 1600px"></div></div>
+        </section>
+      </main>
+    `)
+    await loadStyles(page)
+
+    const menuButton = page.getByRole('button', { name: 'Open menu' })
+    await expect(menuButton).toBeVisible()
+    await expect(menuButton).toHaveCSS('display', 'grid')
+
+    const buttonBox = await menuButton.boundingBox()
+    expect(buttonBox).not.toBeNull()
+    expect(buttonBox!.x).toBeGreaterThanOrEqual(0)
+    expect(buttonBox!.x + buttonBox!.width).toBeLessThanOrEqual(width)
+  })
+}
+
+for (const width of phoneWidths) {
   test(`inventory toolbar and records fit a ${width}px viewport`, async ({ page }) => {
     await page.setViewportSize({ width, height: 820 })
     await page.setContent(`
@@ -180,3 +207,150 @@ test('document preview title and zoom controls stay inline at 320px', async ({ p
   expect(headerBox!.height).toBeLessThanOrEqual(66)
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true)
 })
+
+for (const width of [375, 1440]) {
+  test(`customer summary typography remains readable at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 820 })
+    await page.setContent(`
+      <meta name="viewport" content="width=device-width, initial-scale=1" />
+      <main class="app-shell">
+        <section class="app-main"><div class="app-viewport"><div class="route-transition">
+          <section class="workspace-page customer-detail-page">
+            <div class="customer-detail-layout">
+              <aside class="customer-directory"></aside>
+              <main class="customer-workspace">
+                <div class="workspace-kpi-grid ui-kpi-grid customer-summary-grid" data-columns="4" data-phone-columns="1" data-responsive="true" style="--workspace-kpi-columns: 4">
+                  <article class="ui-kpi-card"><span class="ui-kpi-card__icon">◫</span><div class="ui-kpi-card__content"><span class="ui-kpi-card__label">Current project</span><strong class="ui-kpi-card__value">PRJ-2026-152B65A9</strong><small class="ui-kpi-card__note">3.24 kW · Loan</small></div></article>
+                  <article class="ui-kpi-card"><span class="ui-kpi-card__icon">◷</span><div class="ui-kpi-card__content"><span class="ui-kpi-card__label">Current stage</span><strong class="ui-kpi-card__value">Loan application submitted</strong><small class="ui-kpi-card__note">50% complete</small></div></article>
+                  <article class="ui-kpi-card"><span class="ui-kpi-card__icon">₹</span><div class="ui-kpi-card__content"><span class="ui-kpi-card__label">Approved value</span><strong class="ui-kpi-card__value">₹1,60,000</strong><small class="ui-kpi-card__note">QUO-2026-7CFDE976-R1</small></div></article>
+                  <article class="ui-kpi-card"><span class="ui-kpi-card__icon">✓</span><div class="ui-kpi-card__content"><span class="ui-kpi-card__label">Received / pending</span><strong class="ui-kpi-card__value">₹0</strong><small class="ui-kpi-card__note">₹1,60,000 pending</small></div></article>
+                </div>
+              </main>
+            </div>
+          </section>
+        </div></div></section>
+      </main>
+    `)
+    await loadStyles(page)
+
+    const values = page.locator('.customer-summary-grid .ui-kpi-card__value')
+    await expect(values).toHaveCount(4)
+    const typography = await values.evaluateAll((elements) => elements.map((element) => {
+      const style = getComputedStyle(element)
+      return {
+        fontSize: Number.parseFloat(style.fontSize),
+        lineHeight: Number.parseFloat(style.lineHeight),
+        whiteSpace: style.whiteSpace,
+        height: element.getBoundingClientRect().height,
+      }
+    }))
+    expect(typography.every(({ fontSize }) => fontSize >= 14 && fontSize <= 16)).toBe(true)
+    expect(typography.every(({ whiteSpace }) => whiteSpace === 'normal')).toBe(true)
+    expect(typography.every(({ height, lineHeight }) => height <= (lineHeight * 2) + 1)).toBe(true)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true)
+  })
+}
+
+for (const mode of [
+  { name: 'real phone', width: 375, shellClass: '' },
+  { name: 'mobile preview', width: 1024, shellClass: 'app-shell--view-mobile' },
+]) {
+  test(`customer document controls stack in ${mode.name} mode`, async ({ page }) => {
+    await page.setViewportSize({ width: mode.width, height: 820 })
+    await page.setContent(`
+      <meta name="viewport" content="width=device-width, initial-scale=1" />
+      <main class="app-shell ${mode.shellClass}">
+        <section class="app-main"><div class="app-viewport"><div class="route-transition">
+          <section class="workspace-page customer-detail-page">
+            <main class="customer-workspace">
+              <div class="tab-toolbar customer-documents-toolbar">
+                <div class="customer-documents-toolbar__copy">
+                  <strong>Customer documents</strong>
+                  <span>5 of 5 stored files</span>
+                </div>
+                <div class="customer-documents-toolbar__actions">
+                  <label class="customer-document-search">
+                    <span aria-hidden="true">⌕</span>
+                    <input aria-label="Search customer documents" placeholder="Search filename or document type" />
+                  </label>
+                  <label class="primary-button primary-button--compact">Upload<input hidden type="file" /></label>
+                </div>
+              </div>
+            </main>
+          </section>
+        </div></div></section>
+      </main>
+    `)
+    await loadStyles(page)
+
+    const layout = await page.locator('.customer-documents-toolbar').evaluate((toolbar) => {
+      const title = toolbar.querySelector('.customer-documents-toolbar__copy')!.getBoundingClientRect()
+      const actions = toolbar.querySelector('.customer-documents-toolbar__actions')!.getBoundingClientRect()
+      const search = toolbar.querySelector('.customer-document-search')!.getBoundingClientRect()
+      const upload = toolbar.querySelector('.primary-button')!.getBoundingClientRect()
+      return {
+        toolbar: toolbar.getBoundingClientRect().toJSON(),
+        title: title.toJSON(),
+        actions: actions.toJSON(),
+        search: search.toJSON(),
+        upload: upload.toJSON(),
+      }
+    })
+
+    expect(layout.actions.top).toBeGreaterThanOrEqual(layout.title.bottom)
+    expect(layout.search.width).toBeGreaterThanOrEqual(layout.actions.width - 1)
+    expect(layout.upload.width).toBeGreaterThanOrEqual(layout.actions.width - 1)
+    expect(layout.upload.top).toBeGreaterThanOrEqual(layout.search.bottom)
+    expect(layout.search.left).toBeGreaterThanOrEqual(layout.toolbar.left)
+    expect(layout.search.right).toBeLessThanOrEqual(layout.toolbar.right + 1)
+    expect(layout.upload.right).toBeLessThanOrEqual(layout.toolbar.right + 1)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true)
+  })
+}
+
+for (const width of [375, 1440]) {
+  test(`finance date filters fit overview, bills, and profitability at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 820 })
+    await page.setContent(`
+      <meta name="viewport" content="width=device-width, initial-scale=1" />
+      <main class="app-shell ${width <= 430 ? 'app-shell--view-mobile' : ''}">
+        <aside class="app-sidebar"></aside>
+        <section class="app-main"><div class="app-viewport"><div class="route-transition">
+          <section class="workspace-page finance-page">
+            <div class="finance-tab-panel finance-tab-panel--overview">
+              <div class="finance-range-toolbar">
+                <label class="finance-date-field"><input type="date" value="2026-08-01" /></label>
+                <label class="finance-date-field"><input type="date" value="2026-08-31" /></label>
+                <button class="secondary-button finance-range-apply">Apply</button>
+              </div>
+            </div>
+            <div class="finance-tab-panel finance-tab-panel--bills">
+              <div class="finance-bills-toolbar">
+                <label class="finance-date-field"><input type="date" value="2026-08-01" /></label>
+                <label class="finance-date-field"><input type="date" value="2026-08-31" /></label>
+                <label class="finance-bill-type"><select><option>All bills</option></select></label>
+                <button class="secondary-button finance-bill-apply">Apply</button>
+                <button class="primary-button finance-bill-create">Create bill</button>
+              </div>
+            </div>
+            <div class="finance-tab-panel finance-tab-panel--profitability">
+              <div class="finance-range-toolbar">
+                <label class="finance-date-field"><input type="date" value="2026-08-01" /></label>
+                <label class="finance-date-field"><input type="date" value="2026-08-31" /></label>
+                <button class="secondary-button finance-range-apply">Apply</button>
+              </div>
+            </div>
+          </section>
+        </div></div></section>
+      </main>
+    `)
+    await loadStyles(page)
+
+    await expect(page.getByText('From')).toHaveCount(3)
+    await expect(page.getByText('To')).toHaveCount(3)
+    const controls = page.locator('.finance-date-field, .finance-range-apply, .finance-bill-type, .finance-bill-apply, .finance-bill-create')
+    const boxes = await controls.evaluateAll((elements) => elements.map((element) => element.getBoundingClientRect()))
+    expect(boxes.every((box) => box.width > 0 && box.left >= 0 && box.right <= width + 1)).toBe(true)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true)
+  })
+}

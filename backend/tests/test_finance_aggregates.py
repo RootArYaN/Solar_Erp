@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from types import SimpleNamespace
 
-from app.services.finance_service import list_accounts, profitability
+from app.services.finance_service import list_accounts, overview, profitability
 
 
 class _Result:
@@ -27,6 +27,17 @@ class _RecordingSession:
     def execute(self, statement):
         self.statements.append(statement)
         return next(self._results)
+
+
+class _OverviewRecordingSession(_RecordingSession):
+    def __init__(self, results: list[_Result], scalar_results: list[_Result]):
+        super().__init__(results)
+        self._scalar_results = iter(scalar_results)
+        self.scalar_statements = []
+
+    def scalars(self, statement):
+        self.scalar_statements.append(statement)
+        return next(self._scalar_results)
 
 
 def _actor(company_id: str = 'company-1'):
@@ -71,12 +82,16 @@ def test_profitability_uses_three_fixed_aggregate_queries():
             Decimal('150.00'),
             Decimal('100.00'),
         )),
-        _Result(all_rows=[(project, Decimal('300.00'), Decimal('120.00'))]),
+        _Result(all_rows=[(project, Decimal('1000.00'), Decimal('300.00'), Decimal('120.00'))]),
     ])
 
-    summary = profitability(db, _actor())
+    summary = profitability(db, _actor(), date_from=date(2026, 8, 1), date_to=date(2026, 8, 31))
 
     assert len(db.statements) == 3
+    assert 'bills.bill_date' in str(db.statements[0])
+    assert 'finance_transactions.transaction_date' in str(db.statements[1])
+    assert 'bills.bill_date' in str(db.statements[2])
+    assert 'finance_transactions.transaction_date' in str(db.statements[2])
     assert summary.money_received == 700.0
     assert summary.net_cash_flow == 450.0
     assert summary.estimated_gross_profit == 450.0
@@ -89,3 +104,29 @@ def test_profitability_uses_three_fixed_aggregate_queries():
         'cost': 120.0,
         'gross_profit': 880.0,
     }]
+
+
+def test_overview_applies_the_range_to_transactions_bills_and_accounts():
+    db = _OverviewRecordingSession(
+        [
+            _Result(one=(Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0'))),
+            _Result(all_rows=[]),
+            _Result(all_rows=[]),
+            _Result(all_rows=[]),
+        ],
+        [_Result(all_rows=[]), _Result(all_rows=[])],
+    )
+
+    summary = overview(db, _actor(), date_from=date(2026, 8, 1), date_to=date(2026, 8, 31))
+
+    statements = [str(statement) for statement in [*db.statements, *db.scalar_statements]]
+    assert any('financial_accounts' in statement and 'finance_transactions.transaction_date' in statement for statement in statements)
+    assert any('bills.bill_date' in statement for statement in statements)
+    assert all(
+        'finance_transactions.transaction_date' in statement
+        for statement in statements
+        if 'FROM finance_transactions' in statement
+    )
+    assert summary.money_in_month == 0
+    assert summary.recent_transactions == []
+    assert summary.pending_bills == []

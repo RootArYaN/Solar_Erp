@@ -7,14 +7,21 @@ export function label(value: string) {
   return value.replaceAll('_', ' ').replace(/\b\w/g, (match) => match.toUpperCase())
 }
 
+export function toDateInputValue(date: Date) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 export function today() {
-  return new Date().toISOString().slice(0, 10)
+  return toDateInputValue(new Date())
 }
 
 export function monthStart() {
   const date = new Date()
   date.setDate(1)
-  return date.toISOString().slice(0, 10)
+  return toDateInputValue(date)
 }
 
 export function exportLedgerCsv(rows: FinanceTransactionList['data']) {

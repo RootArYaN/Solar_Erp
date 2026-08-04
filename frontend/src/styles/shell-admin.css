@@ -37,6 +37,7 @@
 .sidebar-backdrop { display: none; }
 .app-main { min-width: 0; height: 100vh; height: 100dvh; overflow: hidden; }
 .app-topbar { display: none; }
+.app-menu-button { display: none; }
 
 @media (max-width: 1080px) and (min-width: 781px) {
   .app-shell { --app-sidebar-width: 204px; }
@@ -99,7 +100,6 @@
 .app-shell--view-mobile .sidebar-backdrop { position: absolute; inset: 0; z-index: 25; display: block; }
 .app-shell--view-mobile .app-topbar { justify-content: space-between; }
 
-.app-menu-button { display: none; }
 .admin-page, .agent-page { width: min(1360px, calc(100% - 48px)); height: 100%; min-height: 0; margin: 0 auto; padding: 34px 0 48px; display: flex; flex-direction: column; overflow: hidden; }
 
 /* Administration */

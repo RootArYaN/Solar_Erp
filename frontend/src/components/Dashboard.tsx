@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import { getDashboardSummary } from '../api/dashboard'
 import type { DashboardSummary } from '../erp-types'
 import { hasPermission, PERMISSIONS } from '../lib/permissions'
+import { WORKSPACE_ROUTE_ACCESS } from '../lib/workspace-routes'
 import type { Session } from '../types'
 import { Button } from './ui/Button'
 import { KpiCard } from './ui/KpiCard'
@@ -31,21 +32,21 @@ export function Dashboard({ session }: { session: Session }) {
   if (!summary) return <WorkspacePage className="erp-page"><div className="erp-state erp-state--error"><AlertCircle /><strong>{error || 'Dashboard is unavailable'}</strong><Button variant="secondary" onClick={() => void load()}>Retry</Button></div></WorkspacePage>
 
   const operational = [
-    ['Customers', summary.total_customers, `${summary.new_customers_month} new this month`, UsersRound, '/app/customers', PERMISSIONS.customers.view],
-    ['Active projects', summary.active_projects, `${summary.completed_projects} completed`, SunMedium, '/app/projects', PERMISSIONS.projects.view],
-    ['Pending quotations', summary.pending_quotations, 'Need review or approval', ClipboardCheck, '/app/approvals', PERMISSIONS.quotations.approve],
-    ['Documents pending', summary.pending_documents, 'Awaiting completion', FileClock, '/app/customer-documents', PERMISSIONS.documents.view],
-    ['Loan approvals', summary.loan_approvals_pending, 'Customer loan files', Landmark, '/app/customers', PERMISSIONS.customers.view],
-    ['Material arrivals', summary.material_arrivals_pending, 'Scheduled or in transit', PackageSearch, '/app/projects', PERMISSIONS.projects.view],
-    ['Installations', summary.installations_in_progress, 'Currently in progress', Boxes, '/app/projects', PERMISSIONS.projects.view],
-    ['Low stock', summary.low_stock_items, 'Items need attention', PackageSearch, '/app/inventory', PERMISSIONS.inventory.view],
+    ['Customers', summary.total_customers, `${summary.new_customers_month} new this month`, UsersRound, WORKSPACE_ROUTE_ACCESS.customers.path, PERMISSIONS.customers.view],
+    ['Active projects', summary.active_projects, `${summary.completed_projects} completed`, SunMedium, WORKSPACE_ROUTE_ACCESS.projects.path, PERMISSIONS.projects.view],
+    ['Pending quotations', summary.pending_quotations, 'Need review or approval', ClipboardCheck, WORKSPACE_ROUTE_ACCESS.approvals.path, PERMISSIONS.quotations.approve],
+    ['Documents pending', summary.pending_documents, 'Awaiting completion', FileClock, WORKSPACE_ROUTE_ACCESS.documents.path, PERMISSIONS.documents.view],
+    ['Loan approvals', summary.loan_approvals_pending, 'Customer loan files', Landmark, WORKSPACE_ROUTE_ACCESS.customers.path, PERMISSIONS.customers.view],
+    ['Material arrivals', summary.material_arrivals_pending, 'Scheduled or in transit', PackageSearch, WORKSPACE_ROUTE_ACCESS.projects.path, PERMISSIONS.projects.view],
+    ['Installations', summary.installations_in_progress, 'Currently in progress', Boxes, WORKSPACE_ROUTE_ACCESS.projects.path, PERMISSIONS.projects.view],
+    ['Low stock', summary.low_stock_items, 'Items need attention', PackageSearch, WORKSPACE_ROUTE_ACCESS.inventory.path, PERMISSIONS.inventory.view],
   ] as const
   const financial = [
-    ['Money received', summary.money_received_month, 'This month', ArrowDownLeft, '/app/finance?tab=transactions&direction=credit'],
-    ['Money paid', summary.money_paid_month, 'This month', ArrowUpRight, '/app/finance?tab=transactions&direction=debit'],
-    ['Expenses', summary.expenses_month, 'This month', WalletCards, '/app/finance?tab=expenses'],
-    ['Customer receivables', summary.customer_receivables, 'Pending collection', HandCoins, '/app/finance?tab=bills&bill_type=sales'],
-    ['Supplier payables', summary.supplier_payables, 'Pending payment', ReceiptText, '/app/finance?tab=bills&bill_type=purchase'],
+    ['Money received', summary.money_received_month, 'This month', ArrowDownLeft, `${WORKSPACE_ROUTE_ACCESS.finance.path}?tab=transactions&direction=credit`],
+    ['Money paid', summary.money_paid_month, 'This month', ArrowUpRight, `${WORKSPACE_ROUTE_ACCESS.finance.path}?tab=transactions&direction=debit`],
+    ['Expenses', summary.expenses_month, 'This month', WalletCards, `${WORKSPACE_ROUTE_ACCESS.finance.path}?tab=expenses`],
+    ['Customer receivables', summary.customer_receivables, 'Pending collection', HandCoins, `${WORKSPACE_ROUTE_ACCESS.finance.path}?tab=bills&bill_type=sales`],
+    ['Supplier payables', summary.supplier_payables, 'Pending payment', ReceiptText, `${WORKSPACE_ROUTE_ACCESS.finance.path}?tab=bills&bill_type=purchase`],
   ] as const
   const canViewFinance = hasPermission(session, PERMISSIONS.finance.view)
 

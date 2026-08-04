@@ -19,4 +19,10 @@ describe('ProtectedRoute', () => {
     render(<MemoryRouter initialEntries={['/app/customers']}><Routes><Route path="/app" element={<div>Home</div>} /><Route path="/app/customers" element={<ProtectedRoute session={base} permissions={['customers.view']}><div>Customers</div></ProtectedRoute>} /></Routes></MemoryRouter>)
     expect(screen.getByText('Home')).toBeInTheDocument()
   })
+
+  it('redirects to the next workspace the user can access', () => {
+    const session = { ...base, permissions: ['agents.view'] }
+    render(<MemoryRouter initialEntries={['/app/customers']}><Routes><Route path="/app" element={<div>Home</div>} /><Route path="/app/customers" element={<ProtectedRoute session={session} permissions={['customers.view']}><div>Customers</div></ProtectedRoute>} /><Route path="/app/agents" element={<div>Agents</div>} /></Routes></MemoryRouter>)
+    expect(screen.getByText('Agents')).toBeInTheDocument()
+  })
 })

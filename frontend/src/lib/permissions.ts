@@ -39,11 +39,11 @@ export function hasPermission(session: Session, permission: string): boolean {
   return isPrivileged(session) || session.permissions.includes(permission)
 }
 
-export function hasEveryPermission(session: Session, permissions: string[]): boolean {
+export function hasEveryPermission(session: Session, permissions: readonly string[]): boolean {
   return permissions.every((permission) => hasPermission(session, permission))
 }
 
-export function hasAnyPermission(session: Session, permissions: string[]): boolean {
+export function hasAnyPermission(session: Session, permissions: readonly string[]): boolean {
   return permissions.some((permission) => hasPermission(session, permission))
 }
 

@@ -42,8 +42,14 @@ def _raise(exc: FinanceServiceError) -> None:
 
 
 @router.get('/overview', response_model=FinanceOverview)
-def get_overview(db: Session = Depends(get_db), session: CurrentSession = Depends(require_any_permissions('finance.view', 'finance.manage'))):
-    return finance_service.overview(db, session)
+def get_overview(
+    date_from: date | None = None,
+    date_to: date | None = None,
+    db: Session = Depends(get_db),
+    session: CurrentSession = Depends(require_any_permissions('finance.view', 'finance.manage')),
+):
+    try: return finance_service.overview(db, session, date_from=date_from, date_to=date_to)
+    except FinanceServiceError as exc: _raise(exc)
 
 
 @router.get('/accounts', response_model=list[FinancialAccountSummary])
@@ -132,12 +138,15 @@ def get_bills(
     payment_status: str | None = None,
     customer_id: str | None = None,
     project_id: str | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=settings.default_page_size, ge=1, le=settings.max_page_size),
     db: Session = Depends(get_db),
     session: CurrentSession = Depends(require_any_permissions('finance.view', 'finance.manage')),
 ):
-    return finance_service.list_bills(db, session, bill_type=bill_type, payment_status=payment_status, customer_id=customer_id, project_id=project_id, page=page, page_size=page_size)
+    try: return finance_service.list_bills(db, session, bill_type=bill_type, payment_status=payment_status, customer_id=customer_id, project_id=project_id, date_from=date_from, date_to=date_to, page=page, page_size=page_size)
+    except FinanceServiceError as exc: _raise(exc)
 
 
 @router.get('/bill-customers', response_model=list[BillCustomerOption])
@@ -211,5 +220,11 @@ def delete_company_loan(loan_id: str, db: Session = Depends(get_db), session: Cu
 
 
 @router.get('/profitability', response_model=ProfitabilitySummary)
-def get_profitability(db: Session = Depends(get_db), session: CurrentSession = Depends(require_any_permissions('finance.view', 'finance.manage'))):
-    return finance_service.profitability(db, session)
+def get_profitability(
+    date_from: date | None = None,
+    date_to: date | None = None,
+    db: Session = Depends(get_db),
+    session: CurrentSession = Depends(require_any_permissions('finance.view', 'finance.manage')),
+):
+    try: return finance_service.profitability(db, session, date_from=date_from, date_to=date_to)
+    except FinanceServiceError as exc: _raise(exc)

@@ -6,7 +6,7 @@ import { ProtectedRoute } from './components/routing/ProtectedRoute'
 import { useToast } from './components/ui/ToastProvider'
 import { getCurrentSession, isConfirmedSessionEnd, logout, refreshCurrentSession } from './lib/api'
 import { AUTH_SESSION_EVENT, clearSession, loadSession, replaceSession, type SessionEndReason } from './lib/auth-storage'
-import { PERMISSIONS } from './lib/permissions'
+import { getFirstAccessibleWorkspacePath, WORKSPACE_ROUTE_ACCESS } from './lib/workspace-routes'
 import type { Session } from './types'
 
 const Dashboard = lazy(() => import('./components/Dashboard').then((module) => ({ default: module.Dashboard })))
@@ -26,6 +26,22 @@ const sessionMessages: Partial<Record<SessionEndReason, string>> = {
   expired: 'Your session expired. Sign in again to continue.',
   revoked: 'This session was revoked from another device.',
   invalid: 'The saved session was invalid and has been cleared.',
+}
+
+function WorkspaceLanding({ session }: { session: Session }) {
+  const destination = getFirstAccessibleWorkspacePath(session)
+
+  if (destination === WORKSPACE_ROUTE_ACCESS.overview.path) return <Dashboard session={session} />
+  if (destination) return <Navigate to={destination} replace />
+
+  return (
+    <section className="workspace-page erp-page">
+      <div className="erp-state">
+        <strong>No workspace access</strong>
+        <span>Ask an administrator to assign at least one workspace permission.</span>
+      </div>
+    </section>
+  )
 }
 
 export default function App() {
@@ -95,7 +111,7 @@ export default function App() {
   function handleAuthenticated(nextSession: Session) {
     setAuthNotice('')
     setSession(nextSession)
-    navigate('/app', { replace: true })
+    navigate(getFirstAccessibleWorkspacePath(nextSession) ?? '/app', { replace: true })
   }
 
   async function handleLogout() {
@@ -116,22 +132,22 @@ export default function App() {
   return (
     <Suspense fallback={<main className="app-boot-screen"><div className="app-boot-spinner" /><strong>Loading page…</strong></main>}>
       <Routes>
-        <Route path="/login" element={session ? <Navigate to="/app" replace /> : <LoginPage notice={authNotice} onAuthenticated={handleAuthenticated} />} />
+        <Route path="/login" element={session ? <Navigate to={getFirstAccessibleWorkspacePath(session) ?? '/app'} replace /> : <LoginPage notice={authNotice} onAuthenticated={handleAuthenticated} />} />
         <Route path="/app" element={session ? <AppShell session={session} onLogout={handleLogout} /> : <Navigate to="/login" replace />}>
-          <Route index element={session ? <ProtectedRoute session={session} permissions={[PERMISSIONS.dashboard.view]}><Dashboard session={session} /></ProtectedRoute> : null} />
-          <Route path="customers" element={session && <ProtectedRoute session={session} permissions={[PERMISSIONS.customers.view]}><CustomerWorkspacePage session={session} /></ProtectedRoute>} />
-          <Route path="administration" element={session && <ProtectedRoute session={session} permissions={[PERMISSIONS.users.view, PERMISSIONS.roles.view]} mode="any"><AdminPage session={session} onSessionRefresh={syncCurrentSession} /></ProtectedRoute>} />
-          <Route path="agents" element={session && <ProtectedRoute session={session} permissions={[PERMISSIONS.agents.view]}><AgentOverviewPage session={session} /></ProtectedRoute>} />
-          <Route path="projects" element={session && <ProtectedRoute session={session} permissions={[PERMISSIONS.projects.view]}><ProjectTimelinePage /></ProtectedRoute>} />
-          <Route path="approvals" element={session && <ProtectedRoute session={session} permissions={[PERMISSIONS.quotations.approve]}><ApprovalCenterPage /></ProtectedRoute>} />
-          <Route path="customer-documents" element={session && <ProtectedRoute session={session} permissions={[PERMISSIONS.documents.view]}><CustomerDataUploadPage session={session} /></ProtectedRoute>} />
-          <Route path="posters" element={session && <ProtectedRoute session={session} permissions={[PERMISSIONS.posters.view]}><PosterUploadPage session={session} /></ProtectedRoute>} />
-          <Route path="solar-pricing" element={session && <ProtectedRoute session={session} permissions={[PERMISSIONS.pricing.view]}><SolarPricingPage session={session} /></ProtectedRoute>} />
-          <Route path="finance" element={session && <ProtectedRoute session={session} permissions={[PERMISSIONS.finance.view]}><FinancePage session={session} /></ProtectedRoute>} />
-          <Route path="inventory" element={session && <ProtectedRoute session={session} permissions={[PERMISSIONS.inventory.view]}><InventoryPage session={session} /></ProtectedRoute>} />
-          <Route path="security/devices" element={session && <ProtectedRoute session={session} permissions={[PERMISSIONS.security.view]}><ActiveDevicesPage session={session} /></ProtectedRoute>} />
+          <Route index element={session ? <WorkspaceLanding session={session} /> : null} />
+          <Route path="customers" element={session && <ProtectedRoute session={session} permissions={WORKSPACE_ROUTE_ACCESS.customers.permissions}><CustomerWorkspacePage session={session} /></ProtectedRoute>} />
+          <Route path="administration" element={session && <ProtectedRoute session={session} permissions={WORKSPACE_ROUTE_ACCESS.administration.permissions} mode={WORKSPACE_ROUTE_ACCESS.administration.mode}><AdminPage session={session} onSessionRefresh={syncCurrentSession} /></ProtectedRoute>} />
+          <Route path="agents" element={session && <ProtectedRoute session={session} permissions={WORKSPACE_ROUTE_ACCESS.agents.permissions}><AgentOverviewPage session={session} /></ProtectedRoute>} />
+          <Route path="projects" element={session && <ProtectedRoute session={session} permissions={WORKSPACE_ROUTE_ACCESS.projects.permissions}><ProjectTimelinePage /></ProtectedRoute>} />
+          <Route path="approvals" element={session && <ProtectedRoute session={session} permissions={WORKSPACE_ROUTE_ACCESS.approvals.permissions}><ApprovalCenterPage /></ProtectedRoute>} />
+          <Route path="customer-documents" element={session && <ProtectedRoute session={session} permissions={WORKSPACE_ROUTE_ACCESS.documents.permissions}><CustomerDataUploadPage session={session} /></ProtectedRoute>} />
+          <Route path="posters" element={session && <ProtectedRoute session={session} permissions={WORKSPACE_ROUTE_ACCESS.posters.permissions}><PosterUploadPage session={session} /></ProtectedRoute>} />
+          <Route path="solar-pricing" element={session && <ProtectedRoute session={session} permissions={WORKSPACE_ROUTE_ACCESS.pricing.permissions}><SolarPricingPage session={session} /></ProtectedRoute>} />
+          <Route path="finance" element={session && <ProtectedRoute session={session} permissions={WORKSPACE_ROUTE_ACCESS.finance.permissions}><FinancePage session={session} /></ProtectedRoute>} />
+          <Route path="inventory" element={session && <ProtectedRoute session={session} permissions={WORKSPACE_ROUTE_ACCESS.inventory.permissions}><InventoryPage session={session} /></ProtectedRoute>} />
+          <Route path="security/devices" element={session && <ProtectedRoute session={session} permissions={WORKSPACE_ROUTE_ACCESS.devices.permissions}><ActiveDevicesPage session={session} /></ProtectedRoute>} />
         </Route>
-        <Route path="*" element={<Navigate to={session ? '/app' : '/login'} replace />} />
+        <Route path="*" element={<Navigate to={session ? (getFirstAccessibleWorkspacePath(session) ?? '/app') : '/login'} replace />} />
       </Routes>
     </Suspense>
   )

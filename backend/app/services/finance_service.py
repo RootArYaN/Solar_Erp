@@ -5,7 +5,7 @@ from datetime import UTC, date, datetime
 from decimal import Decimal
 from uuid import uuid4
 
-from sqlalchemy import case, func, select
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -92,8 +92,43 @@ def _month_bounds(on_date: date | None = None) -> tuple[date, date]:
     return start, end
 
 
-def finance_kpis(db: Session, company_id: str, *, on_date: date | None = None) -> FinanceKpis:
-    start, end = _month_bounds(on_date)
+def _resolve_date_range(date_from: date | None, date_to: date | None) -> tuple[date, date]:
+    if date_from is None and date_to is None:
+        current = date.today()
+        return current.replace(day=1), current
+    if date_from is None:
+        assert date_to is not None
+        date_from = date_to.replace(day=1)
+    if date_to is None:
+        date_to = date.today()
+    if date_from > date_to:
+        raise FinanceConflictError('The From date must be on or before the To date')
+    return date_from, date_to
+
+
+def finance_kpis(db: Session, company_id: str, *, on_date: date | None = None, date_from: date | None = None, date_to: date | None = None) -> FinanceKpis:
+    explicit_range = date_from is not None or date_to is not None
+    transaction_filters = [
+        FinanceTransaction.company_id == company_id,
+        FinanceTransaction.status == 'posted',
+    ]
+    bill_date_filters = []
+    if explicit_range:
+        range_start, range_end = _resolve_date_range(date_from, date_to)
+        transaction_filters.extend([
+            FinanceTransaction.transaction_date >= range_start,
+            FinanceTransaction.transaction_date <= range_end,
+        ])
+        bill_date_filters.extend([
+            Bill.bill_date >= range_start,
+            Bill.bill_date <= range_end,
+        ])
+    else:
+        start, end = _month_bounds(on_date)
+        transaction_filters.extend([
+            FinanceTransaction.transaction_date >= start,
+            FinanceTransaction.transaction_date < end,
+        ])
     receivables = (
         select(func.coalesce(func.sum(Bill.balance_amount), 0))
         .where(
@@ -101,6 +136,7 @@ def finance_kpis(db: Session, company_id: str, *, on_date: date | None = None) -
             Bill.bill_type == 'sales',
             Bill.status != 'cancelled',
             Bill.balance_amount > 0,
+            *bill_date_filters,
         )
         .scalar_subquery()
     )
@@ -111,6 +147,7 @@ def finance_kpis(db: Session, company_id: str, *, on_date: date | None = None) -
             Bill.bill_type == 'purchase',
             Bill.status != 'cancelled',
             Bill.balance_amount > 0,
+            *bill_date_filters,
         )
         .scalar_subquery()
     )
@@ -123,12 +160,7 @@ def finance_kpis(db: Session, company_id: str, *, on_date: date | None = None) -
         ), else_=0)), 0),
         receivables,
         payables,
-    ).select_from(FinanceTransaction).where(
-        FinanceTransaction.company_id == company_id,
-        FinanceTransaction.status == 'posted',
-        FinanceTransaction.transaction_date >= start,
-        FinanceTransaction.transaction_date < end,
-    )).one()
+    ).select_from(FinanceTransaction).where(*transaction_filters)).one()
     return FinanceKpis(
         money_in_month=_float(row[0]),
         money_out_month=_float(row[1]),
@@ -170,8 +202,14 @@ def _account_summary(db: Session, row: FinancialAccount) -> FinancialAccountSumm
     )
 
 
-def list_accounts(db: Session, actor: CurrentSession) -> list[FinancialAccountSummary]:
+def list_accounts(db: Session, actor: CurrentSession, *, as_of: date | None = None) -> list[FinancialAccountSummary]:
     company_id = actor.membership.company_id
+    movement_filters = [
+        FinanceTransaction.company_id == company_id,
+        FinanceTransaction.status == 'posted',
+    ]
+    if as_of:
+        movement_filters.append(FinanceTransaction.transaction_date <= as_of)
     movement_totals = (
         select(
             FinanceTransaction.account_id.label('account_id'),
@@ -184,10 +222,7 @@ def list_accounts(db: Session, actor: CurrentSession) -> list[FinancialAccountSu
                 else_=0,
             )), 0).label('debits'),
         )
-        .where(
-            FinanceTransaction.company_id == company_id,
-            FinanceTransaction.status == 'posted',
-        )
+        .where(*movement_filters)
         .group_by(FinanceTransaction.account_id)
         .subquery()
     )
@@ -676,12 +711,16 @@ def _bill_summary(db: Session, row: Bill) -> BillSummary:
     return _bill_summary_from_related(row, customer, project)
 
 
-def list_bills(db: Session, actor: CurrentSession, *, bill_type: str | None = None, payment_status: str | None = None, customer_id: str | None = None, project_id: str | None = None, page: int = 1, page_size: int = 50) -> BillList:
+def list_bills(db: Session, actor: CurrentSession, *, bill_type: str | None = None, payment_status: str | None = None, customer_id: str | None = None, project_id: str | None = None, date_from: date | None = None, date_to: date | None = None, page: int = 1, page_size: int = 50) -> BillList:
     filters = [Bill.company_id == actor.membership.company_id]
+    if date_from and date_to and date_from > date_to:
+        raise FinanceConflictError('The From date must be on or before the To date')
     if bill_type: filters.append(Bill.bill_type == bill_type)
     if payment_status: filters.append(Bill.payment_status == payment_status)
     if customer_id: filters.append(Bill.customer_id == customer_id)
     if project_id: filters.append(Bill.project_id == project_id)
+    if date_from: filters.append(Bill.bill_date >= date_from)
+    if date_to: filters.append(Bill.bill_date <= date_to)
     total = db.scalar(select(func.count()).select_from(Bill).where(*filters)) or 0
     rows = list(db.scalars(select(Bill).where(*filters).order_by(Bill.bill_date.desc(), Bill.created_at.desc()).offset((page - 1) * page_size).limit(page_size)).all())
     customer_ids = {row.customer_id for row in rows if row.customer_id}
@@ -1048,18 +1087,18 @@ def delete_company_loan(db: Session, actor: CurrentSession, loan_id: str) -> Non
     db.commit()
 
 
-def overview(db: Session, actor: CurrentSession) -> FinanceOverview:
+def overview(db: Session, actor: CurrentSession, *, date_from: date | None = None, date_to: date | None = None) -> FinanceOverview:
     company_id = actor.membership.company_id
-    start, end = _month_bounds()
-    kpis = finance_kpis(db, company_id)
-    accounts = list_accounts(db, actor)
+    range_start, range_end = _resolve_date_range(date_from, date_to)
+    kpis = finance_kpis(db, company_id, date_from=range_start, date_to=range_end)
+    accounts = list_accounts(db, actor, as_of=range_end)
     bank_balance = sum(row.current_balance for row in accounts if row.account_type in {'bank', 'upi'})
     cash_balance = sum(row.current_balance for row in accounts if row.account_type in {'cash', 'petty_cash'})
-    recent_rows = list(db.scalars(select(FinanceTransaction).where(FinanceTransaction.company_id == company_id).order_by(FinanceTransaction.transaction_date.desc(), FinanceTransaction.created_at.desc()).limit(8)).all())
-    pending_rows = list(db.scalars(select(Bill).where(Bill.company_id == company_id, Bill.balance_amount > 0, Bill.status != 'cancelled').order_by(Bill.due_date.asc().nullslast()).limit(8)).all())
-    expense_rows = db.execute(select(FinanceCategory.name, func.sum(FinanceTransaction.amount)).join(FinanceTransaction, FinanceTransaction.category_id == FinanceCategory.id).where(FinanceTransaction.company_id == company_id, FinanceTransaction.direction == 'debit', FinanceTransaction.source_type == 'expense', FinanceTransaction.status == 'posted', FinanceTransaction.transaction_date >= start, FinanceTransaction.transaction_date < end).group_by(FinanceCategory.name).order_by(func.sum(FinanceTransaction.amount).desc()).limit(8)).all()
+    recent_rows = list(db.scalars(select(FinanceTransaction).where(FinanceTransaction.company_id == company_id, FinanceTransaction.transaction_date >= range_start, FinanceTransaction.transaction_date <= range_end).order_by(FinanceTransaction.transaction_date.desc(), FinanceTransaction.created_at.desc()).limit(8)).all())
+    pending_rows = list(db.scalars(select(Bill).where(Bill.company_id == company_id, Bill.balance_amount > 0, Bill.status != 'cancelled', Bill.bill_date >= range_start, Bill.bill_date <= range_end).order_by(Bill.due_date.asc().nullslast()).limit(8)).all())
+    expense_rows = db.execute(select(FinanceCategory.name, func.sum(FinanceTransaction.amount)).join(FinanceTransaction, FinanceTransaction.category_id == FinanceCategory.id).where(FinanceTransaction.company_id == company_id, FinanceTransaction.direction == 'debit', FinanceTransaction.source_type == 'expense', FinanceTransaction.status == 'posted', FinanceTransaction.transaction_date >= range_start, FinanceTransaction.transaction_date <= range_end).group_by(FinanceCategory.name).order_by(func.sum(FinanceTransaction.amount).desc()).limit(8)).all()
     month_bucket = func.to_char(func.date_trunc('month', FinanceTransaction.transaction_date), 'YYYY-MM')
-    flow_rows = db.execute(select(month_bucket, FinanceTransaction.direction, func.sum(FinanceTransaction.amount)).where(FinanceTransaction.company_id == company_id, FinanceTransaction.status == 'posted').group_by(month_bucket, FinanceTransaction.direction).order_by(month_bucket.desc()).limit(24)).all()
+    flow_rows = db.execute(select(month_bucket, FinanceTransaction.direction, func.sum(FinanceTransaction.amount)).where(FinanceTransaction.company_id == company_id, FinanceTransaction.status == 'posted', FinanceTransaction.transaction_date >= range_start, FinanceTransaction.transaction_date <= range_end).group_by(month_bucket, FinanceTransaction.direction).order_by(month_bucket.desc()).limit(24)).all()
     flow_map: dict[str, dict[str, float | str]] = {}
     for month, direction, amount in flow_rows:
         bucket = flow_map.setdefault(str(month), {'month': str(month), 'money_in': 0.0, 'money_out': 0.0})
@@ -1067,8 +1106,18 @@ def overview(db: Session, actor: CurrentSession) -> FinanceOverview:
     return FinanceOverview(money_in_month=kpis.money_in_month, money_out_month=kpis.money_out_month, bank_balance=bank_balance, cash_balance=cash_balance, customer_receivables=kpis.customer_receivables, supplier_payables=kpis.supplier_payables, expenses_month=kpis.expenses_month, net_cash_flow=kpis.money_in_month - kpis.money_out_month, accounts=accounts, recent_transactions=_transaction_summaries(db, recent_rows), pending_bills=[_bill_summary(db, row) for row in pending_rows], expense_by_category=[{'category': name, 'amount': _float(amount)} for name, amount in expense_rows], monthly_flow=list(reversed(list(flow_map.values()))))
 
 
-def profitability(db: Session, actor: CurrentSession) -> ProfitabilitySummary:
+def profitability(db: Session, actor: CurrentSession, *, date_from: date | None = None, date_to: date | None = None) -> ProfitabilitySummary:
     company_id = actor.membership.company_id
+    bill_filters = [Bill.company_id == company_id, Bill.status != 'cancelled']
+    transaction_filters = [FinanceTransaction.company_id == company_id, FinanceTransaction.status == 'posted']
+    if date_from:
+        bill_filters.append(Bill.bill_date >= date_from)
+        transaction_filters.append(FinanceTransaction.transaction_date >= date_from)
+    if date_to:
+        bill_filters.append(Bill.bill_date <= date_to)
+        transaction_filters.append(FinanceTransaction.transaction_date <= date_to)
+    if date_from and date_to and date_from > date_to:
+        raise FinanceConflictError('The From date must be on or before the To date')
     sales_value, purchase_value = db.execute(
         select(
             func.coalesce(func.sum(case(
@@ -1079,10 +1128,7 @@ def profitability(db: Session, actor: CurrentSession) -> ProfitabilitySummary:
                 (Bill.bill_type == 'purchase', Bill.total_amount),
                 else_=0,
             )), 0),
-        ).where(
-            Bill.company_id == company_id,
-            Bill.status != 'cancelled',
-        )
+        ).where(*bill_filters)
     ).one()
 
     money_in, money_out, subsidy, project_expenses, operating = db.execute(
@@ -1110,12 +1156,22 @@ def profitability(db: Session, actor: CurrentSession) -> ProfitabilitySummary:
                 & FinanceTransaction.project_id.is_(None),
                 FinanceTransaction.amount,
             ), else_=0)), 0),
-        ).where(
-            FinanceTransaction.company_id == company_id,
-            FinanceTransaction.status == 'posted',
-        )
+        ).where(*transaction_filters)
     ).one()
 
+    project_sales = (
+        select(
+            Bill.project_id.label('project_id'),
+            func.coalesce(func.sum(Bill.total_amount), 0).label('sales_value'),
+        )
+        .where(
+            *bill_filters,
+            Bill.bill_type == 'sales',
+            Bill.project_id.is_not(None),
+        )
+        .group_by(Bill.project_id)
+        .subquery()
+    )
     project_totals = (
         select(
             FinanceTransaction.project_id.label('project_id'),
@@ -1128,22 +1184,23 @@ def profitability(db: Session, actor: CurrentSession) -> ProfitabilitySummary:
                 else_=0,
             )), 0).label('cost'),
         )
-        .where(
-            FinanceTransaction.company_id == company_id,
-            FinanceTransaction.status == 'posted',
-            FinanceTransaction.project_id.is_not(None),
-        )
+        .where(*transaction_filters, FinanceTransaction.project_id.is_not(None))
         .group_by(FinanceTransaction.project_id)
         .subquery()
     )
     projects = db.execute(
         select(
             CustomerProject,
+            func.coalesce(project_sales.c.sales_value, 0),
             func.coalesce(project_totals.c.received, 0),
             func.coalesce(project_totals.c.cost, 0),
         )
+        .outerjoin(project_sales, project_sales.c.project_id == CustomerProject.id)
         .outerjoin(project_totals, project_totals.c.project_id == CustomerProject.id)
-        .where(CustomerProject.company_id == company_id)
+        .where(
+            CustomerProject.company_id == company_id,
+            or_(project_sales.c.project_id.is_not(None), project_totals.c.project_id.is_not(None)),
+        )
         .order_by(CustomerProject.created_at.desc())
         .limit(100)
     ).all()
@@ -1152,12 +1209,12 @@ def profitability(db: Session, actor: CurrentSession) -> ProfitabilitySummary:
             'project_id': project.id,
             'project_number': project.project_number,
             'project_name': project.name,
-            'sales_value': _float(project.approved_value),
+            'sales_value': _float(project_sales_value),
             'money_received': _float(received),
             'cost': _float(cost),
-            'gross_profit': _float(project.approved_value) - _float(cost),
+            'gross_profit': _float(project_sales_value) - _float(cost),
         }
-        for project, received, cost in projects
+        for project, project_sales_value, received, cost in projects
     ]
     gross = _float(sales_value) - _float(purchase_value) - _float(project_expenses)
     return ProfitabilitySummary(

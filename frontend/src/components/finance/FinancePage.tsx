@@ -90,20 +90,36 @@ export function FinancePage({ session }: { session: Session }) {
   const { toast } = useToast()
   const access = getModuleAccess(session, 'finance')
 
+  function rangeQuery() {
+    return new URLSearchParams({ date_from: dateFrom, date_to: dateTo })
+  }
+
+  function validDateRange() {
+    if (!dateFrom || !dateTo) {
+      setError('Choose both a From date and a To date.')
+      return false
+    }
+    if (dateFrom <= dateTo) return true
+    setError('The From date must be on or before the To date.')
+    return false
+  }
+
   async function loadBase() {
+    if (!validDateRange()) return
     setLoading(true); setError('')
     try {
       const projectRequest = session.permissions.includes(PERMISSIONS.projects.view) ? getProjectTimelines() : Promise.resolve([])
-      const [nextOverview, nextAccounts, nextCategories, nextProjects, nextBillCustomers] = await Promise.all([getFinanceOverview(), getFinancialAccounts(), getFinanceCategories(), projectRequest, getBillCustomers()])
+      const [nextOverview, nextAccounts, nextCategories, nextProjects, nextBillCustomers] = await Promise.all([getFinanceOverview(rangeQuery().toString()), getFinancialAccounts(), getFinanceCategories(), projectRequest, getBillCustomers()])
       setOverview(nextOverview); setAccounts(nextAccounts); setCategories(nextCategories); setProjects(nextProjects); setBillCustomers(nextBillCustomers)
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not load company finance') }
     finally { setLoading(false) }
   }
 
   async function loadTab(nextTab = tab) {
+    if (!validDateRange()) return
     setLoading(true); setError('')
     try {
-      if (nextTab === 'overview') setOverview(await getFinanceOverview())
+      if (nextTab === 'overview') setOverview(await getFinanceOverview(rangeQuery().toString()))
       if (nextTab === 'transactions' || nextTab === 'reports') {
         const query = new URLSearchParams({ date_from: dateFrom, date_to: dateTo, page_size: '100' })
         if (direction) query.set('direction', direction)
@@ -111,18 +127,19 @@ export function FinancePage({ session }: { session: Session }) {
       }
       if (nextTab === 'expenses') setExpenses(await getExpenses(new URLSearchParams({ date_from: dateFrom, date_to: dateTo, page_size: '100' }).toString()))
       if (nextTab === 'bills') {
-        const query = new URLSearchParams({ page_size: '100' }); if (billType) query.set('bill_type', billType)
+        const query = new URLSearchParams({ date_from: dateFrom, date_to: dateTo, page_size: '100' }); if (billType) query.set('bill_type', billType)
         setBills(await getBills(query.toString()))
       }
       if (nextTab === 'accounts') setAccounts(await getFinancialAccounts())
       if (nextTab === 'loans') setLoans(await getCompanyLoans())
-      if (nextTab === 'profitability') setProfitability(await getProfitability())
+      if (nextTab === 'profitability') setProfitability(await getProfitability(rangeQuery().toString()))
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not load finance data') }
     finally { setLoading(false) }
   }
 
   useEffect(() => { void loadBase() }, [])
-  useEffect(() => { if (!loading || overview) void loadTab(tab) }, [tab])
+  const baseLoaded = overview !== null
+  useEffect(() => { if (baseLoaded && tab !== 'overview') void loadTab(tab) }, [tab, baseLoaded])
 
   async function refreshAll() {
     await Promise.all([loadBase(), loadTab(tab)])
@@ -373,13 +390,13 @@ export function FinancePage({ session }: { session: Session }) {
     {error && <div className="inline-error">{error}</div>}
     <div className={`finance-tab-panel finance-tab-panel--${tab}`} role="tabpanel" data-scroll-surface="tab-body">
       {loading ? <LoadingSkeleton rows={6} /> : <>
-        {tab === 'overview' && overview && <Overview data={overview} />}
+        {tab === 'overview' && overview && <Overview data={overview} dateFrom={dateFrom} setDateFrom={setDateFrom} dateTo={dateTo} setDateTo={setDateTo} reload={() => void loadTab('overview')} />}
         {(tab === 'transactions' || tab === 'reports') && <Transactions data={transactions} rows={visibleTransactions} search={search} setSearch={setSearch} direction={direction} setDirection={setDirection} dateFrom={dateFrom} setDateFrom={setDateFrom} dateTo={dateTo} setDateTo={setDateTo} reload={() => void loadTab(tab)} reportMode={tab === 'reports'} canEdit={access.canEdit} onEdit={(row) => { setSelectedTransaction(row); setDialog('edit-transaction') }} onReverse={(row) => { setSelectedTransaction(row); setDialog('reverse-transaction') }} onDelete={setTransactionToDelete} />}
         {tab === 'expenses' && <Expenses data={expenses} dateFrom={dateFrom} setDateFrom={setDateFrom} dateTo={dateTo} setDateTo={setDateTo} reload={() => void loadTab('expenses')} canEdit={access.canEdit} onAdd={() => setDialog('expense')} onEdit={(row) => { setSelectedTransaction(row); setDialog('edit-transaction') }} onDelete={setTransactionToDelete} />}
-        {tab === 'bills' && <Bills data={bills} billType={billType} setBillType={setBillType} reload={() => void loadTab('bills')} canEdit={access.canEdit} onAdd={() => setDialog('bill')} onEdit={(bill) => { setSelectedBill(bill); setDialog('edit-bill') }} onPay={(bill) => { setSelectedBill(bill); setDialog('bill-payment') }} onDelete={setBillToDelete} onUpload={(bill, file) => void uploadBillAttachment(bill, file)} onDownload={(bill) => void downloadBillAttachment(bill)} />}
+        {tab === 'bills' && <Bills data={bills} billType={billType} setBillType={setBillType} dateFrom={dateFrom} setDateFrom={setDateFrom} dateTo={dateTo} setDateTo={setDateTo} reload={() => void loadTab('bills')} canEdit={access.canEdit} onAdd={() => setDialog('bill')} onEdit={(bill) => { setSelectedBill(bill); setDialog('edit-bill') }} onPay={(bill) => { setSelectedBill(bill); setDialog('bill-payment') }} onDelete={setBillToDelete} onUpload={(bill, file) => void uploadBillAttachment(bill, file)} onDownload={(bill) => void downloadBillAttachment(bill)} />}
         {tab === 'accounts' && <Accounts rows={accounts} canEdit={access.canEdit} onAdd={() => setDialog('account')} onTransfer={() => setDialog('transfer')} />}
         {tab === 'loans' && <Loans rows={loans} canEdit={access.canEdit} onAdd={() => setDialog('loan')} onEdit={(loan) => { setSelectedLoan(loan); setDialog('edit-loan') }} onPay={(loan) => { setSelectedLoan(loan); setDialog('loan-payment') }} onDelete={setLoanToDelete} />}
-        {tab === 'profitability' && <ProfitabilityPanel data={profitability} />}
+        {tab === 'profitability' && <ProfitabilityPanel data={profitability} dateFrom={dateFrom} setDateFrom={setDateFrom} dateTo={dateTo} setDateTo={setDateTo} reload={() => void loadTab('profitability')} />}
       </>}
     </div>
 

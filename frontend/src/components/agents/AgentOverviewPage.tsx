@@ -17,6 +17,7 @@ import {
 import { motion } from 'motion/react'
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { WORKSPACE_ROUTE_ACCESS } from '../../lib/workspace-routes'
 import {
   createAgentCustomer,
   createAgentTransaction,
@@ -436,7 +437,7 @@ export function AgentOverviewPage({ session }: { session: Session }) {
                           <td data-label="Outstanding" className="numeric-cell"><strong>{currency.format(customer.outstanding_balance)}</strong></td>
                           <td data-label="Action"><div className="agent-customer-actions">
                             {customer.approved_quotation && <button className="table-action-button table-action-button--download" type="button" onClick={() => void downloadApprovedQuotation(customer)}><Download size={12} /> Download quote</button>}
-                            {canOpenDocuments && customer.approved_quotation && customer.project_id && <button className="table-action-button table-action-button--neutral" type="button" onClick={() => navigate(`/app/customer-documents?customer=${encodeURIComponent(customer.id)}`)}><FileText size={12} /> Documents</button>}
+                            {canOpenDocuments && customer.approved_quotation && customer.project_id && <button className="table-action-button table-action-button--neutral" type="button" onClick={() => navigate(`${WORKSPACE_ROUTE_ACCESS.documents.path}?customer=${encodeURIComponent(customer.id)}`)}><FileText size={12} /> Documents</button>}
                             {customer.can_edit && <button className="table-action-button table-action-button--neutral" type="button" onClick={() => setEditingCustomer(customer)}><Edit3 size={12} /> Edit</button>}
                             {canRequestQuotations && !['pending', 'quotation_ready', 'pending_approval', 'approved'].includes(customer.quotation_status || customer.quotation_request_status || '')
                               ? <button className="table-action-button" type="button" onClick={() => setQuotationCustomer(customer)}>Request quotation</button>
