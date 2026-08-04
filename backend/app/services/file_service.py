@@ -158,8 +158,6 @@ def validate_file_owner(
         ))
         if not bill:
             raise FileNotFoundError("Bill not found")
-        if bill.file_id:
-            raise FileServiceError("This bill already has an attachment")
         if project_id and project_id != bill.project_id:
             raise FileServiceError("The attachment project does not match the bill")
         if customer_id and customer_id != bill.customer_id:
@@ -259,6 +257,8 @@ def save_file(
         checksum=checksum,
         uploaded_by=actor.membership.id,
     )
+    replaced_file: StoredFile | None = None
+    replaced_storage_path: str | None = None
     try:
         db.add(row)
         db.flush()
@@ -269,23 +269,42 @@ def save_file(
             ))
             if not bill:
                 raise FileNotFoundError("Bill not found")
+            if bill.file_id:
+                replaced_file = db.scalar(select(StoredFile).where(
+                    StoredFile.id == bill.file_id,
+                    StoredFile.company_id == row.company_id,
+                    StoredFile.owner_type == "finance_bill",
+                    StoredFile.owner_id == owner_id,
+                ))
             bill.file_id = row.id
+            db.flush()
+            if replaced_file:
+                replaced_storage_path = replaced_file.storage_path
+                db.delete(replaced_file)
         write_event(
             db,
             company_id=row.company_id,
-            event="bill.attachment_uploaded" if owner_type == "finance_bill" else "document.uploaded",
+            event=("bill.attachment_replaced" if replaced_file else "bill.attachment_uploaded") if owner_type == "finance_bill" else "document.uploaded",
             entity="stored_file",
             entity_id=row.id,
             actor=actor,
             project_id=row.project_id,
             customer_id=row.customer_id,
-            changes={"name": row.name, "size_bytes": row.size_bytes, "owner_type": row.owner_type, "checksum": row.checksum},
+            changes={
+                "name": row.name,
+                "size_bytes": row.size_bytes,
+                "owner_type": row.owner_type,
+                "checksum": row.checksum,
+                "replaced_file_id": replaced_file.id if replaced_file else None,
+            },
         )
         db.commit()
     except Exception:
         db.rollback()
         _best_effort_storage_delete(relative)
         raise
+    if replaced_storage_path:
+        _best_effort_storage_delete(replaced_storage_path)
     return _summary(row)
 
 

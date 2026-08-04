@@ -2371,7 +2371,7 @@ body.app-authenticated #root {
 }
 
 .app-shell--view-mobile .finance-expense-presets button,
-.app-shell--view-mobile :is(.finance-ledger-apply, .finance-expense-apply, .finance-expense-create, .finance-bill-apply, .finance-bill-create, .finance-range-apply) {
+.app-shell--view-mobile :is(.finance-ledger-apply, .finance-expense-apply, .finance-expense-create, .finance-bill-apply, .finance-bill-download-all, .finance-bill-create, .finance-range-apply) {
   width: 100%;
   min-width: 0;
 }
@@ -2389,8 +2389,8 @@ body.app-authenticated #root {
   min-width: 0;
 }
 
-.app-shell--view-mobile .finance-bill-create {
-  grid-column: 1 / -1;
+.app-shell--view-mobile :is(.finance-bill-download-all, .finance-bill-create) {
+  grid-column: auto;
 }
 
 .app-shell--view-mobile .finance-range-apply {
@@ -2505,7 +2505,7 @@ body.app-authenticated #root {
   }
 
   .finance-expense-presets button,
-  :is(.finance-ledger-apply, .finance-expense-apply, .finance-expense-create, .finance-bill-apply, .finance-bill-create) {
+  :is(.finance-ledger-apply, .finance-expense-apply, .finance-expense-create, .finance-bill-apply, .finance-bill-download-all, .finance-bill-create) {
     width: 100%;
     min-width: 0;
   }
@@ -2523,8 +2523,8 @@ body.app-authenticated #root {
     min-width: 0;
   }
 
-  .finance-bill-create {
-    grid-column: 1 / -1;
+  :is(.finance-bill-download-all, .finance-bill-create) {
+    grid-column: auto;
   }
 
   .finance-tab-panel .tab-toolbar {

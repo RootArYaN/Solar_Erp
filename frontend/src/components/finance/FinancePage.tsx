@@ -18,6 +18,7 @@ import {
   createFinanceTransaction,
   createFinancialAccount,
   deleteBill,
+  downloadMergedBills,
   deleteCompanyLoan,
   deleteFinanceTransaction,
   getBills,
@@ -37,7 +38,7 @@ import {
   updateCompanyLoan,
   updateFinanceTransaction,
 } from '../../api/finance'
-import { downloadStoredFile, uploadStoredFile } from '../../api/files'
+import { downloadStoredFile, removeStoredFile, uploadStoredFile } from '../../api/files'
 import type { Bill, BillCustomerOption, BillList, CompanyLoan, FinanceCategory, FinanceOverview, FinanceTransaction, FinanceTransactionList, FinancialAccount, Profitability } from '../../erp-types'
 import { fileUploadRules, validateUploadFile } from '../../lib/file-validation'
 import { getModuleAccess, PERMISSIONS } from '../../lib/permissions'
@@ -65,6 +66,7 @@ export function FinancePage({ session }: { session: Session }) {
   const [dialog, setDialog] = useState<Dialog>(null)
   const [loading, setLoading] = useState(true)
   const [working, setWorking] = useState(false)
+  const [downloadingMergedBills, setDownloadingMergedBills] = useState(false)
   const [error, setError] = useState('')
   const [overview, setOverview] = useState<FinanceOverview | null>(null)
   const [transactions, setTransactions] = useState<FinanceTransactionList | null>(null)
@@ -81,6 +83,7 @@ export function FinancePage({ session }: { session: Session }) {
   const [selectedTransaction, setSelectedTransaction] = useState<FinanceTransaction | null>(null)
   const [transactionToDelete, setTransactionToDelete] = useState<FinanceTransaction | null>(null)
   const [billToDelete, setBillToDelete] = useState<Bill | null>(null)
+  const [billAttachmentToRemove, setBillAttachmentToRemove] = useState<Bill | null>(null)
   const [loanToDelete, setLoanToDelete] = useState<CompanyLoan | null>(null)
   const [dateFrom, setDateFrom] = useState(monthStart())
   const [dateTo, setDateTo] = useState(today())
@@ -360,6 +363,37 @@ export function FinancePage({ session }: { session: Session }) {
     }
   }
 
+  async function confirmBillAttachmentRemove() {
+    const bill = billAttachmentToRemove
+    if (!bill?.file_id) return
+    setWorking(true)
+    try {
+      await removeStoredFile(bill.file_id)
+      setBillAttachmentToRemove(null)
+      await loadTab('bills')
+      toast({ message: `Document removed from ${bill.bill_number}`, variant: 'success' })
+    } catch (reason) {
+      toast({ message: reason instanceof Error ? reason.message : 'Could not remove bill document', variant: 'error' })
+    } finally {
+      setWorking(false)
+    }
+  }
+
+  async function downloadFilteredBills() {
+    if (!validDateRange()) return
+    const query = new URLSearchParams({ date_from: dateFrom, date_to: dateTo })
+    if (billType) query.set('bill_type', billType)
+    setDownloadingMergedBills(true)
+    try {
+      await downloadMergedBills(query.toString())
+      toast({ message: 'Filtered bill documents merged and downloaded', variant: 'success' })
+    } catch (reason) {
+      toast({ message: reason instanceof Error ? reason.message : 'Could not merge bill documents', variant: 'error' })
+    } finally {
+      setDownloadingMergedBills(false)
+    }
+  }
+
   const visibleTransactions = useMemo(() => {
     const term = search.trim().toLowerCase()
     const rows = transactions?.data ?? []
@@ -393,7 +427,7 @@ export function FinancePage({ session }: { session: Session }) {
         {tab === 'overview' && overview && <Overview data={overview} dateFrom={dateFrom} setDateFrom={setDateFrom} dateTo={dateTo} setDateTo={setDateTo} reload={() => void loadTab('overview')} />}
         {(tab === 'transactions' || tab === 'reports') && <Transactions data={transactions} rows={visibleTransactions} search={search} setSearch={setSearch} direction={direction} setDirection={setDirection} dateFrom={dateFrom} setDateFrom={setDateFrom} dateTo={dateTo} setDateTo={setDateTo} reload={() => void loadTab(tab)} reportMode={tab === 'reports'} canEdit={access.canEdit} onEdit={(row) => { setSelectedTransaction(row); setDialog('edit-transaction') }} onReverse={(row) => { setSelectedTransaction(row); setDialog('reverse-transaction') }} onDelete={setTransactionToDelete} />}
         {tab === 'expenses' && <Expenses data={expenses} dateFrom={dateFrom} setDateFrom={setDateFrom} dateTo={dateTo} setDateTo={setDateTo} reload={() => void loadTab('expenses')} canEdit={access.canEdit} onAdd={() => setDialog('expense')} onEdit={(row) => { setSelectedTransaction(row); setDialog('edit-transaction') }} onDelete={setTransactionToDelete} />}
-        {tab === 'bills' && <Bills data={bills} billType={billType} setBillType={setBillType} dateFrom={dateFrom} setDateFrom={setDateFrom} dateTo={dateTo} setDateTo={setDateTo} reload={() => void loadTab('bills')} canEdit={access.canEdit} onAdd={() => setDialog('bill')} onEdit={(bill) => { setSelectedBill(bill); setDialog('edit-bill') }} onPay={(bill) => { setSelectedBill(bill); setDialog('bill-payment') }} onDelete={setBillToDelete} onUpload={(bill, file) => void uploadBillAttachment(bill, file)} onDownload={(bill) => void downloadBillAttachment(bill)} />}
+        {tab === 'bills' && <Bills data={bills} billType={billType} setBillType={setBillType} dateFrom={dateFrom} setDateFrom={setDateFrom} dateTo={dateTo} setDateTo={setDateTo} reload={() => void loadTab('bills')} canEdit={access.canEdit} onAdd={() => setDialog('bill')} onEdit={(bill) => { setSelectedBill(bill); setDialog('edit-bill') }} onPay={(bill) => { setSelectedBill(bill); setDialog('bill-payment') }} onDelete={setBillToDelete} onUpload={(bill, file) => void uploadBillAttachment(bill, file)} onDownload={(bill) => void downloadBillAttachment(bill)} onRemoveAttachment={setBillAttachmentToRemove} onDownloadMerged={() => void downloadFilteredBills()} downloadingMerged={downloadingMergedBills} />}
         {tab === 'accounts' && <Accounts rows={accounts} canEdit={access.canEdit} onAdd={() => setDialog('account')} onTransfer={() => setDialog('transfer')} />}
         {tab === 'loans' && <Loans rows={loans} canEdit={access.canEdit} onAdd={() => setDialog('loan')} onEdit={(loan) => { setSelectedLoan(loan); setDialog('edit-loan') }} onPay={(loan) => { setSelectedLoan(loan); setDialog('loan-payment') }} onDelete={setLoanToDelete} />}
         {tab === 'profitability' && <ProfitabilityPanel data={profitability} dateFrom={dateFrom} setDateFrom={setDateFrom} dateTo={dateTo} setDateTo={setDateTo} reload={() => void loadTab('profitability')} />}
@@ -422,6 +456,16 @@ export function FinancePage({ session }: { session: Session }) {
       loading={working}
       onCancel={() => setTransactionToDelete(null)}
       onConfirm={confirmTransactionDelete}
+    />
+    <AlertDialog
+      open={Boolean(billAttachmentToRemove)}
+      title="Remove bill document?"
+      description={billAttachmentToRemove ? `The uploaded document will be removed from ${billAttachmentToRemove.bill_number}. The bill and its payment data will stay unchanged.` : ''}
+      confirmLabel="Remove document"
+      icon="delete"
+      loading={working}
+      onCancel={() => setBillAttachmentToRemove(null)}
+      onConfirm={confirmBillAttachmentRemove}
     />
     <AlertDialog
       open={Boolean(billToDelete)}

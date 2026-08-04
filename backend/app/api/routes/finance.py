@@ -1,6 +1,7 @@
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.api.deps import CurrentSession, require_any_permissions
@@ -32,6 +33,7 @@ from app.schemas.finance import (
     UpsertCustomerLoanRequest,
 )
 from app.services import finance_service
+from app.services.audit_service import write_event
 from app.services.finance_service import FinanceServiceError
 
 router = APIRouter(prefix='/finance', tags=['finance'])
@@ -147,6 +149,53 @@ def get_bills(
 ):
     try: return finance_service.list_bills(db, session, bill_type=bill_type, payment_status=payment_status, customer_id=customer_id, project_id=project_id, date_from=date_from, date_to=date_to, page=page, page_size=page_size)
     except FinanceServiceError as exc: _raise(exc)
+
+
+@router.get('/bills/merged-download')
+def get_merged_bills(
+    background_tasks: BackgroundTasks,
+    bill_type: str | None = Query(default=None, pattern=r'^(sales|purchase)$'),
+    payment_status: str | None = None,
+    customer_id: str | None = None,
+    project_id: str | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    db: Session = Depends(get_db),
+    session: CurrentSession = Depends(require_any_permissions('finance.view', 'finance.manage')),
+):
+    try:
+        path, name, bills = finance_service.merged_bills_pdf(
+            db,
+            session,
+            bill_type=bill_type,
+            payment_status=payment_status,
+            customer_id=customer_id,
+            project_id=project_id,
+            date_from=date_from,
+            date_to=date_to,
+        )
+    except FinanceServiceError as exc:
+        _raise(exc)
+    write_event(
+        db,
+        company_id=session.membership.company_id,
+        event='bill.documents_merged_downloaded',
+        entity='bill_export',
+        entity_id=f'{date_from or "start"}:{date_to or "today"}:{bill_type or "all"}',
+        actor=session,
+        changes={
+            'bill_count': len(bills),
+            'bill_type': bill_type,
+            'payment_status': payment_status,
+            'customer_id': customer_id,
+            'project_id': project_id,
+            'date_from': str(date_from) if date_from else None,
+            'date_to': str(date_to) if date_to else None,
+        },
+    )
+    db.commit()
+    background_tasks.add_task(path.unlink, missing_ok=True)
+    return FileResponse(path=path, media_type='application/pdf', filename=name, background=background_tasks)
 
 
 @router.get('/bill-customers', response_model=list[BillCustomerOption])

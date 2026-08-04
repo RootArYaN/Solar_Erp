@@ -1,6 +1,6 @@
 import type { Bill, BillCustomerOption, BillList, CompanyLoan, FinanceCategory, FinanceOverview, FinanceTransaction, FinanceTransactionList, FinancialAccount, Profitability } from '../erp-types'
 import { createClientId } from '../lib/client-id'
-import { apiRequest, apiSegment } from './client'
+import { apiRequest, apiSegment, downloadRequest } from './client'
 
 export const getFinanceOverview = (query = ''): Promise<FinanceOverview> => apiRequest(`/finance/overview${query ? `?${query}` : ''}`)
 export const getFinancialAccounts = (): Promise<FinancialAccount[]> => apiRequest('/finance/accounts')
@@ -19,6 +19,7 @@ export const createBill = (body: Record<string, unknown>): Promise<Bill> => apiR
 export const updateBill = (id: string, body: Record<string, unknown>): Promise<Bill> => apiRequest(`/finance/bills/${apiSegment(id)}`, { method: 'PATCH', body })
 export const recordBillPayment = (id: string, body: Record<string, unknown>): Promise<Bill> => apiRequest(`/finance/bills/${apiSegment(id)}/payments`, { method: 'POST', body, idempotencyKey: createClientId() })
 export const deleteBill = (id: string): Promise<void> => apiRequest(`/finance/bills/${apiSegment(id)}`, { method: 'DELETE' })
+export const downloadMergedBills = (query = ''): Promise<void> => downloadRequest(`/finance/bills/merged-download${query ? `?${query}` : ''}`, 'Bills.pdf')
 export const getCompanyLoans = (): Promise<CompanyLoan[]> => apiRequest('/finance/company-loans')
 export const createCompanyLoan = (body: Record<string, unknown>): Promise<CompanyLoan> => apiRequest('/finance/company-loans', { method: 'POST', body, idempotencyKey: createClientId() })
 export const updateCompanyLoan = (id: string, body: Record<string, unknown>): Promise<CompanyLoan> => apiRequest(`/finance/company-loans/${apiSegment(id)}`, { method: 'PATCH', body })

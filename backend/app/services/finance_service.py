@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import tempfile
+from contextlib import ExitStack
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from decimal import Decimal
+from io import BytesIO
+from pathlib import Path
 from uuid import uuid4
 
 from sqlalchemy import case, func, or_, select
@@ -711,16 +715,44 @@ def _bill_summary(db: Session, row: Bill) -> BillSummary:
     return _bill_summary_from_related(row, customer, project)
 
 
-def list_bills(db: Session, actor: CurrentSession, *, bill_type: str | None = None, payment_status: str | None = None, customer_id: str | None = None, project_id: str | None = None, date_from: date | None = None, date_to: date | None = None, page: int = 1, page_size: int = 50) -> BillList:
-    filters = [Bill.company_id == actor.membership.company_id]
+def _bill_filters(
+    actor: CurrentSession,
+    *,
+    bill_type: str | None = None,
+    payment_status: str | None = None,
+    customer_id: str | None = None,
+    project_id: str | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+):
     if date_from and date_to and date_from > date_to:
         raise FinanceConflictError('The From date must be on or before the To date')
-    if bill_type: filters.append(Bill.bill_type == bill_type)
-    if payment_status: filters.append(Bill.payment_status == payment_status)
-    if customer_id: filters.append(Bill.customer_id == customer_id)
-    if project_id: filters.append(Bill.project_id == project_id)
-    if date_from: filters.append(Bill.bill_date >= date_from)
-    if date_to: filters.append(Bill.bill_date <= date_to)
+    filters = [Bill.company_id == actor.membership.company_id]
+    if bill_type:
+        filters.append(Bill.bill_type == bill_type)
+    if payment_status:
+        filters.append(Bill.payment_status == payment_status)
+    if customer_id:
+        filters.append(Bill.customer_id == customer_id)
+    if project_id:
+        filters.append(Bill.project_id == project_id)
+    if date_from:
+        filters.append(Bill.bill_date >= date_from)
+    if date_to:
+        filters.append(Bill.bill_date <= date_to)
+    return filters
+
+
+def list_bills(db: Session, actor: CurrentSession, *, bill_type: str | None = None, payment_status: str | None = None, customer_id: str | None = None, project_id: str | None = None, date_from: date | None = None, date_to: date | None = None, page: int = 1, page_size: int = 50) -> BillList:
+    filters = _bill_filters(
+        actor,
+        bill_type=bill_type,
+        payment_status=payment_status,
+        customer_id=customer_id,
+        project_id=project_id,
+        date_from=date_from,
+        date_to=date_to,
+    )
     total = db.scalar(select(func.count()).select_from(Bill).where(*filters)) or 0
     rows = list(db.scalars(select(Bill).where(*filters).order_by(Bill.bill_date.desc(), Bill.created_at.desc()).offset((page - 1) * page_size).limit(page_size)).all())
     customer_ids = {row.customer_id for row in rows if row.customer_id}
@@ -733,6 +765,92 @@ def list_bills(db: Session, actor: CurrentSession, *, bill_type: str | None = No
         page_size=page_size,
         total=int(total),
     )
+
+
+def merged_bills_pdf(
+    db: Session,
+    actor: CurrentSession,
+    *,
+    bill_type: str | None = None,
+    payment_status: str | None = None,
+    customer_id: str | None = None,
+    project_id: str | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+) -> tuple[Path, str, list[Bill]]:
+    filters = _bill_filters(
+        actor,
+        bill_type=bill_type,
+        payment_status=payment_status,
+        customer_id=customer_id,
+        project_id=project_id,
+        date_from=date_from,
+        date_to=date_to,
+    )
+    rows = list(db.execute(
+        select(Bill, StoredFile)
+        .join(StoredFile, StoredFile.id == Bill.file_id)
+        .where(
+            *filters,
+            StoredFile.company_id == actor.membership.company_id,
+            StoredFile.owner_type == 'finance_bill',
+            StoredFile.owner_id == Bill.id,
+        )
+        .order_by(Bill.bill_date.asc(), Bill.created_at.asc())
+    ).all())
+    if not rows:
+        raise FinanceConflictError('No uploaded bill documents match the selected filters')
+
+    output_path: Path | None = None
+    try:
+        from PIL import Image, ImageOps
+        from pypdf import PdfReader, PdfWriter
+
+        with ExitStack() as resources:
+            writer = PdfWriter()
+            bills: list[Bill] = []
+            for bill, attachment in rows:
+                path = resources.enter_context(storage.materialize(attachment.storage_path))
+                if attachment.mime_type == 'application/pdf':
+                    writer.append(str(path))
+                elif attachment.mime_type.startswith('image/'):
+                    with Image.open(path) as source:
+                        image = ImageOps.exif_transpose(source).convert('RGB')
+                        image_pdf = BytesIO()
+                        resources.callback(image_pdf.close)
+                        image.save(image_pdf, format='PDF', resolution=150)
+                        image_pdf.seek(0)
+                        writer.append(PdfReader(image_pdf))
+                else:
+                    raise FinanceConflictError(
+                        f'{attachment.name} cannot be merged. Upload bill documents as PDF, JPG, PNG, or WebP.'
+                    )
+                bills.append(bill)
+
+            if len(writer.pages) == 0:
+                raise FinanceConflictError('The selected bill documents do not contain any PDF pages')
+            with tempfile.NamedTemporaryFile(
+                prefix='merged-bills-',
+                suffix='.pdf',
+                dir=storage.temp_root,
+                delete=False,
+            ) as output:
+                output_path = Path(output.name)
+                writer.write(output)
+    except FinanceServiceError:
+        if output_path:
+            output_path.unlink(missing_ok=True)
+        raise
+    except Exception as exc:
+        if output_path:
+            output_path.unlink(missing_ok=True)
+        raise FinanceConflictError(f'Could not merge the selected bill documents: {exc}') from exc
+
+    range_label = 'all-dates'
+    if date_from or date_to:
+        range_label = f'{date_from.isoformat() if date_from else "start"}_to_{date_to.isoformat() if date_to else "today"}'
+    type_label = bill_type or 'all'
+    return output_path, f'Bills_{range_label}_{type_label}.pdf', bills
 
 
 def list_bill_customers(db: Session, actor: CurrentSession) -> list[BillCustomerOption]:
