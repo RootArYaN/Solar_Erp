@@ -66,7 +66,7 @@ export function Overview({ data, dateFrom, setDateFrom, dateTo, setDateTo, reloa
   </>
 }
 
-export function Transactions({ data, rows, search, setSearch, direction, setDirection, dateFrom, setDateFrom, dateTo, setDateTo, reload, reportMode, canEdit, onEdit, onReverse, onDelete }: { data: FinanceTransactionList | null; rows: FinanceTransactionList['data']; search: string; setSearch: (value: string) => void; direction: string; setDirection: (value: string) => void; dateFrom: string; setDateFrom: (value: string) => void; dateTo: string; setDateTo: (value: string) => void; reload: () => void; reportMode: boolean; canEdit: boolean; onEdit: (row: FinanceTransaction) => void; onReverse: (row: FinanceTransaction) => void; onDelete: (row: FinanceTransaction) => void }) {
+export function Transactions({ data, rows, search, setSearch, direction, setDirection, dateFrom, setDateFrom, dateTo, setDateTo, allDates, setAllDates, reload, reportMode, canEdit, onEdit, onReverse, onDelete }: { data: FinanceTransactionList | null; rows: FinanceTransactionList['data']; search: string; setSearch: (value: string) => void; direction: string; setDirection: (value: string) => void; dateFrom: string; setDateFrom: (value: string) => void; dateTo: string; setDateTo: (value: string) => void; allDates: boolean; setAllDates: (value: boolean) => void; reload: () => void; reportMode: boolean; canEdit: boolean; onEdit: (row: FinanceTransaction) => void; onReverse: (row: FinanceTransaction) => void; onDelete: (row: FinanceTransaction) => void }) {
   return <>
     <section className="mini-kpis finance-ledger-kpis">
       <article><span>Money in</span><strong>{money.format(data?.money_in ?? 0)}</strong></article>
@@ -75,8 +75,11 @@ export function Transactions({ data, rows, search, setSearch, direction, setDire
       <article><span>Entries</span><strong>{data?.total ?? 0}</strong></article>
     </section>
     <div className="finance-ledger-toolbar">
-      <DateFilterInput className="finance-ledger-field" value={dateFrom} max={dateTo} onChange={setDateFrom} ariaLabel="From date" />
-      <DateFilterInput className="finance-ledger-field" value={dateTo} min={dateFrom} onChange={setDateTo} ariaLabel="To date" />
+      <label className="finance-all-dates"><input type="checkbox" checked={allDates} onChange={(event) => setAllDates(event.target.checked)} /><span>All history</span></label>
+      {!allDates && <>
+        <DateFilterInput className="finance-ledger-field" value={dateFrom} max={dateTo} onChange={setDateFrom} ariaLabel="From date" />
+        <DateFilterInput className="finance-ledger-field" value={dateTo} min={dateFrom} onChange={setDateTo} ariaLabel="To date" />
+      </>}
       <label className="finance-ledger-field finance-ledger-direction"><select value={direction} onChange={(event) => setDirection(event.target.value)} aria-label="Transaction direction"><option value="">All</option><option value="credit">Money in</option><option value="debit">Money out</option></select></label>
       <label className="finance-ledger-search"><Search size={13} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search ledger" aria-label="Search ledger" /></label>
       <div className={`finance-ledger-actions ${reportMode ? 'finance-ledger-actions--report' : ''}`.trim()}>
@@ -115,7 +118,7 @@ export function Expenses({ data, dateFrom, setDateFrom, dateTo, setDateTo, reloa
   </>
 }
 
-export function Bills({ data, billType, setBillType, dateFrom, setDateFrom, dateTo, setDateTo, reload, canEdit, onAdd, onEdit, onPay, onDelete, onUpload, onDownload, onRemoveAttachment, onRemovePayment, onDownloadMerged, downloadingMerged }: { data: BillList | null; billType: string; setBillType: (value: string) => void; reload: () => void; canEdit: boolean; onAdd: () => void; onEdit: (bill: Bill) => void; onPay: (bill: Bill) => void; onDelete: (bill: Bill) => void; onUpload: (bill: Bill, file: File) => void; onDownload: (bill: Bill) => void; onRemoveAttachment: (bill: Bill) => void; onRemovePayment: (bill: Bill, payment: BillPayment) => void; onDownloadMerged: () => void; downloadingMerged: boolean } & DateRangeProps) {
+export function Bills({ data, billType, setBillType, dateFrom, setDateFrom, dateTo, setDateTo, allDates, setAllDates, reload, canEdit, onAdd, onEdit, onPay, onDelete, onUpload, onDownload, onRemoveAttachment, onRemovePayment, onDownloadMerged, downloadingMerged }: { data: BillList | null; billType: string; setBillType: (value: string) => void; allDates: boolean; setAllDates: (value: boolean) => void; reload: () => void; canEdit: boolean; onAdd: () => void; onEdit: (bill: Bill) => void; onPay: (bill: Bill) => void; onDelete: (bill: Bill) => void; onUpload: (bill: Bill, file: File) => void; onDownload: (bill: Bill) => void; onRemoveAttachment: (bill: Bill) => void; onRemovePayment: (bill: Bill, payment: BillPayment) => void; onDownloadMerged: () => void; downloadingMerged: boolean } & DateRangeProps) {
   return <>
     <section className="mini-kpis finance-bill-kpis">
       <article><span>Total bills</span><strong>{data?.total ?? 0}</strong></article>
@@ -123,7 +126,8 @@ export function Bills({ data, billType, setBillType, dateFrom, setDateFrom, date
       <article><span>Paid</span><strong>{money.format(data?.data.reduce((sum, row) => sum + row.paid_amount, 0) ?? 0)}</strong></article>
     </section>
     <div className="finance-bills-toolbar">
-      <DateRangeFields dateFrom={dateFrom} setDateFrom={setDateFrom} dateTo={dateTo} setDateTo={setDateTo} />
+      <label className="finance-all-dates"><input type="checkbox" checked={allDates} onChange={(event) => setAllDates(event.target.checked)} /><span>All history</span></label>
+      {!allDates && <DateRangeFields dateFrom={dateFrom} setDateFrom={setDateFrom} dateTo={dateTo} setDateTo={setDateTo} />}
       <label className="finance-bill-type">
         <select value={billType} onChange={(event) => setBillType(event.target.value)}>
           <option value="">All bills</option>
@@ -169,7 +173,7 @@ export function BillTable({ rows, compact = false, onEdit, onPay, onDelete, onUp
           <td><strong>{row.bill_number}</strong><small>{row.customer_name || row.supplier_name}</small></td>
           <td>{label(row.bill_type)}</td>
           <td>{money.format(row.total_amount)}</td>
-          <td>{money.format(row.paid_amount)}{!compact && row.payments.length > 0 && <small>{row.payments.length} payment{row.payments.length === 1 ? '' : 's'}</small>}</td>
+          <td>{money.format(row.paid_amount)}{!compact && (row.payments?.length ?? 0) > 0 && <small>{row.payments.length} payment{row.payments.length === 1 ? '' : 's'}</small>}</td>
           <td>{money.format(row.balance_amount)}</td>
           {!compact && <td>{row.due_date ? shortDate.format(new Date(row.due_date)) : '—'}</td>}
           <td><span className="soft-badge">{label(row.payment_status)}</span></td>
@@ -182,7 +186,7 @@ export function BillTable({ rows, compact = false, onEdit, onPay, onDelete, onUp
             {onDelete && <button type="button" className="danger-icon-button finance-transaction-delete" onClick={() => onDelete(row)} aria-label={`Delete bill ${row.bill_number}`} title="Delete bill"><Trash2 size={14} /></button>}
           </div></td>}
         </tr>
-        {!compact && row.payments.length > 0 && <tr className="finance-bill-payments-row">
+        {!compact && (row.payments?.length ?? 0) > 0 && <tr className="finance-bill-payments-row">
           <td colSpan={columnCount}>
             <div className="finance-bill-payments">
               <span className="finance-bill-payments__title">Linked bill payments</span>

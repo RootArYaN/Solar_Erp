@@ -316,6 +316,25 @@
   gap:7px;
   margin-bottom:8px;
 }
+.finance-all-dates{
+  height:32px;
+  min-width:92px;
+  flex:0 0 auto;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:6px;
+  padding:0 9px;
+  border:1px solid #dce2e7;
+  border-radius:7px;
+  background:#fff;
+  color:#4d5966;
+  font-size:10px;
+  font-weight:800;
+  white-space:nowrap;
+  cursor:pointer;
+}
+.finance-all-dates input{width:13px;height:13px;margin:0;accent-color:#c98310}
 .finance-bill-type{
   width:130px;
   flex:0 0 130px;
@@ -529,7 +548,7 @@
     max-width:none;
     flex:none;
   }
-  .finance-ledger-direction,.finance-ledger-search,.finance-ledger-actions{grid-column:1/-1}
+  .finance-all-dates,.finance-ledger-direction,.finance-ledger-search,.finance-ledger-actions{grid-column:1/-1;width:100%}
   .finance-ledger-search{height:32px}
   .finance-ledger-actions{
     display:grid;

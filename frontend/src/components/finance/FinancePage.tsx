@@ -89,6 +89,8 @@ export function FinancePage({ session }: { session: Session }) {
   const [loanToDelete, setLoanToDelete] = useState<CompanyLoan | null>(null)
   const [dateFrom, setDateFrom] = useState(monthStart())
   const [dateTo, setDateTo] = useState(today())
+  const [allTransactionDates, setAllTransactionDates] = useState(true)
+  const [allBillDates, setAllBillDates] = useState(true)
   const [direction, setDirection] = useState(() => ['credit', 'debit'].includes(searchParams.get('direction') ?? '') ? searchParams.get('direction') ?? '' : '')
   const [billType, setBillType] = useState(() => ['sales', 'purchase'].includes(searchParams.get('bill_type') ?? '') ? searchParams.get('bill_type') ?? '' : '')
   const [search, setSearch] = useState('')
@@ -126,13 +128,22 @@ export function FinancePage({ session }: { session: Session }) {
     try {
       if (nextTab === 'overview') setOverview(await getFinanceOverview(rangeQuery().toString()))
       if (nextTab === 'transactions' || nextTab === 'reports') {
-        const query = new URLSearchParams({ date_from: dateFrom, date_to: dateTo, page_size: '100' })
+        const query = new URLSearchParams({ page_size: '100' })
+        if (!allTransactionDates) {
+          query.set('date_from', dateFrom)
+          query.set('date_to', dateTo)
+        }
         if (direction) query.set('direction', direction)
         setTransactions(await getFinanceTransactions(query.toString()))
       }
       if (nextTab === 'expenses') setExpenses(await getExpenses(new URLSearchParams({ date_from: dateFrom, date_to: dateTo, page_size: '100' }).toString()))
       if (nextTab === 'bills') {
-        const query = new URLSearchParams({ date_from: dateFrom, date_to: dateTo, page_size: '100' }); if (billType) query.set('bill_type', billType)
+        const query = new URLSearchParams({ page_size: '100' })
+        if (!allBillDates) {
+          query.set('date_from', dateFrom)
+          query.set('date_to', dateTo)
+        }
+        if (billType) query.set('bill_type', billType)
         setBills(await getBills(query.toString()))
       }
       if (nextTab === 'accounts') setAccounts(await getFinancialAccounts())
@@ -397,8 +408,12 @@ export function FinancePage({ session }: { session: Session }) {
   }
 
   async function downloadFilteredBills() {
-    if (!validDateRange()) return
-    const query = new URLSearchParams({ date_from: dateFrom, date_to: dateTo })
+    if (!allBillDates && !validDateRange()) return
+    const query = new URLSearchParams()
+    if (!allBillDates) {
+      query.set('date_from', dateFrom)
+      query.set('date_to', dateTo)
+    }
     if (billType) query.set('bill_type', billType)
     setDownloadingMergedBills(true)
     try {
@@ -442,9 +457,9 @@ export function FinancePage({ session }: { session: Session }) {
     <div className={`finance-tab-panel finance-tab-panel--${tab}`} role="tabpanel" data-scroll-surface="tab-body">
       {loading ? <LoadingSkeleton rows={6} /> : <>
         {tab === 'overview' && overview && <Overview data={overview} dateFrom={dateFrom} setDateFrom={setDateFrom} dateTo={dateTo} setDateTo={setDateTo} reload={() => void loadTab('overview')} />}
-        {(tab === 'transactions' || tab === 'reports') && <Transactions data={transactions} rows={visibleTransactions} search={search} setSearch={setSearch} direction={direction} setDirection={setDirection} dateFrom={dateFrom} setDateFrom={setDateFrom} dateTo={dateTo} setDateTo={setDateTo} reload={() => void loadTab(tab)} reportMode={tab === 'reports'} canEdit={access.canEdit} onEdit={(row) => { setSelectedTransaction(row); setDialog('edit-transaction') }} onReverse={(row) => { setSelectedTransaction(row); setDialog('reverse-transaction') }} onDelete={setTransactionToDelete} />}
+        {(tab === 'transactions' || tab === 'reports') && <Transactions data={transactions} rows={visibleTransactions} search={search} setSearch={setSearch} direction={direction} setDirection={setDirection} dateFrom={dateFrom} setDateFrom={setDateFrom} dateTo={dateTo} setDateTo={setDateTo} allDates={allTransactionDates} setAllDates={setAllTransactionDates} reload={() => void loadTab(tab)} reportMode={tab === 'reports'} canEdit={access.canEdit} onEdit={(row) => { setSelectedTransaction(row); setDialog('edit-transaction') }} onReverse={(row) => { setSelectedTransaction(row); setDialog('reverse-transaction') }} onDelete={setTransactionToDelete} />}
         {tab === 'expenses' && <Expenses data={expenses} dateFrom={dateFrom} setDateFrom={setDateFrom} dateTo={dateTo} setDateTo={setDateTo} reload={() => void loadTab('expenses')} canEdit={access.canEdit} onAdd={() => setDialog('expense')} onEdit={(row) => { setSelectedTransaction(row); setDialog('edit-transaction') }} onDelete={setTransactionToDelete} />}
-        {tab === 'bills' && <Bills data={bills} billType={billType} setBillType={setBillType} dateFrom={dateFrom} setDateFrom={setDateFrom} dateTo={dateTo} setDateTo={setDateTo} reload={() => void loadTab('bills')} canEdit={access.canEdit} onAdd={() => setDialog('bill')} onEdit={(bill) => { setSelectedBill(bill); setDialog('edit-bill') }} onPay={(bill) => { setSelectedBill(bill); setDialog('bill-payment') }} onDelete={setBillToDelete} onUpload={(bill, file) => void uploadBillAttachment(bill, file)} onDownload={(bill) => void downloadBillAttachment(bill)} onRemoveAttachment={setBillAttachmentToRemove} onRemovePayment={(bill, payment) => setBillPaymentToDelete({ bill, payment })} onDownloadMerged={() => void downloadFilteredBills()} downloadingMerged={downloadingMergedBills} />}
+        {tab === 'bills' && <Bills data={bills} billType={billType} setBillType={setBillType} dateFrom={dateFrom} setDateFrom={setDateFrom} dateTo={dateTo} setDateTo={setDateTo} allDates={allBillDates} setAllDates={setAllBillDates} reload={() => void loadTab('bills')} canEdit={access.canEdit} onAdd={() => setDialog('bill')} onEdit={(bill) => { setSelectedBill(bill); setDialog('edit-bill') }} onPay={(bill) => { setSelectedBill(bill); setDialog('bill-payment') }} onDelete={setBillToDelete} onUpload={(bill, file) => void uploadBillAttachment(bill, file)} onDownload={(bill) => void downloadBillAttachment(bill)} onRemoveAttachment={setBillAttachmentToRemove} onRemovePayment={(bill, payment) => setBillPaymentToDelete({ bill, payment })} onDownloadMerged={() => void downloadFilteredBills()} downloadingMerged={downloadingMergedBills} />}
         {tab === 'accounts' && <Accounts rows={accounts} canEdit={access.canEdit} onAdd={() => setDialog('account')} onTransfer={() => setDialog('transfer')} />}
         {tab === 'loans' && <Loans rows={loans} canEdit={access.canEdit} onAdd={() => setDialog('loan')} onEdit={(loan) => { setSelectedLoan(loan); setDialog('edit-loan') }} onPay={(loan) => { setSelectedLoan(loan); setDialog('loan-payment') }} onDelete={setLoanToDelete} />}
         {tab === 'profitability' && <ProfitabilityPanel data={profitability} dateFrom={dateFrom} setDateFrom={setDateFrom} dateTo={dateTo} setDateTo={setDateTo} reload={() => void loadTab('profitability')} />}

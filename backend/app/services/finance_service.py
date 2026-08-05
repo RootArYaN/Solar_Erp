@@ -9,7 +9,7 @@ from io import BytesIO
 from pathlib import Path
 from uuid import uuid4
 
-from sqlalchemy import case, func, or_, select
+from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -722,30 +722,43 @@ def _bill_payment_summaries(db: Session, bill_ids: set[str], company_ids: set[st
     if not bill_ids:
         return {}
     rows = db.execute(
-        select(BillPayment, FinanceTransaction, FinancialAccount)
-        .join(FinanceTransaction, FinanceTransaction.id == BillPayment.transaction_id)
+        select(FinanceTransaction, FinancialAccount, BillPayment)
         .join(FinancialAccount, FinancialAccount.id == FinanceTransaction.account_id)
+        .outerjoin(
+            BillPayment,
+            and_(
+                BillPayment.transaction_id == FinanceTransaction.id,
+                BillPayment.company_id == FinanceTransaction.company_id,
+            ),
+        )
         .where(
-            BillPayment.bill_id.in_(bill_ids),
-            BillPayment.company_id.in_(company_ids),
+            FinanceTransaction.company_id.in_(company_ids),
+            FinanceTransaction.source_type.in_(BILL_PAYMENT_SOURCE_TYPES),
+            or_(
+                FinanceTransaction.source_id.in_(bill_ids),
+                BillPayment.bill_id.in_(bill_ids),
+            ),
         )
         .order_by(FinanceTransaction.transaction_date.desc(), FinanceTransaction.created_at.desc())
     ).all()
     result: dict[str, list[BillPaymentSummary]] = {}
-    for payment, transaction, account in rows:
-        result.setdefault(payment.bill_id, []).append(BillPaymentSummary(
-            id=payment.id,
+    for transaction, account, payment in rows:
+        bill_id = payment.bill_id if payment else transaction.source_id
+        if not bill_id or bill_id not in bill_ids:
+            continue
+        result.setdefault(bill_id, []).append(BillPaymentSummary(
+            id=payment.id if payment else transaction.id,
             transaction_id=transaction.id,
             transaction_number=transaction.transaction_number,
             transaction_date=transaction.transaction_date,
-            amount=_float(payment.amount),
+            amount=_float(payment.amount if payment else transaction.amount),
             account_id=account.id,
             account_name=account.name,
             payment_method=transaction.payment_method,
             reference_number=transaction.reference_number,
             description=transaction.description,
             status=transaction.status,
-            created_at=payment.created_at,
+            created_at=payment.created_at if payment else transaction.created_at,
         ))
     return result
 
@@ -1040,10 +1053,33 @@ def delete_bill_payment(db: Session, actor: CurrentSession, bill_id: str, paymen
         BillPayment.bill_id == bill.id,
         BillPayment.company_id == bill.company_id,
     ))
-    if not payment:
+    transaction_id = payment.transaction_id if payment else None
+    legacy_transaction = None
+    if not transaction_id:
+        legacy_transaction = db.scalar(select(FinanceTransaction).where(
+            FinanceTransaction.id == payment_id,
+            FinanceTransaction.company_id == bill.company_id,
+            FinanceTransaction.source_id == bill.id,
+            FinanceTransaction.source_type.in_(BILL_PAYMENT_SOURCE_TYPES),
+        ))
+        transaction_id = legacy_transaction.id if legacy_transaction else None
+    if not transaction_id:
         raise FinanceNotFoundError('Bill payment not found')
+    if legacy_transaction:
+        bill.paid_amount = max(
+            Decimal('0.00'),
+            Decimal(bill.paid_amount) - Decimal(legacy_transaction.amount),
+        )
+        bill.balance_amount = max(
+            Decimal('0.00'),
+            Decimal(bill.total_amount) - Decimal(bill.paid_amount),
+        )
+        bill.payment_status = (
+            'unpaid' if bill.paid_amount <= 0
+            else ('paid' if bill.balance_amount <= 0 else 'partially_paid')
+        )
     deleted: set[str] = set()
-    _delete_transaction_tree(db, actor, payment.transaction_id, deleted)
+    _delete_transaction_tree(db, actor, transaction_id, deleted)
     db.commit()
     db.refresh(bill)
     return _bill_summary(db, bill)
