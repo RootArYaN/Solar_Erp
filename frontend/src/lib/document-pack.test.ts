@@ -4,6 +4,7 @@ import {
   renderDocumentHtml,
   type DocumentPackInput,
 } from './document-pack'
+import { buildFormattedPdf } from './document-pack/pdf'
 
 const input: DocumentPackInput = {
   customerName: 'Asha Patel',
@@ -28,6 +29,15 @@ const input: DocumentPackInput = {
   notes: '',
 }
 
+function readBlob(blob: Blob) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result || ''))
+    reader.onerror = () => reject(reader.error)
+    reader.readAsText(blob)
+  })
+}
+
 describe('document pack template content', () => {
   it('uses saved document wording, specifications, and signature settings', () => {
     const template = normalizeDocumentPackTemplate({
@@ -48,6 +58,7 @@ describe('document pack template content', () => {
       quotation_title: 'Custom Quotation',
       customer_signature_label: 'Consumer acceptance',
       vendor_signature_label: 'EPC approval',
+      vendor_signature_image: 'data:image/png;base64,dmVuZG9yLXNpZ25hdHVyZQ==',
       vendor_signatory_name: 'Authorized Person',
       vendor_signatory_title: 'Managing Partner',
     })
@@ -58,6 +69,8 @@ describe('document pack template content', () => {
     expect(feasibility).toContain('Roof condition')
     expect(feasibility).toContain('Consumer acceptance')
     expect(feasibility).toContain('Authorized Person')
+    expect(feasibility).toContain('alt="Uploaded vendor signature"')
+    expect(feasibility).toContain('data:image/png;base64,dmVuZG9yLXNpZ25hdHVyZQ==')
 
     const estimate = renderDocumentHtml('estimate', input, template)
     expect(estimate).toContain('Custom Estimate')
@@ -81,5 +94,19 @@ describe('document pack template content', () => {
     expect(html).toContain('Uploaded customer signature')
     expect(html).not.toContain('Uploaded customer signature unavailable')
     expect(html).not.toContain('Electronically signed')
+  })
+
+  it('embeds the vendor signature image in generated PDFs', async () => {
+    const template = normalizeDocumentPackTemplate({ vendor_signatory_name: 'Authorized Person' })
+    const vendorSignature = {
+      bytes: new Uint8Array([0xff, 0xd8, 0xff, 0xd9]),
+      width: 120,
+      height: 40,
+    }
+    const source = await readBlob(buildFormattedPdf(input, template, 'quotation', undefined, vendorSignature))
+
+    expect(source).toContain('/VendorSig')
+    expect(source).toContain('/Subtype /Image')
+    expect(source).toContain('Authorized Person')
   })
 })

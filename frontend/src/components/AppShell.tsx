@@ -68,7 +68,6 @@ export function AppShell({ session, onLogout }: { session: Session; onLogout: ()
           {canViewAdministration && <NavLink to={WORKSPACE_ROUTE_ACCESS.administration.path} onClick={() => setMobileOpen(false)} title="Users & roles"><Users size={19} /><span>Users & roles</span></NavLink>}
         </nav>
 
-        <section className="sidebar-company"><Building2 size={18} /><div><strong>{session.company.name}</strong><span>{session.company.code}</span></div></section>
         <section className="sidebar-profile"><div className="avatar">{session.user.full_name.slice(0, 1).toUpperCase()}</div><div className="sidebar-profile__copy"><strong>{session.user.full_name}</strong><span>{session.role.replaceAll('_', ' ')}</span></div><button className="sidebar-logout" onClick={() => void onLogout()} aria-label="Sign out"><LogOut size={18} /></button></section>
       </aside>
 
@@ -78,12 +77,11 @@ export function AppShell({ session, onLogout }: { session: Session; onLogout: ()
           <button className="icon-button app-menu-button" onClick={() => setMobileOpen(true)} aria-label="Open menu"><Menu size={20} /></button>
           {isSuperAdmin && desktopBrowser && (
             <div className="layout-view-switch" role="group" aria-label="Workspace preview size">
-              <span>View</span>
               <button type="button" className={layoutView === 'desktop' ? 'is-active' : ''} aria-pressed={layoutView === 'desktop'} onClick={() => { setLayoutView('desktop'); setMobileOpen(false) }} title="Desktop view">
-                <Monitor size={15} /><span>Desktop</span>
+                <Monitor size={15} />
               </button>
               <button type="button" className={layoutView === 'mobile' ? 'is-active' : ''} aria-pressed={layoutView === 'mobile'} onClick={() => { setLayoutView('mobile'); setSidebarCollapsed(false) }} title="Mobile view">
-                <Smartphone size={15} /><span>Mobile</span>
+                <Smartphone size={15} />
               </button>
             </div>
           )}

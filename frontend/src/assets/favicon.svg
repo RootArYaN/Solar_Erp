@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Solar ERP">
+  <rect x="2" y="2" width="60" height="60" rx="15" fill="#123247"/>
+
+  <g fill="none" stroke="#FFAA1D" stroke-width="4" stroke-linecap="round">
+    <path d="M32 8v6"/>
+    <path d="M18.5 13.5l4.2 4.2"/>
+    <path d="M45.5 13.5l-4.2 4.2"/>
+    <path d="M12 26h6"/>
+    <path d="M46 26h6"/>
+  </g>
+  <path d="M21 28a11 11 0 0 1 22 0" fill="#FFAA1D"/>
+
+  <path d="M14 31h36l-5 22H9z" fill="#F7FAFC"/>
+  <path d="M16.5 34h29L42 50H13z" fill="#2F6D8D"/>
+  <g fill="none" stroke="#DCEAF2" stroke-width="2">
+    <path d="M24 34l-2 16"/>
+    <path d="M34 34l-1 16"/>
+    <path d="M43 34l-2 16"/>
+    <path d="M15 42h29"/>
+  </g>
+  <path d="M27 53h10l2 4H25z" fill="#FFAA1D"/>
+</svg>

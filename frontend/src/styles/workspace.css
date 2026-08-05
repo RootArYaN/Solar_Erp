@@ -409,6 +409,94 @@ body.app-authenticated #root {
   margin-bottom: 12px;
 }
 
+/* Keep the customer identity, metadata, contact details and actions on one
+   compact desktop row. The contact address is the only item allowed to
+   truncate, so the action buttons always remain reachable. */
+.workspace-page .customer-workspace__header {
+  min-width: 0;
+  align-items: center;
+  gap: 16px;
+}
+
+.workspace-page .customer-title-block {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.workspace-page .customer-title-content {
+  min-width: 0;
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px 14px;
+  white-space: nowrap;
+}
+
+.workspace-page .customer-title-block h1 {
+  min-width: 0;
+  max-width: clamp(170px, 20vw, 320px);
+  margin: 0;
+  overflow: hidden;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-page .customer-title-meta {
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+}
+
+.workspace-page .customer-title-contact {
+  min-width: 0;
+  flex: 1 1 220px;
+  flex-wrap: nowrap;
+  overflow: hidden;
+  gap: 12px;
+}
+
+.workspace-page .customer-contact-item {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.workspace-page .customer-contact-item > svg {
+  flex: 0 0 auto;
+}
+
+.workspace-page .customer-contact-item:first-child {
+  flex: 0 0 auto;
+}
+
+.workspace-page .customer-contact-item:last-child {
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+.workspace-page .customer-contact-item:last-child > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.workspace-page .customer-header-actions {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+@media (min-width: 781px) and (max-width: 1180px) {
+  .workspace-page .customer-title-content {
+    flex-wrap: wrap;
+    row-gap: 4px;
+  }
+
+  .workspace-page .customer-title-contact {
+    flex-basis: 100%;
+  }
+}
+
 .workspace-page .workspace-tab-panel {
   flex: 1 1 auto;
   overflow: auto;
@@ -416,29 +504,27 @@ body.app-authenticated #root {
   scrollbar-gutter: stable;
 }
 
-.workspace-page .customer-workspace > .workspace-tab-panel:has(> .customer-tab-table) {
-  --customer-tab-bleed: 22px;
-  --customer-tab-inset: 11px;
+/* The customer workspace already owns the surrounding card boundary.
+   Keep the tab body as a flat content surface so it does not create a nested
+   full-height border around every tab. */
+.workspace-page .customer-tab-panel {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.workspace-page .customer-tab-panel:has(> .customer-tab-table) {
   display: flex;
   flex-direction: column;
   overflow: hidden;
 }
 
-.workspace-page .workspace-tab-panel > .customer-tab-table {
-  width: calc(100% + var(--customer-tab-bleed));
+.workspace-page .customer-tab-panel > .customer-tab-table {
+  width: 100%;
   flex: 1 1 auto;
   min-height: 0;
-  margin-right: calc(-1 * var(--customer-tab-inset));
-  margin-bottom: calc(-1 * var(--customer-tab-inset));
-  margin-left: calc(-1 * var(--customer-tab-inset));
-  border-right: 0;
-  border-bottom: 0;
-  border-left: 0;
-  border-radius: 0;
-}
-
-.workspace-page .workspace-tab-panel > .customer-tab-table:first-child {
-  margin-top: calc(-1 * var(--customer-tab-inset));
+  margin: 0;
 }
 
 .workspace-page .finance-tab-panel {
@@ -701,75 +787,22 @@ body.app-authenticated #root {
   max-width: 100%;
 }
 
-.document-page .erp-kpi-grid > article.document-customer-kpi {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  align-content: center;
-  gap: 4px;
-  padding: 9px 10px;
-}
-
-.document-customer-kpi label {
-  min-width: 0;
-  display: grid;
-  gap: 4px;
-}
-
-.document-customer-kpi select {
-  width: 100%;
-  min-width: 0;
-  min-height: 34px;
-  padding: 0 8px;
-  border: 1px solid var(--workspace-border);
-  border-radius: 8px;
-  background: #fff;
-  color: var(--workspace-text);
-  font: inherit;
-  font-size: 9px;
-  outline: 0;
-}
-
-.document-customer-kpi select:focus {
-  border-color: #d5a344;
-  box-shadow: 0 0 0 3px rgba(217, 154, 20, .1);
-}
-
-.document-customer-kpi small {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.document-page .erp-kpi-grid > article.document-status-kpi {
-  position: relative;
-  padding-right: 42px;
-}
-
-.document-status-kpi > button {
-  position: absolute;
-  top: 9px;
-  right: 9px;
-  width: 27px;
-  height: 27px;
-  display: grid;
-  place-items: center;
-  padding: 0;
-  border: 1px solid #e0e5e9;
-  border-radius: 7px;
-  background: #fff;
-  color: #986614;
-  cursor: pointer;
-}
-
-.document-status-kpi > button:hover:not(:disabled) {
-  border-color: #d5a344;
-  background: #fff8e9;
-}
-
-.document-status-kpi > button:disabled {
-  opacity: .55;
-  cursor: wait;
-}
+.document-summary-grid { gap: 8px; }
+.document-summary-grid .document-customer-selector,
+.document-summary-grid .ui-kpi-card { min-height: 60px; }
+.document-summary-grid .document-customer-selector { gap: 3px; padding: 6px 8px; }
+.document-summary-grid .document-customer-selector .ui-field { gap: 3px; }
+.document-summary-grid .document-customer-selector .ui-field__label { font-size: 8px; }
+.document-summary-grid .document-customer-selector .ui-field__control { min-height: 28px; padding-inline: 8px; }
+.document-summary-grid .document-customer-selector select { font-size: 10px; }
+.document-summary-grid .document-customer-selector__note { font-size: 8px; line-height: 1.2; }
+.document-summary-grid .ui-kpi-card { gap: 8px; padding: 7px 9px; }
+.document-summary-grid .ui-kpi-card__icon { width: 30px; height: 30px; border-radius: 8px; }
+.document-summary-grid .ui-kpi-card__icon > svg { width: 15px; height: 15px; }
+.document-summary-grid .ui-kpi-card__label { font-size: 8px; letter-spacing: .35px; }
+.document-summary-grid .ui-kpi-card__value { font-size: 13px; line-height: 1.12; }
+.document-summary-grid .ui-kpi-card__note { font-size: 8px; line-height: 1.2; -webkit-line-clamp: 1; }
+.document-summary-grid .ui-kpi-card__action :is(button, a) { width: 24px; height: 24px; }
 
 .customer-documents-toolbar__actions {
   min-width: 0;
@@ -1035,6 +1068,103 @@ body.app-authenticated #root {
   line-height: 1.5;
 }
 
+.document-template-signature-field {
+  display: grid;
+  gap: 6px;
+}
+
+.document-template-signature-field__label {
+  color: #354052;
+  font-size: 8.5px;
+  font-weight: 760;
+}
+
+.document-template-signature-field__input {
+  position: fixed;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.document-template-signature {
+  display: flex;
+  min-height: 76px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px;
+  border: 1px dashed #cfd7df;
+  border-radius: 9px;
+  background: #fafbfc;
+}
+
+.document-template-signature.has-image {
+  border-style: solid;
+  background: #fff;
+}
+
+.document-template-signature__preview {
+  display: flex;
+  min-width: 0;
+  min-height: 56px;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: #87919d;
+  font-size: 8px;
+  font-weight: 650;
+}
+
+.document-template-signature__preview img {
+  display: block;
+  width: min(100%, 260px);
+  height: 56px;
+  object-fit: contain;
+  object-position: left center;
+}
+
+.document-template-signature__actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 6px;
+}
+
+.document-template-signature__actions button {
+  display: inline-grid;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  place-items: center;
+  border: 1px solid #d8dee5;
+  border-radius: 8px;
+  color: #435064;
+  background: #fff;
+  cursor: pointer;
+}
+
+.document-template-signature__actions button:hover:not(:disabled) {
+  border-color: #b58a25;
+  color: #936715;
+  background: #fffaf0;
+}
+
+.document-template-signature__actions button.is-remove:hover:not(:disabled) {
+  border-color: #d6a4a4;
+  color: #a33939;
+  background: #fff7f7;
+}
+
+.document-template-signature__actions button:disabled {
+  cursor: wait;
+  opacity: .55;
+}
+
+.document-template-signature__error {
+  color: #a33939!important;
+}
+
 @media (max-width: 1400px) {
   .document-data-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1090,19 +1220,128 @@ body.app-authenticated #root {
   }
 }
 
-/* Customer project values can be long IDs or stage names. Keep their type
-   balanced across desktop and phone layouts and show two readable lines. */
+/* Compact customer summary cards. These cards are intentionally denser than
+   the shared KPI component because they sit between the identity header and
+   the tab strip. Phones use a 2 x 2 grid, falling back to one column only on
+   very narrow screens through the shared responsive rule. */
+.customer-summary-grid {
+  gap: 8px;
+}
+
+.customer-summary-grid .ui-kpi-card {
+  min-height: 64px;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 9px;
+}
+
+.customer-summary-grid .ui-kpi-card__icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+}
+
+.customer-summary-grid .ui-kpi-card__icon > svg {
+  width: 15px;
+  height: 15px;
+}
+
+.customer-summary-grid .ui-kpi-card__content {
+  gap: 1px;
+}
+
+.customer-summary-grid .ui-kpi-card__label {
+  font-size: 8px;
+  letter-spacing: .34px;
+}
+
 .customer-summary-grid .ui-kpi-card__value {
   display: -webkit-box;
   overflow: hidden;
-  font-size: clamp(14px, 1.15vw, 16px);
-  line-height: 1.2;
+  font-size: clamp(10.5px, .75vw, 12px);
+  line-height: 1.14;
   letter-spacing: -.15px;
   overflow-wrap: anywhere;
   text-overflow: ellipsis;
   white-space: normal;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
+}
+
+.customer-summary-grid .ui-kpi-card__note {
+  font-size: 8px;
+  line-height: 1.18;
+  -webkit-line-clamp: 1;
+}
+
+@media (max-width: 520px) {
+  .customer-summary-grid {
+    gap: 7px;
+  }
+
+  .customer-summary-grid .ui-kpi-card {
+    min-height: 58px;
+    gap: 7px;
+    padding: 7px 8px;
+  }
+
+  .customer-summary-grid .ui-kpi-card__icon {
+    width: 27px;
+    height: 27px;
+    border-radius: 7px;
+  }
+
+  .customer-summary-grid .ui-kpi-card__icon > svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  .customer-summary-grid .ui-kpi-card__label,
+  .customer-summary-grid .ui-kpi-card__note {
+    font-size: 7.5px;
+  }
+
+}
+
+/* Keep customer KPIs in a readable 2 x 2 mobile grid. The shared KPI base
+   selector is intentionally specific, so these rules match that specificity
+   instead of allowing the desktop four-column declaration to win. */
+.app-shell--view-mobile .workspace-page .workspace-kpi-grid.ui-kpi-grid.customer-summary-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.app-shell--view-mobile .customer-summary-grid .ui-kpi-card {
+  grid-template-columns: 27px minmax(0, 1fr);
+  align-content: center;
+  min-height: 60px;
+}
+
+@media (max-width: 780px) {
+  .workspace-page .workspace-kpi-grid.ui-kpi-grid.customer-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .customer-summary-grid .ui-kpi-card {
+    grid-template-columns: 27px minmax(0, 1fr);
+    align-content: center;
+    min-height: 60px;
+  }
+
+  .customer-summary-grid .ui-kpi-card__content {
+    min-width: 0;
+  }
+
+  .customer-summary-grid .ui-kpi-card__value,
+  .customer-summary-grid .ui-kpi-card__note {
+    overflow-wrap: anywhere;
+  }
+}
+
+@media (max-width: 360px) {
+  .workspace-page .workspace-kpi-grid.ui-kpi-grid.customer-summary-grid,
+  .app-shell--view-mobile .workspace-page .workspace-kpi-grid.ui-kpi-grid.customer-summary-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 /* Customer workspace on phones: use the page as the only vertical scroll
@@ -1134,14 +1373,48 @@ body.app-authenticated #root {
 
 .app-shell--view-mobile .customer-workspace__header {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.app-shell--view-mobile .customer-header-actions.ui-action-bar {
+  width: auto;
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 6px;
+}
+
+.app-shell--view-mobile .customer-header-actions.ui-action-bar > .ui-button {
+  width: 34px;
+  min-width: 34px;
+  min-height: 34px;
+  padding: 0;
 }
 
 .app-shell--view-mobile .customer-title-block,
-.app-shell--view-mobile .customer-title-block > div {
+.app-shell--view-mobile .customer-title-content {
   width: 100%;
   min-width: 0;
+}
+
+.app-shell--view-mobile .customer-title-content {
+  display: grid;
+  align-items: start;
+  gap: 3px;
+  white-space: normal;
+}
+
+.app-shell--view-mobile .customer-title-meta,
+.app-shell--view-mobile .customer-title-contact {
+  flex-wrap: wrap;
+}
+
+.app-shell--view-mobile .customer-title-contact,
+.app-shell--view-mobile .customer-contact-item:last-child,
+.app-shell--view-mobile .customer-contact-item:last-child > span {
+  overflow: visible;
+  white-space: normal;
 }
 
 .app-shell--view-mobile .customer-title-icon {
@@ -1191,14 +1464,48 @@ body.app-authenticated #root {
 
   .customer-workspace__header {
     display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    gap: 10px;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .customer-header-actions.ui-action-bar {
+    width: auto;
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 6px;
+  }
+
+  .customer-header-actions.ui-action-bar > .ui-button {
+    width: 34px;
+    min-width: 34px;
+    min-height: 34px;
+    padding: 0;
   }
 
   .customer-title-block,
-  .customer-title-block > div {
+  .customer-title-content {
     width: 100%;
     min-width: 0;
+  }
+
+  .customer-title-content {
+    display: grid;
+    align-items: start;
+    gap: 3px;
+    white-space: normal;
+  }
+
+  .customer-title-meta,
+  .customer-title-contact {
+    flex-wrap: wrap;
+  }
+
+  .customer-title-contact,
+  .customer-contact-item:last-child,
+  .customer-contact-item:last-child > span {
+    overflow: visible;
+    white-space: normal;
   }
 
   .customer-title-icon {
@@ -1378,8 +1685,6 @@ body.app-authenticated #root {
 .generated-pack-actions--exports .generated-pack-version{flex:0 0 auto}
 
 .generated-pack-actions button{display:inline-flex;align-items:center;justify-content:center;gap:6px;flex:0 0 auto;height:34px;min-height:34px;margin:0;padding:0 11px;border-radius:8px;font-size:9px;line-height:1;box-shadow:none}
-.generated-pack-actions .primary-button{border:1px solid #ca8509;background:linear-gradient(135deg,#e3a01d,#c57b08);box-shadow:0 5px 12px rgba(190,116,13,.16),inset 0 1px 0 rgba(255,255,255,.26)}
-.generated-pack-actions .primary-button:hover{filter:brightness(1.02);transform:translateY(-1px)}
 .generated-pack-actions .secondary-button{border-color:#dce2e7;color:#3e4a58;background:#fff}
 .generated-pack-actions .secondary-button:hover{border-color:#d8b66f;background:#fffaf0}
 .generated-pack-finalize{color:#246640!important;border-color:#b9ddc5!important;background:#f0faf3!important}
@@ -1458,7 +1763,7 @@ body.app-authenticated #root {
 .pack-doc__signatures{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:28px;padding-top:14px;border-top:1px solid #d8dee6}
 .pack-doc__signatures>div{display:grid;gap:3px}
 .pack-doc__signatures span,.pack-doc__signatures small{font-size:7.5px;color:#75808b}
-.pack-doc__signature--customer{position:relative;padding-bottom:3px}
+.pack-doc__signature--customer,.pack-doc__signature--vendor{position:relative;padding-bottom:3px}
 .pack-doc__signature-image{display:block;width:min(100%,180px);height:34px;padding:2px 4px 4px;border-bottom:1px solid #9aa6b4;object-fit:contain;object-position:left center;mix-blend-mode:multiply}
 .pack-doc__signature-missing{display:grid;min-height:34px;align-items:center;padding:2px 4px 4px;border-bottom:1px solid #9aa6b4;color:#8b95a1!important;font-size:7px!important;font-style:italic}
 .pack-doc__signed-status{margin-top:2px;color:#657488!important;font-size:6.8px!important;font-weight:700;letter-spacing:.15px}
@@ -1549,6 +1854,20 @@ body.app-authenticated #root {
 .inventory-history-tabs button{min-width:68px}
 .inventory-action--inward{color:#2e7147!important;border-color:#cbe3d2!important;background:#f1faf4!important}
 .inventory-action--outward{color:#956111!important;border-color:#ead8b7!important;background:#fff8e9!important}
+.inventory-table .table-row-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.inventory-table .table-row-actions button,
+.inventory-table td[data-label='Actions'] > button {
+  width: auto;
+  min-width: 0;
+  min-height: 30px !important;
+  height: 30px;
+  justify-content: center;
+}
 .agent-transaction-actions{display:flex;align-items:center;gap:5px;white-space:nowrap}
 .agent-transaction-actions .danger-icon-button,.finance-transaction-delete{flex:0 0 auto}
 
@@ -1878,6 +2197,20 @@ body.app-authenticated #root {
   width: min(360px, 100%);
   min-width: 220px;
   flex: 0 1 360px;
+}
+
+.workspace-page .pricing-row-search > input[type='search'] {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  outline: 0;
+  box-shadow: none;
+  background: transparent;
+}
+
+.workspace-page .pricing-row-search:focus-within {
+  border-color: #d5a344;
+  box-shadow: 0 0 0 3px rgba(217, 154, 20, .1);
 }
 
 .workspace-page .pricing-book-actions > button {
@@ -2351,7 +2684,7 @@ body.app-authenticated #root {
   gap: 7px;
 }
 
-.app-shell--view-mobile .finance-tab-panel :is(.finance-ledger-heading, .finance-expense-heading, .finance-bills-heading, .finance-ledger-search, .finance-expense-presets) {
+.app-shell--view-mobile .finance-tab-panel :is(.finance-ledger-direction, .finance-ledger-search, .finance-ledger-actions, .finance-expense-presets) {
   width: 100%;
   min-width: 0;
   grid-column: 1 / -1;
@@ -2376,15 +2709,21 @@ body.app-authenticated #root {
   min-width: 0;
 }
 
-.app-shell--view-mobile .finance-ledger-export {
-  width: 100%;
-  min-width: 0;
-  grid-column: 1 / -1;
+.app-shell--view-mobile .finance-ledger-actions {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 7px;
+}
+
+.app-shell--view-mobile .finance-ledger-actions--report {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.app-shell--view-mobile .finance-ledger-export button {
+.app-shell--view-mobile .finance-ledger-actions--report .finance-ledger-apply {
+  grid-column: 1 / -1;
+}
+
+.app-shell--view-mobile .finance-ledger-actions button {
   width: 100%;
   min-width: 0;
 }
@@ -2485,7 +2824,7 @@ body.app-authenticated #root {
     gap: 7px;
   }
 
-  .finance-tab-panel :is(.finance-ledger-heading, .finance-expense-heading, .finance-bills-heading, .finance-ledger-search, .finance-expense-presets) {
+  .finance-tab-panel :is(.finance-ledger-direction, .finance-ledger-search, .finance-ledger-actions, .finance-expense-presets) {
     width: 100%;
     min-width: 0;
     grid-column: 1 / -1;
@@ -2510,15 +2849,21 @@ body.app-authenticated #root {
     min-width: 0;
   }
 
-  .finance-ledger-export {
-    width: 100%;
-    min-width: 0;
-    grid-column: 1 / -1;
+  .finance-ledger-actions {
     display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 7px;
+  }
+
+  .finance-ledger-actions--report {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .finance-ledger-export button {
+  .finance-ledger-actions--report .finance-ledger-apply {
+    grid-column: 1 / -1;
+  }
+
+  .finance-ledger-actions button {
     width: 100%;
     min-width: 0;
   }
@@ -2590,14 +2935,6 @@ body.app-preview-mobile .generated-pack-panel > * {
 body.app-preview-mobile .document-page > .workspace-header .workspace-header__actions,
 body.app-preview-mobile .document-page > .workspace-header .workspace-header__actions button {
   width: 100%;
-}
-
-body.app-preview-mobile .document-kpi-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-body.app-preview-mobile .document-kpi-grid > .document-customer-kpi {
-  grid-column: 1 / -1;
 }
 
 body.app-preview-mobile .generated-pack-panel {
@@ -2748,14 +3085,6 @@ body.app-preview-mobile .document-checklist article {
   .document-page > .workspace-header .workspace-header__actions,
   .document-page > .workspace-header .workspace-header__actions button {
     width: 100%;
-  }
-
-  .document-kpi-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .document-kpi-grid > .document-customer-kpi {
-    grid-column: 1 / -1;
   }
 
   .generated-pack-panel {
@@ -3037,15 +3366,18 @@ body.app-preview-mobile .document-checklist article {
 }
 
 :is(.app-shell--view-mobile, body.app-preview-mobile) .inventory-table .table-row-actions {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 :is(.app-shell--view-mobile, body.app-preview-mobile) .inventory-table .table-row-actions button,
 :is(.app-shell--view-mobile, body.app-preview-mobile) .inventory-table td[data-label='Actions'] > button {
-  width: 100%;
+  width: auto;
   min-width: 0;
+  min-height: 32px !important;
+  height: 32px;
   justify-content: center;
 }
 
@@ -3149,14 +3481,17 @@ body.app-preview-mobile .document-checklist article {
   }
   .inventory-table td > * { min-width: 0; }
   .inventory-table .table-row-actions {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 6px;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
   }
   .inventory-table .table-row-actions button,
   .inventory-table td[data-label='Actions'] > button {
-    width: 100%;
+    width: auto;
     min-width: 0;
+    min-height: 32px !important;
+    height: 32px;
     justify-content: center;
   }
   :is(.inventory-stock-grid, .inventory-history-panel) .erp-table-wrap {

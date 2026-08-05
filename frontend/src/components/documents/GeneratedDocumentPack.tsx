@@ -147,7 +147,10 @@ export function GeneratedDocumentPackPanel({
     return Object.fromEntries(Object.entries(current).map(([key, value]) => [key, String(selectedPack.template_snapshot[key] ?? value)])) as DocumentPackTemplate
   }, [template, selectedPack])
   const locked = selectedPack?.status === 'final'
-  const renderAssets = useMemo(() => ({ customerSignatureUrl }), [customerSignatureUrl])
+  const renderAssets = useMemo(() => ({
+    customerSignatureUrl,
+    vendorSignatureUrl: settings.vendor_signature_image,
+  }), [customerSignatureUrl, settings.vendor_signature_image])
 
   useEffect(() => {
     setInput(defaults(snapshot, selectedPack, agentName))

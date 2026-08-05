@@ -10,6 +10,7 @@ import {
   X,
 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
+import { projectDisplayName } from '../../lib/project-name'
 import {
   decideQuotation,
   decideTransaction,
@@ -203,7 +204,7 @@ export function ApprovalCenterPage() {
                     </td>
                     <td data-label="Quote">
                       {quotation
-                        ? <div className="approval-quote-summary"><strong>{quotation.title}</strong><span>{currency.format(quotation.grand_total)}</span><small>{quotation.quotation_number} · {quotation.lines.length} item{quotation.lines.length === 1 ? '' : 's'}</small></div>
+                        ? <div className="approval-quote-summary"><strong>{projectDisplayName(quotation.title, item.customer_name)}</strong><span>{currency.format(quotation.grand_total)}</span><small>{quotation.quotation_number} · {quotation.lines.length} item{quotation.lines.length === 1 ? '' : 's'}</small></div>
                         : <span className="approval-muted">Not generated</span>}
                     </td>
                     <td data-label="Status"><span className={`workflow-status workflow-status--${quotation?.status || item.status}`}>{prettyStatus(quotation?.status || item.status)}</span></td>

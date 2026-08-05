@@ -1,7 +1,7 @@
 import type { DocumentPackInput, DocumentPackTab, DocumentPackTemplate } from './types'
 import { documentTabs, firstPartyActivities, secondPartyActivities, templateChecks, templateComponentSpecs, templateLines } from './template'
 import { amount, esc, expiryDate, money, safeName } from './format'
-import type { DocumentPackRenderAssets } from './signature'
+import { isSignatureDataUrl, type DocumentPackRenderAssets } from './signature'
 
 export function documentPackFilePrefix(input: DocumentPackInput, version?: number) {
   return `${safeName(input.customerName)}_${safeName(input.projectNumber || input.customerNumber)}${version ? `_v${version}` : ''}`
@@ -33,7 +33,11 @@ export function signature(input: DocumentPackInput, template: DocumentPackTempla
   const customerSignature = assets?.customerSignatureUrl
     ? `<img class="pack-doc__signature-image" src="${esc(assets.customerSignatureUrl)}" alt="Uploaded signature of ${esc(input.customerName)}">`
     : '<span class="pack-doc__signature-missing">Uploaded customer signature unavailable</span>'
-  return `<div class="pack-doc__signatures"><div class="pack-doc__signature pack-doc__signature--customer"><span>${esc(template.customer_signature_label || 'Customer')}</span>${customerSignature}<small class="pack-doc__signed-status">Uploaded customer signature</small></div><div class="pack-doc__signature"><span>${esc(template.vendor_signature_label || 'Vendor')}</span><strong>${esc(template.vendor_signatory_name || template.company_name || 'Company')}</strong><small>${esc(template.vendor_signatory_title || 'Authorized signatory')}</small></div></div>`
+  const vendorSignatureUrl = assets?.vendorSignatureUrl || template.vendor_signature_image
+  const vendorSignature = isSignatureDataUrl(vendorSignatureUrl)
+    ? `<img class="pack-doc__signature-image" src="${esc(vendorSignatureUrl)}" alt="Uploaded vendor signature">`
+    : ''
+  return `<div class="pack-doc__signatures"><div class="pack-doc__signature pack-doc__signature--customer"><span>${esc(template.customer_signature_label || 'Customer')}</span>${customerSignature}<small class="pack-doc__signed-status">Uploaded customer signature</small></div><div class="pack-doc__signature pack-doc__signature--vendor"><span>${esc(template.vendor_signature_label || 'Vendor')}</span>${vendorSignature}<strong>${esc(template.vendor_signatory_name || template.company_name || 'Company')}</strong><small>${esc(template.vendor_signatory_title || 'Authorized signatory')}</small></div></div>`
 }
 
 export function renderDocumentHtml(tab: Exclude<DocumentPackTab, 'full'>, input: DocumentPackInput, template: DocumentPackTemplate, assets?: DocumentPackRenderAssets) {

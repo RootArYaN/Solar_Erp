@@ -266,7 +266,6 @@ export function AdminPage({
         <section className="data-panel">
           <div className="data-panel__toolbar">
             <Field label="Search users" hideLabel prefix={<Search size={16} />} className="admin-search-field"><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search users" /></Field>
-            <span>{filteredUsers.length}</span>
           </div>
 
           {loading ? <div className="empty-state">Loading…</div> : filteredUsers.length === 0 ? <div className="empty-state">No users found</div> : (

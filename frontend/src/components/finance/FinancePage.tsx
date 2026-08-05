@@ -213,7 +213,7 @@ export function FinancePage({ session }: { session: Session }) {
     event.preventDefault(); if (!selectedBill) return; setWorking(true); const form = new FormData(event.currentTarget)
     try {
       await recordBillPayment(selectedBill.id, { transaction_date: form.get('transaction_date'), amount: Number(form.get('amount') || 0), account_id: form.get('account_id'), payment_method: form.get('payment_method'), reference_number: form.get('reference_number'), description: form.get('description') })
-      setDialog(null); setSelectedBill(null); await refreshAll(); toast({ message: 'Bill payment linked to one finance transaction', variant: 'success' })
+      setDialog(null); setSelectedBill(null); await refreshAll(); toast({ message: 'Bill payment recorded in the separate bill calculation', variant: 'success' })
     } catch (reason) { toast({ message: reason instanceof Error ? reason.message : 'Could not record bill payment', variant: 'error' }) }
     finally { setWorking(false) }
   }

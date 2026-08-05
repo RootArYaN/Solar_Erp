@@ -173,21 +173,21 @@ export function PosterUploadPage({ session }: { session: Session }) {
             <span className={`poster-format${row.mime_type === 'application/pdf' ? ' poster-format--pdf' : ''}`}>{row.mime_type === 'application/pdf' ? 'PDF' : 'IMAGE'}</span>
           </button>
           <div className="poster-card__body">
-            <span className="soft-badge">{row.category}</span>
             <h2>{row.title}</h2>
             <p>{row.description || row.file_name}</p>
             <small>Uploaded {date.format(new Date(row.created_at))}</small>
           </div>
           <footer className="poster-card__actions">
-            <button type="button" onClick={() => void openPreview(row)} disabled={previewingId === row.id} title="Preview poster"><Eye size={14} /><span>Preview</span></button>
-            <button type="button" onClick={() => void downloadStoredFile(row.file_id, row.file_name)} title="Download poster"><Download size={14} /><span>Download</span></button>
+            <button type="button" onClick={() => void openPreview(row)} disabled={previewingId === row.id} title="Preview poster"><Eye size={14} /></button>
+            <button type="button" onClick={() => void downloadStoredFile(row.file_id, row.file_name)} title="Download poster"><Download size={14} /></button>
             {access.canEdit && <>
-              <button type="button" onClick={() => setEditing(row)} title="Edit poster details"><Pencil size={14} /><span>Edit</span></button>
+              <button type="button" onClick={() => setEditing(row)} title="Edit poster details"><Pencil size={14} /></button>
+              <button className="poster-card__delete" type="button" onClick={() => setDeleting(row)} title="Remove poster"><Trash2 size={14} /></button>
               <button type="button" onClick={() => void movePoster(row)} disabled={working} title={row.status === 'active' ? 'Save to drafts' : 'Publish poster'}>
                 {row.status === 'active' ? <Archive size={14} /> : <Send size={14} />}
                 <span>{row.status === 'active' ? 'To drafts' : 'Publish'}</span>
               </button>
-              <button className="poster-card__delete" type="button" onClick={() => setDeleting(row)} title="Remove poster"><Trash2 size={14} /><span>Remove</span></button>
+              
             </>}
           </footer>
         </article>)}
@@ -222,7 +222,7 @@ export function PosterUploadPage({ session }: { session: Session }) {
         <header>
           <div><strong>{preview.poster.title}</strong><span>{preview.poster.file_name}</span></div>
           <div>
-            <button type="button" onClick={() => void downloadStoredFile(preview.poster.file_id, preview.poster.file_name)} title="Download poster"><Download size={14} /><span>Download</span></button>
+            <button type="button" onClick={() => void downloadStoredFile(preview.poster.file_id, preview.poster.file_name)} title="Download poster"><Download size={14} /></button>
             <button type="button" onClick={() => setPreview(null)} aria-label="Close preview"><X size={16} /></button>
           </div>
         </header>

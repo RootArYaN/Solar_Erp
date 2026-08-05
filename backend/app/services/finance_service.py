@@ -69,6 +69,9 @@ class FinanceConflictError(FinanceServiceError):
     status_code = 409
 
 
+BILL_PAYMENT_SOURCE_TYPES = ('sales_bill_payment', 'purchase_bill_payment')
+
+
 @dataclass(frozen=True)
 class FinanceKpis:
     money_in_month: float
@@ -115,6 +118,7 @@ def finance_kpis(db: Session, company_id: str, *, on_date: date | None = None, d
     transaction_filters = [
         FinanceTransaction.company_id == company_id,
         FinanceTransaction.status == 'posted',
+        FinanceTransaction.source_type.not_in(BILL_PAYMENT_SOURCE_TYPES),
     ]
     bill_date_filters = []
     if explicit_range:
@@ -363,7 +367,10 @@ def list_transactions(
     if category_id: filters.append(FinanceTransaction.category_id == category_id)
     if customer_id: filters.append(FinanceTransaction.customer_id == customer_id)
     if project_id: filters.append(FinanceTransaction.project_id == project_id)
-    if source_type: filters.append(FinanceTransaction.source_type == source_type)
+    if source_type:
+        filters.append(FinanceTransaction.source_type == source_type)
+    else:
+        filters.append(FinanceTransaction.source_type.not_in(BILL_PAYMENT_SOURCE_TYPES))
     if status: filters.append(FinanceTransaction.status == status)
     if date_from: filters.append(FinanceTransaction.transaction_date >= date_from)
     if date_to: filters.append(FinanceTransaction.transaction_date <= date_to)
@@ -1212,11 +1219,11 @@ def overview(db: Session, actor: CurrentSession, *, date_from: date | None = Non
     accounts = list_accounts(db, actor, as_of=range_end)
     bank_balance = sum(row.current_balance for row in accounts if row.account_type in {'bank', 'upi'})
     cash_balance = sum(row.current_balance for row in accounts if row.account_type in {'cash', 'petty_cash'})
-    recent_rows = list(db.scalars(select(FinanceTransaction).where(FinanceTransaction.company_id == company_id, FinanceTransaction.transaction_date >= range_start, FinanceTransaction.transaction_date <= range_end).order_by(FinanceTransaction.transaction_date.desc(), FinanceTransaction.created_at.desc()).limit(8)).all())
+    recent_rows = list(db.scalars(select(FinanceTransaction).where(FinanceTransaction.company_id == company_id, FinanceTransaction.source_type.not_in(BILL_PAYMENT_SOURCE_TYPES), FinanceTransaction.transaction_date >= range_start, FinanceTransaction.transaction_date <= range_end).order_by(FinanceTransaction.transaction_date.desc(), FinanceTransaction.created_at.desc()).limit(8)).all())
     pending_rows = list(db.scalars(select(Bill).where(Bill.company_id == company_id, Bill.balance_amount > 0, Bill.status != 'cancelled', Bill.bill_date >= range_start, Bill.bill_date <= range_end).order_by(Bill.due_date.asc().nullslast()).limit(8)).all())
     expense_rows = db.execute(select(FinanceCategory.name, func.sum(FinanceTransaction.amount)).join(FinanceTransaction, FinanceTransaction.category_id == FinanceCategory.id).where(FinanceTransaction.company_id == company_id, FinanceTransaction.direction == 'debit', FinanceTransaction.source_type == 'expense', FinanceTransaction.status == 'posted', FinanceTransaction.transaction_date >= range_start, FinanceTransaction.transaction_date <= range_end).group_by(FinanceCategory.name).order_by(func.sum(FinanceTransaction.amount).desc()).limit(8)).all()
     month_bucket = func.to_char(func.date_trunc('month', FinanceTransaction.transaction_date), 'YYYY-MM')
-    flow_rows = db.execute(select(month_bucket, FinanceTransaction.direction, func.sum(FinanceTransaction.amount)).where(FinanceTransaction.company_id == company_id, FinanceTransaction.status == 'posted', FinanceTransaction.transaction_date >= range_start, FinanceTransaction.transaction_date <= range_end).group_by(month_bucket, FinanceTransaction.direction).order_by(month_bucket.desc()).limit(24)).all()
+    flow_rows = db.execute(select(month_bucket, FinanceTransaction.direction, func.sum(FinanceTransaction.amount)).where(FinanceTransaction.company_id == company_id, FinanceTransaction.status == 'posted', FinanceTransaction.source_type.not_in(BILL_PAYMENT_SOURCE_TYPES), FinanceTransaction.transaction_date >= range_start, FinanceTransaction.transaction_date <= range_end).group_by(month_bucket, FinanceTransaction.direction).order_by(month_bucket.desc()).limit(24)).all()
     flow_map: dict[str, dict[str, float | str]] = {}
     for month, direction, amount in flow_rows:
         bucket = flow_map.setdefault(str(month), {'month': str(month), 'money_in': 0.0, 'money_out': 0.0})

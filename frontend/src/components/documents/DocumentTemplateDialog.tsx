@@ -1,8 +1,11 @@
-import { Save } from 'lucide-react'
-import type { FormEvent } from 'react'
+import { Image, ImagePlus, RefreshCw, Save, Trash2 } from 'lucide-react'
+import { useRef, useState } from 'react'
+import type { ChangeEvent, FormEvent } from 'react'
 import type { DocumentTemplate } from '../../erp-types'
-import type { DocumentPackTemplate } from '../../lib/document-pack'
+import { isSignatureDataUrl, prepareVendorSignature, type DocumentPackTemplate } from '../../lib/document-pack'
 import { Modal } from '../admin/Modal'
+
+const MAX_VENDOR_SIGNATURE_BYTES = 5 * 1024 * 1024
 
 export function DocumentTemplateDialog({
   template,
@@ -17,6 +20,36 @@ export function DocumentTemplateDialog({
   onClose: () => void
   onSubmit: (event: FormEvent<HTMLFormElement>) => void
 }) {
+  const signatureInputRef = useRef<HTMLInputElement>(null)
+  const [vendorSignatureImage, setVendorSignatureImage] = useState(() => isSignatureDataUrl(settings.vendor_signature_image) ? settings.vendor_signature_image : '')
+  const [signatureError, setSignatureError] = useState('')
+  const [preparingSignature, setPreparingSignature] = useState(false)
+
+  async function selectVendorSignature(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    if (file.size > MAX_VENDOR_SIGNATURE_BYTES) {
+      setSignatureError('Use a vendor signature image smaller than 5 MB.')
+      return
+    }
+    setPreparingSignature(true)
+    setSignatureError('')
+    try {
+      const prepared = await prepareVendorSignature(file)
+      setVendorSignatureImage(prepared.dataUrl)
+    } catch (reason) {
+      setSignatureError(reason instanceof Error ? reason.message : 'Could not prepare the vendor signature image.')
+    } finally {
+      setPreparingSignature(false)
+    }
+  }
+
+  function removeVendorSignature() {
+    setVendorSignatureImage('')
+    setSignatureError('')
+  }
+
   return (
     <Modal
       className="document-template-modal"
@@ -24,7 +57,13 @@ export function DocumentTemplateDialog({
       subtitle="Controls branding, document wording, specifications, legal clauses, and signature blocks for every generated customer pack."
       onClose={onClose}
     >
-      <form className="erp-form document-template-form" onSubmit={onSubmit}>
+      <form className="erp-form document-template-form" onSubmit={(event) => {
+        if (preparingSignature) {
+          event.preventDefault()
+          return
+        }
+        onSubmit(event)
+      }}>
         <fieldset>
           <legend>Template and company identity</legend>
           <div className="erp-form-grid">
@@ -83,18 +122,45 @@ export function DocumentTemplateDialog({
 
         <fieldset>
           <legend>Signature blocks</legend>
-          <p className="document-template-help">Set signature captions for previews and exports.</p>
+          <p className="document-template-help">Set signature captions and the vendor signature used in previews and generated exports.</p>
           <div className="erp-form-grid">
             <label><span>Customer signature label</span><input name="customer_signature_label" defaultValue={settings.customer_signature_label} /></label>
             <label><span>Vendor signature label</span><input name="vendor_signature_label" defaultValue={settings.vendor_signature_label} /></label>
             <label><span>Vendor signatory name</span><input name="vendor_signatory_name" defaultValue={settings.vendor_signatory_name} placeholder={settings.company_name || 'Company name'} /></label>
             <label className="erp-form-wide"><span>Vendor signatory title</span><input name="vendor_signatory_title" defaultValue={settings.vendor_signatory_title} /></label>
+            <div className="erp-form-wide document-template-signature-field">
+              <span className="document-template-signature-field__label">Vendor signature image</span>
+              <input type="hidden" name="vendor_signature_image" value={vendorSignatureImage} />
+              <input
+                ref={signatureInputRef}
+                className="document-template-signature-field__input"
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                tabIndex={-1}
+                aria-hidden="true"
+                onChange={(event) => void selectVendorSignature(event)}
+              />
+              <div className={`document-template-signature${vendorSignatureImage ? ' has-image' : ''}`}>
+                <div className="document-template-signature__preview">
+                  {vendorSignatureImage
+                    ? <img src={vendorSignatureImage} alt="Vendor signature preview" />
+                    : <><Image size={22} aria-hidden="true" /><span>No vendor signature added</span></>}
+                </div>
+                <div className="document-template-signature__actions">
+                  {!vendorSignatureImage && <button type="button" onClick={() => signatureInputRef.current?.click()} disabled={preparingSignature} aria-label="Add vendor signature" title="Add vendor signature"><ImagePlus size={16} /></button>}
+                  {vendorSignatureImage && <button type="button" onClick={() => signatureInputRef.current?.click()} disabled={preparingSignature} aria-label="Replace vendor signature" title="Replace vendor signature"><RefreshCw className={preparingSignature ? 'spin' : ''} size={16} /></button>}
+                  {vendorSignatureImage && <button type="button" className="is-remove" onClick={removeVendorSignature} disabled={preparingSignature} aria-label="Remove vendor signature" title="Remove vendor signature"><Trash2 size={16} /></button>}
+                </div>
+              </div>
+              {signatureError && <small className="document-template-signature__error" role="alert">{signatureError}</small>}
+              {!signatureError && <small>JPG, PNG, or WebP · saved with each generated document version</small>}
+            </div>
           </div>
         </fieldset>
 
         <footer className="erp-form-actions">
           <button type="button" className="secondary-button" onClick={onClose}>Cancel</button>
-          <button className="primary-button" disabled={working}><Save size={14} /> {working ? 'Saving…' : 'Save complete template'}</button>
+          <button className="primary-button" disabled={working || preparingSignature}><Save size={14} /> {preparingSignature ? 'Preparing signature…' : working ? 'Saving…' : 'Save complete template'}</button>
         </footer>
       </form>
     </Modal>

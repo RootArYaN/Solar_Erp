@@ -1,4 +1,5 @@
 import { Edit3, Plus, RefreshCw, Search } from 'lucide-react'
+import { projectDisplayName } from '../../lib/project-name'
 import type { AgentCustomer, AgentListItem, AgentOverview } from '../../types'
 import { Button } from '../ui/Button'
 import { WorkspaceHeader, WorkspaceToolbar } from '../workspace'
@@ -97,7 +98,7 @@ export function AgentWorkspaceControls({
                 {searchResults.customers.map((customer) => (
                   <button type="button" key={customer.id} onClick={() => onSelectCustomer(customer)}>
                     <div className="customer-avatar">{customer.customer_name.slice(0, 1).toUpperCase()}</div>
-                    <span><strong>{customer.customer_name}</strong><small>{customer.consumer_number || customer.project_name || customer.customer_type}</small></span>
+                    <span><strong>{customer.customer_name}</strong><small>{customer.consumer_number || (customer.project_name ? projectDisplayName(customer.project_name, customer.customer_name) : customer.customer_type)}</small></span>
                   </button>
                 ))}
               </section>

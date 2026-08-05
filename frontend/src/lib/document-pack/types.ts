@@ -51,6 +51,7 @@ export type DocumentPackTemplate = {
   quotation_title: string
   customer_signature_label: string
   vendor_signature_label: string
+  vendor_signature_image: string
   vendor_signatory_name: string
   vendor_signatory_title: string
 }

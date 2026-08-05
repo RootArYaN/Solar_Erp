@@ -4,7 +4,7 @@ from datetime import UTC, date, datetime
 from decimal import Decimal
 from types import SimpleNamespace
 
-from app.services.finance_service import list_accounts, overview, profitability
+from app.services.finance_service import list_accounts, list_transactions, overview, profitability
 
 
 class _Result:
@@ -40,6 +40,23 @@ class _OverviewRecordingSession(_RecordingSession):
         return next(self._scalar_results)
 
 
+class _TransactionListRecordingSession:
+    def __init__(self):
+        self.statements = []
+
+    def scalar(self, statement):
+        self.statements.append(statement)
+        return 0
+
+    def execute(self, statement):
+        self.statements.append(statement)
+        return _Result(one=(Decimal('0'), Decimal('0')))
+
+    def scalars(self, statement):
+        self.statements.append(statement)
+        return _Result(all_rows=[])
+
+
 def _actor(company_id: str = 'company-1'):
     return SimpleNamespace(membership=SimpleNamespace(company_id=company_id))
 
@@ -64,6 +81,26 @@ def test_list_accounts_aggregates_all_balances_in_one_query():
     assert len(db.statements) == 1
     assert len(summaries) == 1
     assert summaries[0].current_balance == 230.0
+
+
+def test_transaction_ledger_excludes_bill_payment_calculations_by_default():
+    db = _TransactionListRecordingSession()
+
+    summary = list_transactions(db, _actor())
+
+    assert summary.total == 0
+    assert summary.data == []
+    assert all('finance_transactions.source_type NOT IN' in str(statement) for statement in db.statements)
+
+
+def test_expense_ledger_can_still_request_its_explicit_source_type():
+    db = _TransactionListRecordingSession()
+
+    list_transactions(db, _actor(), source_type='expense')
+
+    statements = [str(statement) for statement in db.statements]
+    assert all('finance_transactions.source_type =' in statement for statement in statements)
+    assert all('finance_transactions.source_type NOT IN' not in statement for statement in statements)
 
 
 def test_profitability_uses_three_fixed_aggregate_queries():
@@ -130,3 +167,7 @@ def test_overview_applies_the_range_to_transactions_bills_and_accounts():
     assert summary.money_in_month == 0
     assert summary.recent_transactions == []
     assert summary.pending_bills == []
+    assert 'finance_transactions.source_type NOT IN' in str(db.statements[0])
+    assert 'finance_transactions.source_type NOT IN' in str(db.scalar_statements[0])
+    assert 'finance_transactions.source_type NOT IN' in str(db.statements[-1])
+    assert 'finance_transactions.source_type NOT IN' not in str(db.statements[1])

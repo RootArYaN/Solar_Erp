@@ -17,6 +17,7 @@ import {
 import { motion } from 'motion/react'
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { projectDisplayName } from '../../lib/project-name'
 import { WORKSPACE_ROUTE_ACCESS } from '../../lib/workspace-routes'
 import {
   createAgentCustomer,
@@ -383,8 +384,6 @@ export function AgentOverviewPage({ session }: { session: Session }) {
               <div className="agent-contact-list">
                 <a href={`mailto:${overview.profile.email}`}><Mail size={17} /><span><small>Email</small><strong>{overview.profile.email}</strong></span></a>
                 {overview.profile.phone && <a href={`tel:${overview.profile.phone}`}><Phone size={17} /><span><small>Phone</small><strong>{overview.profile.phone}</strong></span></a>}
-                {overview.profile.alternate_phone && <a href={`tel:${overview.profile.alternate_phone}`}><Phone size={17} /><span><small>Alternate phone</small><strong>{overview.profile.alternate_phone}</strong></span></a>}
-                {formatAddress(overview) && <div><MapPin size={17} /><span><small>Address</small><strong>{formatAddress(overview)}</strong></span></div>}
               </div>
             </motion.article>
 
@@ -430,15 +429,15 @@ export function AgentOverviewPage({ session }: { session: Session }) {
                       {filteredCustomers.map((customer) => (
                         <tr key={customer.id}>
                           <td data-label="Customer"><div className="customer-identity"><div className="customer-avatar">{customer.customer_name.slice(0, 1)}</div><span><strong>{customer.customer_name}</strong><small>{customer.consumer_number || customer.customer_type}</small></span></div></td>
-                          <td data-label="Contact"><div className="table-contact"><strong>{customer.phone || '—'}</strong><small>{customer.email || customer.address}</small></div></td>
-                          <td data-label="Project"><strong className="project-name">{customer.project_name || 'Not assigned'}</strong>{customer.project_number && <small>{customer.project_number} · {customer.project_status?.replaceAll('_', ' ')}</small>}</td>
+                          <td data-label="Contact"><div className="table-contact"><strong>{customer.phone || '—'}</strong></div></td>
+                          <td data-label="Project"><strong className="project-name">{customer.project_name ? projectDisplayName(customer.project_name, customer.customer_name) : 'Not assigned'}</strong></td>
                           <td data-label="Workflow"><span className={`workflow-status workflow-status--${customer.quotation_status || customer.quotation_request_status || 'not_requested'}`}>{(customer.quotation_status || customer.quotation_request_status || 'not requested').replaceAll('_', ' ')}</span></td>
                           <td data-label="Status"><span className={`customer-status customer-status--${customer.status}`}>{customer.status.replaceAll('_', ' ')}</span></td>
                           <td data-label="Outstanding" className="numeric-cell"><strong>{currency.format(customer.outstanding_balance)}</strong></td>
                           <td data-label="Action"><div className="agent-customer-actions">
-                            {customer.approved_quotation && <button className="table-action-button table-action-button--download" type="button" onClick={() => void downloadApprovedQuotation(customer)}><Download size={12} /> Download quote</button>}
-                            {canOpenDocuments && customer.approved_quotation && customer.project_id && <button className="table-action-button table-action-button--neutral" type="button" onClick={() => navigate(`${WORKSPACE_ROUTE_ACCESS.documents.path}?customer=${encodeURIComponent(customer.id)}`)}><FileText size={12} /> Documents</button>}
-                            {customer.can_edit && <button className="table-action-button table-action-button--neutral" type="button" onClick={() => setEditingCustomer(customer)}><Edit3 size={12} /> Edit</button>}
+                            {customer.approved_quotation && <button className="table-action-button table-action-button--download" type="button" onClick={() => void downloadApprovedQuotation(customer)}><Download size={12} /></button>}
+                            {canOpenDocuments && customer.approved_quotation && customer.project_id && <button className="table-action-button table-action-button--neutral" type="button" onClick={() => navigate(`${WORKSPACE_ROUTE_ACCESS.documents.path}?customer=${encodeURIComponent(customer.id)}`)}><FileText size={12} /></button>}
+                            {customer.can_edit && <button className="table-action-button table-action-button--neutral" type="button" onClick={() => setEditingCustomer(customer)}><Edit3 size={12} /></button>}
                             {canRequestQuotations && !['pending', 'quotation_ready', 'pending_approval', 'approved'].includes(customer.quotation_status || customer.quotation_request_status || '')
                               ? <button className="table-action-button" type="button" onClick={() => setQuotationCustomer(customer)}>Request quotation</button>
                               : !customer.approved_quotation && !customer.can_edit && <small>{customer.project_number ? 'Project created' : customer.quotation_request_status ? 'With admin' : '—'}</small>}
@@ -478,7 +477,7 @@ export function AgentOverviewPage({ session }: { session: Session }) {
                           <td data-label="Debit" className="numeric-cell amount-debit">{transaction.debit > 0 ? currency.format(transaction.debit) : '—'}</td>
                           <td data-label="Credit" className="numeric-cell amount-credit">{transaction.credit > 0 ? currency.format(transaction.credit) : '—'}</td>
                           <td data-label="Balance" className="numeric-cell"><strong>{currency.format(transaction.running_balance)}</strong></td>
-                          {canPostTransactions && <td data-label="Action"><div className="agent-transaction-actions">{(canManageAgentTransactions || transaction.approval_status === 'pending') && <button className="table-action-button table-action-button--neutral" type="button" onClick={() => setEditingTransaction(transaction)}><Edit3 size={12} /> Edit</button>}<button className="danger-icon-button" type="button" onClick={() => setTransactionToDelete(transaction)} aria-label={`Delete transaction ${transaction.reference || transaction.id}`} title="Delete transaction"><Trash2 size={14} /></button></div></td>}
+                          {canPostTransactions && <td data-label="Action"><div className="agent-transaction-actions">{(canManageAgentTransactions || transaction.approval_status === 'pending') && <button className="table-action-button table-action-button--neutral" type="button" onClick={() => setEditingTransaction(transaction)}><Edit3 size={12} /></button>}<button className="danger-icon-button" type="button" onClick={() => setTransactionToDelete(transaction)} aria-label={`Delete transaction ${transaction.reference || transaction.id}`} title="Delete transaction"><Trash2 size={14} /></button></div></td>}
                         </tr>
                       ))}
                     </tbody>

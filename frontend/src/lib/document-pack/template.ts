@@ -96,6 +96,7 @@ export const defaultDocumentPackTemplate: DocumentPackTemplate = {
   quotation_title: 'Solar Quotation',
   customer_signature_label: 'Customer',
   vendor_signature_label: 'Vendor',
+  vendor_signature_image: '',
   vendor_signatory_name: '',
   vendor_signatory_title: 'Authorized signatory',
 }

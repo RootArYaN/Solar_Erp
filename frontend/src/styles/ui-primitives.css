@@ -49,11 +49,19 @@
 
 .ui-button--primary {
   color: #fff;
-  border-color: #bd7914;
-  background: linear-gradient(135deg, #d99a22, #b96f0f);
-  box-shadow: 0 6px 16px rgba(177, 105, 13, 0.16);
+  border-color: var(--ui-color-accent);
+  background: var(--ui-color-accent);
+  box-shadow: none;
 }
-.ui-button--primary:hover:not(:disabled) { background: linear-gradient(135deg, #d1911c, #a9620c); }
+.ui-button--primary:hover:not(:disabled) {
+  border-color: var(--ui-color-accent-strong);
+  background: var(--ui-color-accent-strong);
+  transform: none;
+}
+.ui-button--primary:active:not(:disabled) {
+  border-color: #8f570a;
+  background: #8f570a;
+}
 
 .ui-button--secondary {
   color: #3d4957;

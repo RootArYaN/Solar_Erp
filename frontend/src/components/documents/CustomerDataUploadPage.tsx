@@ -8,7 +8,7 @@ import type { Customer, CustomerFlowSnapshot } from '../../contracts/domain-cont
 import type { DocumentTemplate, GeneratedDocumentPack } from '../../erp-types'
 import { getModuleAccess, hasPermission, PERMISSIONS } from '../../lib/permissions'
 import { createCustomerFlowRepository } from '../../lib/repositories/customer-flow-repository'
-import { createDocumentPackPdf, documentPackFilePrefix, isCustomerSignatureFile, isEmbeddableSignatureFile, loadCustomerSignature, normalizeDocumentPackTemplate, type DocumentPackInput, type LoadedCustomerSignature } from '../../lib/document-pack'
+import { createDocumentPackPdf, documentPackFilePrefix, isCustomerSignatureFile, isEmbeddableSignatureFile, loadCustomerSignature, normalizeDocumentPackTemplate, prepareVendorSignatureDataUrl, type DocumentPackInput, type LoadedCustomerSignature } from '../../lib/document-pack'
 import { fileUploadRules, validateUploadFile } from '../../lib/file-validation'
 import type { Session, StoredFile } from '../../types'
 import { Modal } from '../admin/Modal'
@@ -231,10 +231,13 @@ export function CustomerDataUploadPage({ session }: { session: Session }) {
     }
     setWorking(true)
     try {
+      const settings = settingsFrom(template)
+      const vendorSignature = status === 'generated'
+        ? await prepareVendorSignatureDataUrl(settings.vendor_signature_image)
+        : undefined
       const pack = await saveGeneratedDocumentPack(snapshot.customer.id, { input_snapshot: input, status })
       if (status === 'generated') {
-        const settings = settingsFrom(template)
-        const blob = await createDocumentPackPdf(input, settings, 'all', customerSignature?.pdf)
+        const blob = await createDocumentPackPdf(input, settings, 'all', customerSignature?.pdf, vendorSignature)
         const fileName = `${documentPackFilePrefix(input, pack.version)}_Full_Document_Pack.pdf`
         await uploadStoredFile({
           file: new File([blob], fileName, { type: 'application/pdf' }),

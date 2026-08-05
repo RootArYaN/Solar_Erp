@@ -2,6 +2,7 @@ import { FileText, History, Pencil, Plus, Search, Upload } from 'lucide-react'
 import { useEffect, useState, type ChangeEvent } from 'react'
 import type { CustomerFlowSnapshot, CustomerPayment } from '../../contracts/domain-contracts'
 import { downloadStoredFile } from '../../api/files'
+import { projectDisplayName } from '../../lib/project-name'
 import { EmptyState } from '../ui/PageState'
 import { dateTime, label, money, shortDate } from './customer-workspace-utils'
 
@@ -19,7 +20,7 @@ export function OverviewTab({ snapshot }: { snapshot: CustomerFlowSnapshot }) {
 
 export function ProjectsTab({ snapshot }: { snapshot: CustomerFlowSnapshot }) {
   if (!snapshot.projects.length) return <EmptyState title="No project yet" message="Approve a quotation to create the customer project." />
-  return <div className="erp-table-wrap customer-tab-table"><table className="erp-table"><thead><tr><th>Project</th><th>Site / capacity</th><th>Payment</th><th>Documentation</th><th>Material</th><th>Installation</th><th>Subsidy</th></tr></thead><tbody>{snapshot.projects.map((row) => <tr key={row.id}><td><strong>{row.record_number}</strong><small>{row.name}</small></td><td>{row.capacity_kw} kW<small>{row.site_address}</small></td><td><span className="soft-badge">{label(row.payment_mode || 'Pending')}</span></td><td>{label(row.documentation_status)}</td><td>{label(row.material_status)}</td><td>{label(row.installation_status)}</td><td>{label(row.subsidy_status)}</td></tr>)}</tbody></table></div>
+  return <div className="erp-table-wrap customer-tab-table"><table className="erp-table"><thead><tr><th>Project</th><th>Site / capacity</th><th>Payment</th><th>Documentation</th><th>Material</th><th>Installation</th><th>Subsidy</th></tr></thead><tbody>{snapshot.projects.map((row) => <tr key={row.id}><td><strong>{row.record_number}</strong><small>{projectDisplayName(row.name, snapshot.customer.display_name)}</small></td><td>{row.capacity_kw} kW<small>{row.site_address}</small></td><td><span className="soft-badge">{label(row.payment_mode || 'Pending')}</span></td><td>{label(row.documentation_status)}</td><td>{label(row.material_status)}</td><td>{label(row.installation_status)}</td><td>{label(row.subsidy_status)}</td></tr>)}</tbody></table></div>
 }
 
 export function TimelineTab({ snapshot }: { snapshot: CustomerFlowSnapshot }) {

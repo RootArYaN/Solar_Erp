@@ -14,6 +14,7 @@ import {
   WalletCards,
 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { projectDisplayName } from '../../lib/project-name'
 import {
   getProjectTimeline,
   getProjectTimelines,
@@ -257,7 +258,7 @@ export function ProjectTimelinePage() {
                 <header className="timeline-project-header">
                   <div className="timeline-project-heading">
                     <span className="timeline-project-icon"><UserRound size={20} /></span>
-                    <div><small>{timeline.project_number}</small><h1>{timeline.customer_name}</h1><p>{timeline.project_name}</p></div>
+                    <div><small>{timeline.project_number}</small><h1>{timeline.customer_name}</h1><p>{projectDisplayName(timeline.project_name, timeline.customer_name)}</p></div>
                   </div>
                   <div className="timeline-header-status"><span>{timeline.current_step_name}</span><strong>{timeline.progress}%</strong></div>
                 </header>

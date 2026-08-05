@@ -81,7 +81,12 @@ export class DocumentPackPdfLayout {
   private currentTitle = ''
   private currentSubtitle = ''
 
-  constructor(private input: DocumentPackInput, private template: DocumentPackTemplate, private customerSignature?: PdfSignatureImage) {}
+  constructor(
+    private input: DocumentPackInput,
+    private template: DocumentPackTemplate,
+    private customerSignature?: PdfSignatureImage,
+    private vendorSignature?: PdfSignatureImage,
+  ) {}
 
   private command(value: string) {
     this.page?.commands.push(value)
@@ -286,8 +291,22 @@ export class DocumentPackPdfLayout {
     this.line(PDF_MARGIN_X, this.cursorTop + 50, PDF_MARGIN_X + columnWidth, this.cursorTop + 50, '#9aa6b4', 0.65)
     this.text(PDF_MARGIN_X, this.cursorTop + 57, 'Uploaded customer signature', 7.2, false, PDF_MUTED)
     this.text(vendorX, this.cursorTop + 14, this.template.vendor_signature_label || 'Vendor', 7.6, false, PDF_MUTED)
-    this.text(vendorX, this.cursorTop + 31, this.template.vendor_signatory_name || this.template.company_name || 'Company', 9, true, PDF_INK)
-    this.text(vendorX, this.cursorTop + 48, this.template.vendor_signatory_title || 'Authorized signatory', 7.6, false, PDF_MUTED)
+    if (this.vendorSignature) {
+      const maxWidth = columnWidth - 8
+      const maxHeight = 34
+      const scale = Math.min(maxWidth / this.vendorSignature.width, maxHeight / this.vendorSignature.height)
+      const width = this.vendorSignature.width * scale
+      const imageHeight = this.vendorSignature.height * scale
+      const x = vendorX + 4
+      const top = this.cursorTop + 14 + ((maxHeight - imageHeight) / 2)
+      this.command(`q ${width.toFixed(2)} 0 0 ${imageHeight.toFixed(2)} ${x.toFixed(2)} ${(PDF_HEIGHT - top - imageHeight).toFixed(2)} cm /VendorSig Do Q`)
+      this.line(vendorX, this.cursorTop + 50, vendorX + columnWidth, this.cursorTop + 50, '#9aa6b4', 0.65)
+      this.text(vendorX, this.cursorTop + 57, this.template.vendor_signatory_name || this.template.company_name || 'Company', 8, true, PDF_INK)
+      this.text(vendorX, this.cursorTop + 69, this.template.vendor_signatory_title || 'Authorized signatory', 7.2, false, PDF_MUTED)
+    } else {
+      this.text(vendorX, this.cursorTop + 31, this.template.vendor_signatory_name || this.template.company_name || 'Company', 9, true, PDF_INK)
+      this.text(vendorX, this.cursorTop + 48, this.template.vendor_signatory_title || 'Authorized signatory', 7.6, false, PDF_MUTED)
+    }
     this.cursorTop += height
   }
 
@@ -476,10 +495,21 @@ export function buildDocumentPackPdfStreams(input: DocumentPackInput, template: 
   return layout.finish()
 }
 
-export function buildPdfBlobFromStreams(streams: string[], marker = 'ERP-DOCUMENT', customerSignature?: PdfSignatureImage) {
+function pdfImageObject(signatureImage: PdfSignatureImage) {
+  const chunks: string[] = []
+  for (let offset = 0; offset < signatureImage.bytes.length; offset += 8192) {
+    chunks.push(Array.from(signatureImage.bytes.subarray(offset, offset + 8192), (byte) => byte.toString(16).padStart(2, '0')).join(''))
+  }
+  const imageHex = `${chunks.join('')}>`
+  return `<< /Type /XObject /Subtype /Image /Width ${signatureImage.width} /Height ${signatureImage.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter [/ASCIIHexDecode /DCTDecode] /Length ${imageHex.length} >>\nstream\n${imageHex}\nendstream`
+}
+
+export function buildPdfBlobFromStreams(streams: string[], marker = 'ERP-DOCUMENT', customerSignature?: PdfSignatureImage, vendorSignature?: PdfSignatureImage) {
   const objects: string[] = []
   const pageIds = streams.map((_, index) => 6 + (index * 2))
-  const signatureObjectId = customerSignature ? 5 + (streams.length * 2) : null
+  const firstImageObjectId = 5 + (streams.length * 2)
+  const signatureObjectId = customerSignature ? firstImageObjectId : null
+  const vendorSignatureObjectId = vendorSignature ? firstImageObjectId + (customerSignature ? 1 : 0) : null
   objects[1] = '<< /Type /Catalog /Pages 2 0 R >>'
   objects[2] = `<< /Type /Pages /Kids [${pageIds.map((id) => `${id} 0 R`).join(' ')}] /Count ${pageIds.length} >>`
   objects[3] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>'
@@ -488,16 +518,18 @@ export function buildPdfBlobFromStreams(streams: string[], marker = 'ERP-DOCUMEN
     const contentId = 5 + (index * 2)
     const pageId = contentId + 1
     objects[contentId] = `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`
-    const signatureResource = signatureObjectId ? ` /XObject << /Sig ${signatureObjectId} 0 R >>` : ''
+    const imageResources = [
+      signatureObjectId ? `/Sig ${signatureObjectId} 0 R` : '',
+      vendorSignatureObjectId ? `/VendorSig ${vendorSignatureObjectId} 0 R` : '',
+    ].filter(Boolean).join(' ')
+    const signatureResource = imageResources ? ` /XObject << ${imageResources} >>` : ''
     objects[pageId] = `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${PDF_WIDTH} ${PDF_HEIGHT}] /Resources << /Font << /F1 3 0 R /F2 4 0 R >>${signatureResource} >> /Contents ${contentId} 0 R >>`
   })
   if (customerSignature && signatureObjectId) {
-    const chunks: string[] = []
-    for (let offset = 0; offset < customerSignature.bytes.length; offset += 8192) {
-      chunks.push(Array.from(customerSignature.bytes.subarray(offset, offset + 8192), (byte) => byte.toString(16).padStart(2, '0')).join(''))
-    }
-    const imageHex = `${chunks.join('')}>`
-    objects[signatureObjectId] = `<< /Type /XObject /Subtype /Image /Width ${customerSignature.width} /Height ${customerSignature.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter [/ASCIIHexDecode /DCTDecode] /Length ${imageHex.length} >>\nstream\n${imageHex}\nendstream`
+    objects[signatureObjectId] = pdfImageObject(customerSignature)
+  }
+  if (vendorSignature && vendorSignatureObjectId) {
+    objects[vendorSignatureObjectId] = pdfImageObject(vendorSignature)
   }
   let pdf = `%PDF-1.4\n%${plainAscii(marker).replace(/\s+/g, '-').toUpperCase()}\n`
   const offsets = [0]
@@ -512,17 +544,17 @@ export function buildPdfBlobFromStreams(streams: string[], marker = 'ERP-DOCUMEN
   return new Blob([pdf], { type: 'application/pdf' })
 }
 
-export function buildFormattedPdf(input: DocumentPackInput, template: DocumentPackTemplate, selected: Exclude<DocumentPackTab, 'full'> | 'all', customerSignature?: PdfSignatureImage) {
-  const layout = new DocumentPackPdfLayout(input, template, customerSignature)
-  return buildPdfBlobFromStreams(buildDocumentPackPdfStreams(input, template, selected, layout), 'ERP-DOCUMENT-PACK', customerSignature)
+export function buildFormattedPdf(input: DocumentPackInput, template: DocumentPackTemplate, selected: Exclude<DocumentPackTab, 'full'> | 'all', customerSignature?: PdfSignatureImage, vendorSignature?: PdfSignatureImage) {
+  const layout = new DocumentPackPdfLayout(input, template, customerSignature, vendorSignature)
+  return buildPdfBlobFromStreams(buildDocumentPackPdfStreams(input, template, selected, layout), 'ERP-DOCUMENT-PACK', customerSignature, vendorSignature)
 }
 
-export async function createDocumentPackPdf(input: DocumentPackInput, template: DocumentPackTemplate, selected: Exclude<DocumentPackTab, 'full'> | 'all' = 'all', customerSignature?: PdfSignatureImage) {
-  return buildFormattedPdf(input, template, selected, customerSignature)
+export async function createDocumentPackPdf(input: DocumentPackInput, template: DocumentPackTemplate, selected: Exclude<DocumentPackTab, 'full'> | 'all' = 'all', customerSignature?: PdfSignatureImage, vendorSignature?: PdfSignatureImage) {
+  return buildFormattedPdf(input, template, selected, customerSignature, vendorSignature)
 }
 
-export async function downloadDocumentPackPdf(input: DocumentPackInput, template: DocumentPackTemplate, selected: Exclude<DocumentPackTab, 'full'> | 'all', version?: number, customerSignature?: PdfSignatureImage) {
-  const blob = await createDocumentPackPdf(input, template, selected, customerSignature)
+export async function downloadDocumentPackPdf(input: DocumentPackInput, template: DocumentPackTemplate, selected: Exclude<DocumentPackTab, 'full'> | 'all', version?: number, customerSignature?: PdfSignatureImage, vendorSignature?: PdfSignatureImage) {
+  const blob = await createDocumentPackPdf(input, template, selected, customerSignature, vendorSignature)
   const url = URL.createObjectURL(blob)
   const anchor = document.createElement('a')
   const part = selected === 'all' ? 'Merged_Document_Pack' : documentTabs.find((item) => item.key === selected)?.file || selected

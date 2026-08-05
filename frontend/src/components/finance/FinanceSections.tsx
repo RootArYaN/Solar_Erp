@@ -1,5 +1,6 @@
 import { ArrowDownLeft, ArrowRightLeft, ArrowUpRight, BadgeIndianRupee, Banknote, BarChart3, CalendarDays, Download, FileSpreadsheet, FileText, Landmark, Pencil, Plus, ReceiptText, RotateCcw, Search, Trash2, Upload, X } from 'lucide-react'
 import type { Bill, BillList, CompanyLoan, FinanceOverview, FinanceTransaction, FinanceTransactionList, FinancialAccount, Profitability } from '../../erp-types'
+import { DateFilterInput } from '../ui/DateFilterInput'
 import { EmptyState } from '../ui/PageState'
 import { KpiGrid } from '../workspace'
 import { exportLedgerCsv, label, money, monthStart, shortDate, today, toDateInputValue } from './finance-utils'
@@ -13,8 +14,8 @@ type DateRangeProps = {
 
 function DateRangeFields({ dateFrom, setDateFrom, dateTo, setDateTo }: DateRangeProps) {
   return <>
-    <label className="finance-date-field"><input type="date" value={dateFrom} max={dateTo} onChange={(event) => setDateFrom(event.target.value)} required /></label>
-    <label className="finance-date-field"><input type="date" value={dateTo} min={dateFrom} onChange={(event) => setDateTo(event.target.value)} required /></label>
+    <DateFilterInput className="finance-date-field" value={dateFrom} max={dateTo} onChange={setDateFrom} ariaLabel="From date" required />
+    <DateFilterInput className="finance-date-field" value={dateTo} min={dateFrom} onChange={setDateTo} ariaLabel="To date" required />
   </>
 }
 
@@ -73,15 +74,17 @@ export function Transactions({ data, rows, search, setSearch, direction, setDire
       <article><span>Entries</span><strong>{data?.total ?? 0}</strong></article>
     </section>
     <div className="finance-ledger-toolbar">
-      <label className="finance-ledger-field"><input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} /></label>
-      <label className="finance-ledger-field"><input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} /></label>
-      <label className="finance-ledger-field finance-ledger-direction"><select value={direction} onChange={(event) => setDirection(event.target.value)}><option value="">All</option><option value="credit">Money in</option><option value="debit">Money out</option></select></label>
+      <DateFilterInput className="finance-ledger-field" value={dateFrom} max={dateTo} onChange={setDateFrom} ariaLabel="From date" />
+      <DateFilterInput className="finance-ledger-field" value={dateTo} min={dateFrom} onChange={setDateTo} ariaLabel="To date" />
+      <label className="finance-ledger-field finance-ledger-direction"><select value={direction} onChange={(event) => setDirection(event.target.value)} aria-label="Transaction direction"><option value="">All</option><option value="credit">Money in</option><option value="debit">Money out</option></select></label>
       <label className="finance-ledger-search"><Search size={13} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search ledger" aria-label="Search ledger" /></label>
-      <button className="secondary-button finance-ledger-apply" onClick={reload}>Apply</button>
-      {reportMode && <div className="finance-ledger-export">
-        <button className="secondary-button" onClick={() => exportLedgerCsv(rows)}><FileSpreadsheet size={13} /> CSV</button>
-        <button className="secondary-button" onClick={() => window.print()}><FileText size={13} /> Print</button>
-      </div>}
+      <div className={`finance-ledger-actions ${reportMode ? 'finance-ledger-actions--report' : ''}`.trim()}>
+        <button className="secondary-button finance-ledger-apply" onClick={reload}>Apply</button>
+        {reportMode && <>
+          <button className="secondary-button" onClick={() => exportLedgerCsv(rows)}><FileSpreadsheet size={13} /> CSV</button>
+          <button className="secondary-button" onClick={() => window.print()}><FileText size={13} /> Print</button>
+        </>}
+      </div>
     </div>
     <TransactionTable rows={rows} canEdit={canEdit && !reportMode} onEdit={onEdit} onReverse={onReverse} onDelete={onDelete} />
   </>
@@ -102,8 +105,8 @@ export function Expenses({ data, dateFrom, setDateFrom, dateTo, setDateTo, reloa
         <button onClick={() => { const d = new Date(); d.setDate(d.getDate() - 6); setDateFrom(toDateInputValue(d)); setDateTo(today()) }}>This week</button>
         <button onClick={() => { setDateFrom(monthStart()); setDateTo(today()) }}>This month</button>
       </div>
-      <label className="finance-expense-date"><input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} /></label>
-      <label className="finance-expense-date"><input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} /></label>
+      <DateFilterInput className="finance-expense-date" value={dateFrom} max={dateTo} onChange={setDateFrom} ariaLabel="Expense from date" />
+      <DateFilterInput className="finance-expense-date" value={dateTo} min={dateFrom} onChange={setDateTo} ariaLabel="Expense to date" />
       <button className="secondary-button finance-expense-apply" onClick={reload}>Apply</button>
       {canEdit && <button className="primary-button finance-expense-create" onClick={onAdd}><Plus size={14} /> Add expense</button>}
     </div>

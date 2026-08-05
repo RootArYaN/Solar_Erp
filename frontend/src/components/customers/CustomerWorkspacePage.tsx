@@ -269,11 +269,25 @@ export function CustomerWorkspacePage({ session }: { session: Session }) {
         <main className="customer-workspace">
           {detailLoading || !snapshot ? <LoadingSkeleton rows={7} /> : <>
             <header className="customer-workspace__header">
-              <div className="customer-title-block"><span className="customer-title-icon">{snapshot.customer.display_name.slice(0, 1)}</span><div><div className="customer-title-meta"><span>{snapshot.customer.record_number}</span><span>{label(snapshot.customer.customer_type)}</span><span className={`status-badge status-badge--${snapshot.customer.status}`}>{label(snapshot.customer.status)}</span></div><h1>{snapshot.customer.display_name}</h1><p><Phone size={13} /> {snapshot.customer.contacts[0]?.phone || 'No phone'} <MapPin size={13} /> {snapshot.customer.site_address || 'Site address pending'}</p></div></div>
-              <ActionBar className="customer-header-actions" layout="grid"><Button variant="secondary" leadingIcon={<RefreshCw size={14} />} onClick={() => void loadSnapshot()}>Refresh</Button>{customerAccess.canEdit && <Button variant="primary" size="compact" leadingIcon={<Pencil size={14} />} onClick={() => setEditOpen(true)}>Edit</Button>}</ActionBar>
+              <div className="customer-title-block">
+                <span className="customer-title-icon">{snapshot.customer.display_name.slice(0, 1)}</span>
+                <div className="customer-title-content">
+                  <h1>{snapshot.customer.display_name}</h1>
+                  <div className="customer-title-meta">
+                  </div>
+                  <p className="customer-title-contact">
+                    <span className="customer-contact-item"><Phone size={13} /><span>{snapshot.customer.contacts[0]?.phone || 'No phone'}</span></span>
+                    <span className="customer-contact-item"><MapPin size={13} /><span>{snapshot.customer.site_address || 'Site address pending'}</span></span>
+                  </p>
+                </div>
+              </div>
+              <ActionBar className="customer-header-actions" layout="grid">
+                <Button variant="secondary" leadingIcon={<RefreshCw size={14} />} onClick={() => void loadSnapshot()}></Button>
+                {customerAccess.canEdit && <Button variant="primary" size="compact" leadingIcon={<Pencil size={14} />} onClick={() => setEditOpen(true)}></Button>}
+              </ActionBar>
             </header>
 
-            <KpiGrid columns={4} phoneColumns={1} responsive className="customer-summary-grid">
+            <KpiGrid columns={4} phoneColumns={2} responsive className="customer-summary-grid">
               <KpiCard icon={<FolderKanban />} label="Current project" value={project?.record_number || 'Not created'} note={project ? `${project.capacity_kw} kW · ${label(project.payment_mode || 'mode pending')}` : 'Awaiting approved quotation'} />
               <KpiCard icon={<CalendarClock />} label="Current stage" value={snapshot.timeline.find((row) => row.status === 'current')?.name || (project?.status ? label(project.status) : 'Quotation')} note={project ? `${Math.round((snapshot.timeline.filter((row) => row.status === 'completed').length / Math.max(1, snapshot.timeline.length)) * 100)}% complete` : 'Project not started'} tone="navy" />
               <KpiCard icon={<BadgeIndianRupee />} label="Approved value" value={money.format(approvedValue)} note={currentRevision?.record_number || 'No approved quotation'} />
@@ -288,7 +302,7 @@ export function CustomerWorkspacePage({ session }: { session: Session }) {
               ] as Array<[Tab, typeof Building2, string]>).filter(([key]) => key !== 'loan' || project?.payment_mode === 'loan' || snapshot.loan).map(([key, Icon, text]) => <TabButton active={tab === key} onClick={() => setTab(key)} key={key}><Icon size={14} /> {text}</TabButton>)}
             </TabStrip>
 
-            <section className="workspace-tab-panel" data-scroll-surface="tab-body">
+            <section className="workspace-tab-panel customer-tab-panel" data-scroll-surface="tab-body">
               {tab === 'overview' && <OverviewTab snapshot={snapshot} />}
               {tab === 'projects' && <ProjectsTab snapshot={snapshot} />}
               {tab === 'timeline' && <TimelineTab snapshot={snapshot} />}

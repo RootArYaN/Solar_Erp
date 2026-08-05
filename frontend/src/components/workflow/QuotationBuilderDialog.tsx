@@ -1,6 +1,7 @@
 import { Plus, Trash2 } from 'lucide-react'
 import { FormEvent, useMemo, useState } from 'react'
 import type { GenerateQuotationInput, QuotationLineInput, QuotationRequestSummary } from '../../types'
+import { projectDisplayName } from '../../lib/project-name'
 import { Modal } from '../admin/Modal'
 
 function newLine(description = ''): QuotationLineInput {
@@ -13,7 +14,11 @@ export function QuotationBuilderDialog({ request, busy, onClose, onSubmit }: {
   onClose: () => void
   onSubmit: (value: GenerateQuotationInput) => Promise<void>
 }) {
-  const [title, setTitle] = useState(request.quotation?.title || `${request.proposed_capacity_kw} kW solar EPC · ${request.customer_name}`)
+  const [title, setTitle] = useState(
+    request.quotation
+      ? projectDisplayName(request.quotation.title, request.customer_name)
+      : `${request.proposed_capacity_kw} kW solar EPC`,
+  )
   const [validUntil, setValidUntil] = useState(() => {
     if (request.quotation?.valid_until) return request.quotation.valid_until.slice(0, 10)
     const date = new Date(); date.setDate(date.getDate() + 30); return date.toISOString().slice(0, 10)
