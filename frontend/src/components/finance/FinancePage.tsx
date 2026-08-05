@@ -18,6 +18,7 @@ import {
   createFinanceTransaction,
   createFinancialAccount,
   deleteBill,
+  deleteBillPayment,
   downloadMergedBills,
   deleteCompanyLoan,
   deleteFinanceTransaction,
@@ -39,7 +40,7 @@ import {
   updateFinanceTransaction,
 } from '../../api/finance'
 import { downloadStoredFile, removeStoredFile, uploadStoredFile } from '../../api/files'
-import type { Bill, BillCustomerOption, BillList, CompanyLoan, FinanceCategory, FinanceOverview, FinanceTransaction, FinanceTransactionList, FinancialAccount, Profitability } from '../../erp-types'
+import type { Bill, BillCustomerOption, BillList, BillPayment, CompanyLoan, FinanceCategory, FinanceOverview, FinanceTransaction, FinanceTransactionList, FinancialAccount, Profitability } from '../../erp-types'
 import { fileUploadRules, validateUploadFile } from '../../lib/file-validation'
 import { getModuleAccess, PERMISSIONS } from '../../lib/permissions'
 import { getProjectTimelines } from '../../api/workflow'
@@ -83,6 +84,7 @@ export function FinancePage({ session }: { session: Session }) {
   const [selectedTransaction, setSelectedTransaction] = useState<FinanceTransaction | null>(null)
   const [transactionToDelete, setTransactionToDelete] = useState<FinanceTransaction | null>(null)
   const [billToDelete, setBillToDelete] = useState<Bill | null>(null)
+  const [billPaymentToDelete, setBillPaymentToDelete] = useState<{ bill: Bill; payment: BillPayment } | null>(null)
   const [billAttachmentToRemove, setBillAttachmentToRemove] = useState<Bill | null>(null)
   const [loanToDelete, setLoanToDelete] = useState<CompanyLoan | null>(null)
   const [dateFrom, setDateFrom] = useState(monthStart())
@@ -321,6 +323,21 @@ export function FinancePage({ session }: { session: Session }) {
     }
   }
 
+  async function confirmBillPaymentDelete() {
+    if (!billPaymentToDelete) return
+    setWorking(true)
+    try {
+      await deleteBillPayment(billPaymentToDelete.bill.id, billPaymentToDelete.payment.id)
+      setBillPaymentToDelete(null)
+      await refreshAll()
+      toast({ message: 'Bill payment removed; bill and bank balances recalculated', variant: 'success' })
+    } catch (reason) {
+      toast({ message: reason instanceof Error ? reason.message : 'Could not remove bill payment', variant: 'error' })
+    } finally {
+      setWorking(false)
+    }
+  }
+
   async function confirmLoanDelete() {
     if (!loanToDelete) return
     setWorking(true)
@@ -427,7 +444,7 @@ export function FinancePage({ session }: { session: Session }) {
         {tab === 'overview' && overview && <Overview data={overview} dateFrom={dateFrom} setDateFrom={setDateFrom} dateTo={dateTo} setDateTo={setDateTo} reload={() => void loadTab('overview')} />}
         {(tab === 'transactions' || tab === 'reports') && <Transactions data={transactions} rows={visibleTransactions} search={search} setSearch={setSearch} direction={direction} setDirection={setDirection} dateFrom={dateFrom} setDateFrom={setDateFrom} dateTo={dateTo} setDateTo={setDateTo} reload={() => void loadTab(tab)} reportMode={tab === 'reports'} canEdit={access.canEdit} onEdit={(row) => { setSelectedTransaction(row); setDialog('edit-transaction') }} onReverse={(row) => { setSelectedTransaction(row); setDialog('reverse-transaction') }} onDelete={setTransactionToDelete} />}
         {tab === 'expenses' && <Expenses data={expenses} dateFrom={dateFrom} setDateFrom={setDateFrom} dateTo={dateTo} setDateTo={setDateTo} reload={() => void loadTab('expenses')} canEdit={access.canEdit} onAdd={() => setDialog('expense')} onEdit={(row) => { setSelectedTransaction(row); setDialog('edit-transaction') }} onDelete={setTransactionToDelete} />}
-        {tab === 'bills' && <Bills data={bills} billType={billType} setBillType={setBillType} dateFrom={dateFrom} setDateFrom={setDateFrom} dateTo={dateTo} setDateTo={setDateTo} reload={() => void loadTab('bills')} canEdit={access.canEdit} onAdd={() => setDialog('bill')} onEdit={(bill) => { setSelectedBill(bill); setDialog('edit-bill') }} onPay={(bill) => { setSelectedBill(bill); setDialog('bill-payment') }} onDelete={setBillToDelete} onUpload={(bill, file) => void uploadBillAttachment(bill, file)} onDownload={(bill) => void downloadBillAttachment(bill)} onRemoveAttachment={setBillAttachmentToRemove} onDownloadMerged={() => void downloadFilteredBills()} downloadingMerged={downloadingMergedBills} />}
+        {tab === 'bills' && <Bills data={bills} billType={billType} setBillType={setBillType} dateFrom={dateFrom} setDateFrom={setDateFrom} dateTo={dateTo} setDateTo={setDateTo} reload={() => void loadTab('bills')} canEdit={access.canEdit} onAdd={() => setDialog('bill')} onEdit={(bill) => { setSelectedBill(bill); setDialog('edit-bill') }} onPay={(bill) => { setSelectedBill(bill); setDialog('bill-payment') }} onDelete={setBillToDelete} onUpload={(bill, file) => void uploadBillAttachment(bill, file)} onDownload={(bill) => void downloadBillAttachment(bill)} onRemoveAttachment={setBillAttachmentToRemove} onRemovePayment={(bill, payment) => setBillPaymentToDelete({ bill, payment })} onDownloadMerged={() => void downloadFilteredBills()} downloadingMerged={downloadingMergedBills} />}
         {tab === 'accounts' && <Accounts rows={accounts} canEdit={access.canEdit} onAdd={() => setDialog('account')} onTransfer={() => setDialog('transfer')} />}
         {tab === 'loans' && <Loans rows={loans} canEdit={access.canEdit} onAdd={() => setDialog('loan')} onEdit={(loan) => { setSelectedLoan(loan); setDialog('edit-loan') }} onPay={(loan) => { setSelectedLoan(loan); setDialog('loan-payment') }} onDelete={setLoanToDelete} />}
         {tab === 'profitability' && <ProfitabilityPanel data={profitability} dateFrom={dateFrom} setDateFrom={setDateFrom} dateTo={dateTo} setDateTo={setDateTo} reload={() => void loadTab('profitability')} />}
@@ -456,6 +473,16 @@ export function FinancePage({ session }: { session: Session }) {
       loading={working}
       onCancel={() => setTransactionToDelete(null)}
       onConfirm={confirmTransactionDelete}
+    />
+    <AlertDialog
+      open={Boolean(billPaymentToDelete)}
+      title="Remove this bill payment?"
+      description={billPaymentToDelete ? `${billPaymentToDelete.bill.bill_number} · ${money.format(billPaymentToDelete.payment.amount)} from ${billPaymentToDelete.payment.account_name}. The bill outstanding and bank balance will be recalculated.` : ''}
+      confirmLabel="Remove payment"
+      icon="delete"
+      loading={working}
+      onCancel={() => setBillPaymentToDelete(null)}
+      onConfirm={confirmBillPaymentDelete}
     />
     <AlertDialog
       open={Boolean(billAttachmentToRemove)}

@@ -367,6 +367,15 @@
 .finance-bill-document-remove{color:#a2433d!important;border-color:#edcbc8!important;background:#fff8f7!important}
 .finance-bill-document-remove:disabled{color:#a9b0b8!important;border-color:#e1e5e8!important;background:#f7f8f9!important}
 .finance-bills-table .secondary-button:disabled{cursor:not-allowed;opacity:.55}
+.finance-bill-payments-row>td{padding:0 8px 9px!important;border-top:0!important;background:#fafbfc}
+.finance-bill-payments{display:grid;gap:5px;padding:8px;border:1px solid #e2e7ec;border-radius:8px;background:#fff}
+.finance-bill-payments__title{color:#728091;font-size:8px;font-weight:850;letter-spacing:.5px;text-transform:uppercase}
+.finance-bill-payment{display:grid;grid-template-columns:110px 150px minmax(150px,1fr) minmax(190px,1.2fr) 30px;align-items:center;gap:8px;min-width:680px;padding:6px 7px;border-top:1px solid #edf0f3;color:#647181;font-size:8.5px}
+.finance-bill-payment>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.finance-bill-payment>span:first-child{display:flex;align-items:center;gap:5px}
+.finance-bill-payment>strong{font-size:9px;white-space:nowrap}
+.finance-bill-payment>button{display:grid;width:28px;height:28px;padding:0;place-items:center;border:1px solid #edcbc8;border-radius:7px;color:#a2433d;background:#fff8f7;cursor:pointer}
+.finance-bill-payment>button:hover{border-color:#d59b96;background:#fff1ef}
 @media(max-width:700px){
   .finance-bills-toolbar{align-items:stretch;flex-wrap:wrap}
   .finance-bills-toolbar .finance-date-field{flex:1 1 124px}

@@ -31,6 +31,7 @@ from app.schemas.finance import (
     AccountTransferRequest,
     BillCustomerOption,
     BillList,
+    BillPaymentSummary,
     BillSummary,
     CompanyLoanPaymentRequest,
     CompanyLoanSummary,
@@ -712,14 +713,64 @@ def _bill_summary_from_related(
     row: Bill,
     customer: AgentCustomer | None,
     project: CustomerProject | None,
+    payments: list[BillPaymentSummary] | None = None,
 ) -> BillSummary:
-    return BillSummary(id=row.id, bill_type=row.bill_type, bill_number=row.bill_number, bill_date=row.bill_date, customer_id=row.customer_id, customer_name=customer.customer_name if customer else '', project_id=row.project_id, project_number=project.project_number if project else '', supplier_name=row.supplier_name, subtotal=_float(row.subtotal), tax_amount=_float(row.tax_amount), total_amount=_float(row.total_amount), due_date=row.due_date, paid_amount=_float(row.paid_amount), balance_amount=_float(row.balance_amount), payment_status=row.payment_status, status=row.status, file_id=row.file_id, note=row.note, created_at=row.created_at)
+    return BillSummary(id=row.id, bill_type=row.bill_type, bill_number=row.bill_number, bill_date=row.bill_date, customer_id=row.customer_id, customer_name=customer.customer_name if customer else '', project_id=row.project_id, project_number=project.project_number if project else '', supplier_name=row.supplier_name, subtotal=_float(row.subtotal), tax_amount=_float(row.tax_amount), total_amount=_float(row.total_amount), due_date=row.due_date, paid_amount=_float(row.paid_amount), balance_amount=_float(row.balance_amount), payment_status=row.payment_status, status=row.status, file_id=row.file_id, note=row.note, payments=payments or [], created_at=row.created_at)
+
+
+def _bill_payment_summaries(db: Session, bill_ids: set[str], company_ids: set[str]) -> dict[str, list[BillPaymentSummary]]:
+    if not bill_ids:
+        return {}
+    rows = db.execute(
+        select(BillPayment, FinanceTransaction, FinancialAccount)
+        .join(FinanceTransaction, FinanceTransaction.id == BillPayment.transaction_id)
+        .join(FinancialAccount, FinancialAccount.id == FinanceTransaction.account_id)
+        .where(
+            BillPayment.bill_id.in_(bill_ids),
+            BillPayment.company_id.in_(company_ids),
+        )
+        .order_by(FinanceTransaction.transaction_date.desc(), FinanceTransaction.created_at.desc())
+    ).all()
+    result: dict[str, list[BillPaymentSummary]] = {}
+    for payment, transaction, account in rows:
+        result.setdefault(payment.bill_id, []).append(BillPaymentSummary(
+            id=payment.id,
+            transaction_id=transaction.id,
+            transaction_number=transaction.transaction_number,
+            transaction_date=transaction.transaction_date,
+            amount=_float(payment.amount),
+            account_id=account.id,
+            account_name=account.name,
+            payment_method=transaction.payment_method,
+            reference_number=transaction.reference_number,
+            description=transaction.description,
+            status=transaction.status,
+            created_at=payment.created_at,
+        ))
+    return result
+
+
+def _bill_summaries(db: Session, rows: list[Bill]) -> list[BillSummary]:
+    if not rows:
+        return []
+    customer_ids = {row.customer_id for row in rows if row.customer_id}
+    project_ids = {row.project_id for row in rows if row.project_id}
+    customers = {row.id: row for row in db.scalars(select(AgentCustomer).where(AgentCustomer.id.in_(customer_ids))).all()} if customer_ids else {}
+    projects = {row.id: row for row in db.scalars(select(CustomerProject).where(CustomerProject.id.in_(project_ids))).all()} if project_ids else {}
+    payments = _bill_payment_summaries(db, {row.id for row in rows}, {row.company_id for row in rows})
+    return [
+        _bill_summary_from_related(
+            row,
+            customers.get(row.customer_id),
+            projects.get(row.project_id),
+            payments.get(row.id),
+        )
+        for row in rows
+    ]
 
 
 def _bill_summary(db: Session, row: Bill) -> BillSummary:
-    customer = db.get(AgentCustomer, row.customer_id) if row.customer_id else None
-    project = db.get(CustomerProject, row.project_id) if row.project_id else None
-    return _bill_summary_from_related(row, customer, project)
+    return _bill_summaries(db, [row])[0]
 
 
 def _bill_filters(
@@ -762,12 +813,8 @@ def list_bills(db: Session, actor: CurrentSession, *, bill_type: str | None = No
     )
     total = db.scalar(select(func.count()).select_from(Bill).where(*filters)) or 0
     rows = list(db.scalars(select(Bill).where(*filters).order_by(Bill.bill_date.desc(), Bill.created_at.desc()).offset((page - 1) * page_size).limit(page_size)).all())
-    customer_ids = {row.customer_id for row in rows if row.customer_id}
-    project_ids = {row.project_id for row in rows if row.project_id}
-    customers = {row.id: row for row in db.scalars(select(AgentCustomer).where(AgentCustomer.id.in_(customer_ids))).all()} if customer_ids else {}
-    projects = {row.id: row for row in db.scalars(select(CustomerProject).where(CustomerProject.id.in_(project_ids))).all()} if project_ids else {}
     return BillList(
-        data=[_bill_summary_from_related(row, customers.get(row.customer_id), projects.get(row.project_id)) for row in rows],
+        data=_bill_summaries(db, rows),
         page=page,
         page_size=page_size,
         total=int(total),
@@ -966,6 +1013,10 @@ def record_bill_payment(db: Session, actor: CurrentSession, bill_id: str, payloa
     amount = _decimal(payload.amount)
     if bill.status == 'cancelled': raise FinanceConflictError('Cancelled bills cannot be paid')
     if amount > Decimal(bill.balance_amount): raise FinanceConflictError('Payment exceeds the bill balance')
+    if bill.bill_type == 'purchase':
+        account = _load_account(db, actor, payload.account_id)
+        if _account_balance(db, account) < amount:
+            raise FinanceConflictError('The selected account does not have enough balance for this bill payment')
     direction = 'credit' if bill.bill_type == 'sales' else 'debit'
     customer = db.get(AgentCustomer, bill.customer_id) if bill.customer_id else None
     tx_summary = create_transaction(db, actor, CreateFinanceTransactionRequest(transaction_date=payload.transaction_date, direction=direction, amount=float(amount), account_id=payload.account_id, payment_method=payload.payment_method, party_type='customer' if bill.bill_type == 'sales' else 'supplier', party_name=customer.customer_name if customer else bill.supplier_name, customer_id=bill.customer_id, project_id=bill.project_id, source_type=f'{bill.bill_type}_bill_payment', source_id=bill.id, reference_number=payload.reference_number, description=payload.description or f'Payment against {bill.bill_number}'), commit=False)
@@ -975,6 +1026,27 @@ def record_bill_payment(db: Session, actor: CurrentSession, bill_id: str, payloa
     db.add(BillPayment(company_id=bill.company_id, bill_id=bill.id, transaction_id=tx_summary.id, amount=amount))
     write_event(db, company_id=bill.company_id, event='bill.payment_recorded', entity='bill', entity_id=bill.id, actor=actor, project_id=bill.project_id, customer_id=bill.customer_id, changes={'amount': str(amount), 'balance_amount': str(bill.balance_amount), 'transaction_id': tx_summary.id})
     db.commit(); return _bill_summary(db, bill)
+
+
+def delete_bill_payment(db: Session, actor: CurrentSession, bill_id: str, payment_id: str) -> BillSummary:
+    bill = db.scalar(select(Bill).where(
+        Bill.id == bill_id,
+        Bill.company_id == actor.membership.company_id,
+    ))
+    if not bill:
+        raise FinanceNotFoundError('Bill not found')
+    payment = db.scalar(select(BillPayment).where(
+        BillPayment.id == payment_id,
+        BillPayment.bill_id == bill.id,
+        BillPayment.company_id == bill.company_id,
+    ))
+    if not payment:
+        raise FinanceNotFoundError('Bill payment not found')
+    deleted: set[str] = set()
+    _delete_transaction_tree(db, actor, payment.transaction_id, deleted)
+    db.commit()
+    db.refresh(bill)
+    return _bill_summary(db, bill)
 
 
 def delete_bill(db: Session, actor: CurrentSession, bill_id: str) -> None:
@@ -1228,7 +1300,7 @@ def overview(db: Session, actor: CurrentSession, *, date_from: date | None = Non
     for month, direction, amount in flow_rows:
         bucket = flow_map.setdefault(str(month), {'month': str(month), 'money_in': 0.0, 'money_out': 0.0})
         bucket['money_in' if direction == 'credit' else 'money_out'] = _float(amount)
-    return FinanceOverview(money_in_month=kpis.money_in_month, money_out_month=kpis.money_out_month, bank_balance=bank_balance, cash_balance=cash_balance, customer_receivables=kpis.customer_receivables, supplier_payables=kpis.supplier_payables, expenses_month=kpis.expenses_month, net_cash_flow=kpis.money_in_month - kpis.money_out_month, accounts=accounts, recent_transactions=_transaction_summaries(db, recent_rows), pending_bills=[_bill_summary(db, row) for row in pending_rows], expense_by_category=[{'category': name, 'amount': _float(amount)} for name, amount in expense_rows], monthly_flow=list(reversed(list(flow_map.values()))))
+    return FinanceOverview(money_in_month=kpis.money_in_month, money_out_month=kpis.money_out_month, bank_balance=bank_balance, cash_balance=cash_balance, customer_receivables=kpis.customer_receivables, supplier_payables=kpis.supplier_payables, expenses_month=kpis.expenses_month, net_cash_flow=kpis.money_in_month - kpis.money_out_month, accounts=accounts, recent_transactions=_transaction_summaries(db, recent_rows), pending_bills=_bill_summaries(db, pending_rows), expense_by_category=[{'category': name, 'amount': _float(amount)} for name, amount in expense_rows], monthly_flow=list(reversed(list(flow_map.values()))))
 
 
 def profitability(db: Session, actor: CurrentSession, *, date_from: date | None = None, date_to: date | None = None) -> ProfitabilitySummary:

@@ -142,6 +142,21 @@ class AccountTransferRequest(BaseModel):
         return self
 
 
+class BillPaymentSummary(BaseModel):
+    id: str
+    transaction_id: str
+    transaction_number: str
+    transaction_date: date
+    amount: float
+    account_id: str
+    account_name: str
+    payment_method: str
+    reference_number: str
+    description: str
+    status: str
+    created_at: datetime
+
+
 class BillSummary(BaseModel):
     id: str
     bill_type: str
@@ -162,6 +177,7 @@ class BillSummary(BaseModel):
     status: str
     file_id: str | None
     note: str
+    payments: list[BillPaymentSummary] = Field(default_factory=list)
     created_at: datetime
 
 

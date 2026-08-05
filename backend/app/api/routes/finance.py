@@ -221,6 +221,12 @@ def post_bill_payment(bill_id: str, payload: RecordBillPaymentRequest, db: Sessi
     except FinanceServiceError as exc: _raise(exc)
 
 
+@router.delete('/bills/{bill_id}/payments/{payment_id}', response_model=BillSummary)
+def delete_bill_payment(bill_id: str, payment_id: str, db: Session = Depends(get_db), session: CurrentSession = Depends(require_any_permissions('finance.manage'))):
+    try: return finance_service.delete_bill_payment(db, session, bill_id, payment_id)
+    except FinanceServiceError as exc: _raise(exc)
+
+
 @router.delete('/bills/{bill_id}', status_code=204)
 def delete_bill(bill_id: str, db: Session = Depends(get_db), session: CurrentSession = Depends(require_any_permissions('finance.manage'))):
     try: return finance_service.delete_bill(db, session, bill_id)

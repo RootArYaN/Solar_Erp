@@ -60,6 +60,21 @@ export type FinanceTransaction = {
 
 export type FinanceTransactionList = { data: FinanceTransaction[]; page: number; page_size: number; total: number; money_in: number; money_out: number }
 
+export type BillPayment = {
+  id: string
+  transaction_id: string
+  transaction_number: string
+  transaction_date: string
+  amount: number
+  account_id: string
+  account_name: string
+  payment_method: string
+  reference_number: string
+  description: string
+  status: string
+  created_at: string
+}
+
 export type Bill = {
   id: string
   bill_type: 'sales' | 'purchase'
@@ -80,6 +95,7 @@ export type Bill = {
   status: string
   file_id: string | null
   note: string
+  payments: BillPayment[]
   created_at: string
 }
 export type BillList = { data: Bill[]; page: number; page_size: number; total: number }

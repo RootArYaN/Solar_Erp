@@ -18,6 +18,7 @@ export const getBillCustomers = (): Promise<BillCustomerOption[]> => apiRequest(
 export const createBill = (body: Record<string, unknown>): Promise<Bill> => apiRequest('/finance/bills', { method: 'POST', body, idempotencyKey: createClientId() })
 export const updateBill = (id: string, body: Record<string, unknown>): Promise<Bill> => apiRequest(`/finance/bills/${apiSegment(id)}`, { method: 'PATCH', body })
 export const recordBillPayment = (id: string, body: Record<string, unknown>): Promise<Bill> => apiRequest(`/finance/bills/${apiSegment(id)}/payments`, { method: 'POST', body, idempotencyKey: createClientId() })
+export const deleteBillPayment = (billId: string, paymentId: string): Promise<Bill> => apiRequest(`/finance/bills/${apiSegment(billId)}/payments/${apiSegment(paymentId)}`, { method: 'DELETE' })
 export const deleteBill = (id: string): Promise<void> => apiRequest(`/finance/bills/${apiSegment(id)}`, { method: 'DELETE' })
 export const downloadMergedBills = (query = ''): Promise<void> => downloadRequest(`/finance/bills/merged-download${query ? `?${query}` : ''}`, 'Bills.pdf')
 export const getCompanyLoans = (): Promise<CompanyLoan[]> => apiRequest('/finance/company-loans')
