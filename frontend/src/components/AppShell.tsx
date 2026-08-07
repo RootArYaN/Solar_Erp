@@ -221,7 +221,6 @@ export function AppShell({ session, onLogout }: { session: Session; onLogout: ()
           <div className="app-topbar__start">
             <button className="icon-button app-menu-button" onClick={() => setMobileOpen(true)} aria-label="Open menu"><Menu size={20} /></button>
             <div className="app-topbar__context">
-              <span>{session.company.name}</span>
               <strong>{currentWorkspace.label}</strong>
             </div>
           </div>

@@ -302,7 +302,6 @@ export function TaskPage({ session }: { session: Session }) {
       <WorkspaceHeader
         eyebrow="Work planner"
         title="Tasks"
-        description="Fast personal tracking with controlled user and role assignment."
         actions={(
           <>
             <button type="button" className="secondary-button" onClick={() => void refresh()} disabled={loading || loadingMore || working}>
