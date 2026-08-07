@@ -359,3 +359,105 @@ export type StoredFile = {
   created_at: string
 }
 export type StoredFileList = { data: StoredFile[]; page: number; page_size: number; total: number }
+
+export type TaskPriority = 'low' | 'normal' | 'high' | 'urgent'
+export type TaskStatus = 'todo' | 'in_progress' | 'blocked' | 'done'
+export type TaskContext = 'general' | 'customers' | 'projects' | 'finance' | 'inventory' | 'documents'
+export type TaskScope = 'mine' | 'team'
+
+export type TaskAssignment = {
+  id: string
+  membership_id: string
+  assignee_name: string
+  role_code: string
+  source_role_id: string | null
+  source_role_name: string | null
+  status: TaskStatus
+  progress: number
+  note: string
+  completed_at: string | null
+  updated_at: string
+}
+
+export type TaskItem = {
+  id: string
+  version: number
+  title: string
+  description: string
+  priority: TaskPriority
+  context_type: TaskContext
+  context_id: string | null
+  due_at: string | null
+  created_by_membership_id: string
+  created_by_name: string
+  created_at: string
+  updated_at: string
+  status: TaskStatus
+  progress: number
+  overdue: boolean
+  is_mine: boolean
+  can_edit: boolean
+  can_delete: boolean
+  can_manage_assignments: boolean
+  assignments: TaskAssignment[]
+}
+
+export type TaskList = {
+  data: TaskItem[]
+  page: number
+  page_size: number
+  total: number
+}
+
+export type TaskMetrics = {
+  my_open: number
+  my_overdue: number
+  my_due_today: number
+  my_completed: number
+  team_open: number
+  team_overdue: number
+}
+
+export type TaskUserOption = {
+  membership_id: string
+  full_name: string
+  role_code: string
+}
+
+export type TaskRoleOption = {
+  id: string
+  name: string
+  code: string
+  member_count: number
+}
+
+export type TaskOptions = {
+  users: TaskUserOption[]
+  roles: TaskRoleOption[]
+}
+
+export type CreateTaskInput = {
+  title: string
+  description: string
+  priority: TaskPriority
+  context_type: TaskContext
+  context_id?: string | null
+  due_at?: string | null
+  assignee_membership_ids?: string[]
+  assignee_role_ids?: string[]
+}
+
+export type UpdateTaskInput = Partial<CreateTaskInput> & { expected_version?: number }
+export type UpdateTaskAssignmentInput = { status?: TaskStatus; progress?: number; note?: string; expected_version?: number }
+
+export type WorkspaceNotificationChannel = {
+  key: 'tasks' | 'approvals' | 'finance' | 'documents' | string
+  title: string
+  detail: string
+  count: number
+}
+
+export type WorkspaceNotificationSummary = {
+  channels: WorkspaceNotificationChannel[]
+  total: number
+}

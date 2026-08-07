@@ -19,7 +19,8 @@ MIGRATION_007 = "007_backend_performance_indexes"
 MIGRATION_008 = "008_measured_read_path_indexes"
 MIGRATION_009 = "009_transactional_migration_framework"
 MIGRATION_010 = "010_finance_aggregate_indexes"
-CURRENT_MIGRATION_ID = MIGRATION_010
+MIGRATION_011 = "011_tasks_and_live_notifications"
+CURRENT_MIGRATION_ID = MIGRATION_011
 MIGRATION_LOCK_KEY = 7_336_526_977_082_001
 
 # These IDs were written by earlier released versions whose migration logic was
@@ -38,6 +39,7 @@ ACTIVE_MIGRATION_IDS = (
     MIGRATION_008,
     MIGRATION_009,
     MIGRATION_010,
+    MIGRATION_011,
 )
 MIGRATION_IDS = HISTORICAL_MIGRATION_IDS + ACTIVE_MIGRATION_IDS
 MIGRATION_CHECKSUMS = {
@@ -50,6 +52,7 @@ BACKUP_REQUIRED_MIGRATIONS = {
     MIGRATION_007,
     MIGRATION_008,
     MIGRATION_010,
+    MIGRATION_011,
 }
 
 MIGRATED_PERMISSIONS = {
@@ -61,11 +64,16 @@ MIGRATED_PERMISSIONS = {
     "events.view": ("View event history", "View the append-only event history."),
     "finance.view": ("View finance", "View ledgers, bills, accounts and company financial reports."),
     "finance.manage": ("Manage finance", "Create and post finance transactions, bills and account movements."),
+    "tasks.view": ("Show Tasks tab", "View personal and assigned tasks."),
+    "tasks.create": ("Create tasks", "Create personal tasks and task drafts."),
+    "tasks.assign": ("Assign tasks", "Assign tasks to company users and roles."),
+    "tasks.manage": ("Manage tasks", "Edit, reassign and delete company tasks."),
 }
 
 ROLE_MIGRATED_PERMISSIONS = {
-    "agent": {"documents.view", "documents.create", "documents.edit"},
-    "accounts_admin": {"documents.view", "documents.approve", "documents.manage", "events.view", "finance.view", "finance.manage"},
+    "customer": {"tasks.view", "tasks.create"},
+    "agent": {"documents.view", "documents.create", "documents.edit", "tasks.view", "tasks.create"},
+    "accounts_admin": {"documents.view", "documents.approve", "documents.manage", "events.view", "finance.view", "finance.manage", "tasks.view", "tasks.create", "tasks.assign", "tasks.manage"},
     "company_admin": set(MIGRATED_PERMISSIONS),
     "super_admin": set(MIGRATED_PERMISSIONS),
 }
@@ -316,6 +324,65 @@ def _migrate_permissions(connection, inspector) -> None:
             ), {"role_id": role_id, "permission_id": manage_id})
 
 
+def _create_tasks_schema(connection) -> None:
+    connection.execute(text(
+        "CREATE TABLE IF NOT EXISTS tasks ("
+        "id VARCHAR(36) PRIMARY KEY, "
+        "version INTEGER NOT NULL DEFAULT 1, "
+        "company_id VARCHAR(36) NOT NULL REFERENCES companies(id) ON DELETE CASCADE, "
+        "title VARCHAR(180) NOT NULL, "
+        "description TEXT NOT NULL DEFAULT '', "
+        "priority VARCHAR(12) NOT NULL DEFAULT 'normal', "
+        "context_type VARCHAR(32) NOT NULL DEFAULT 'general', "
+        "context_id VARCHAR(80), "
+        "due_at TIMESTAMPTZ, "
+        "created_by VARCHAR(36) NOT NULL REFERENCES memberships(id) ON DELETE RESTRICT, "
+        "created_at TIMESTAMPTZ NOT NULL, "
+        "updated_at TIMESTAMPTZ NOT NULL, "
+        "CONSTRAINT ck_tasks_priority CHECK (priority IN ('low','normal','high','urgent'))"
+        ")"
+    ))
+    connection.execute(text(
+        "CREATE TABLE IF NOT EXISTS task_assignments ("
+        "id VARCHAR(36) PRIMARY KEY, "
+        "task_id VARCHAR(36) NOT NULL REFERENCES tasks(id) ON DELETE CASCADE, "
+        "membership_id VARCHAR(36) NOT NULL REFERENCES memberships(id) ON DELETE CASCADE, "
+        "source_role_id VARCHAR(36) REFERENCES roles(id) ON DELETE SET NULL, "
+        "assigned_by VARCHAR(36) NOT NULL REFERENCES memberships(id) ON DELETE RESTRICT, "
+        "status VARCHAR(16) NOT NULL DEFAULT 'todo', "
+        "progress INTEGER NOT NULL DEFAULT 0, "
+        "note VARCHAR(600) NOT NULL DEFAULT '', "
+        "completed_at TIMESTAMPTZ, "
+        "created_at TIMESTAMPTZ NOT NULL, "
+        "updated_at TIMESTAMPTZ NOT NULL, "
+        "CONSTRAINT uq_task_assignment_member UNIQUE (task_id, membership_id), "
+        "CONSTRAINT ck_task_assignments_status CHECK (status IN ('todo','in_progress','blocked','done')), "
+        "CONSTRAINT ck_task_assignments_progress CHECK (progress >= 0 AND progress <= 100)"
+        ")"
+    ))
+    task_indexes = (
+        ("ix_tasks_company_id", "tasks", "company_id"),
+        ("ix_tasks_priority", "tasks", "priority"),
+        ("ix_tasks_context_type", "tasks", "context_type"),
+        ("ix_tasks_context_id", "tasks", "context_id"),
+        ("ix_tasks_due_at", "tasks", "due_at"),
+        ("ix_tasks_created_by", "tasks", "created_by"),
+        ("ix_tasks_company_due", "tasks", "company_id,due_at"),
+        ("ix_tasks_company_priority_updated", "tasks", "company_id,priority,updated_at"),
+        ("ix_task_assignments_task_id", "task_assignments", "task_id"),
+        ("ix_task_assignments_membership_id", "task_assignments", "membership_id"),
+        ("ix_task_assignments_source_role_id", "task_assignments", "source_role_id"),
+        ("ix_task_assignments_status", "task_assignments", "status"),
+        ("ix_task_assignments_member_status", "task_assignments", "membership_id,status"),
+        ("ix_task_assignments_task_status", "task_assignments", "task_id,status"),
+    )
+    for name, table, columns in task_indexes:
+        column_sql = ", ".join(f'"{column.strip()}"' for column in columns.split(","))
+        connection.execute(text(
+            f'CREATE INDEX IF NOT EXISTS "{name}" ON "{table}" ({column_sql})'
+        ))
+
+
 def _remove_archive_schema(connection, inspector) -> None:
     if inspector.has_table("agent_customers"):
         connection.execute(text("UPDATE agent_customers SET status = 'on_hold' WHERE status = 'archived'"))
@@ -508,6 +575,11 @@ def run_migrations(*, backup_reference: str | None = None) -> None:
             if MIGRATION_010 not in applied:
                 _apply_columns_and_indexes(connection)
                 _record_migration(connection, MIGRATION_010)
+
+            if MIGRATION_011 not in applied:
+                _create_tasks_schema(connection)
+                _migrate_permissions(connection, inspect(connection))
+                _record_migration(connection, MIGRATION_011)
     except Exception:
         for staged_path, original_path in reversed(staged_deletes):
             storage.restore_staged_delete(staged_path, original_path)

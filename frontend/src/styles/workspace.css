@@ -28,9 +28,6 @@ body.app-authenticated #root {
   overflow: hidden;
 }
 
-.app-shell,
-.app-main,
-.app-viewport,
 .workspace-page,
 .workspace-page > *,
 .workspace-scroll-surface,
@@ -40,24 +37,6 @@ body.app-authenticated #root {
   min-height: 0;
 }
 
-.app-shell {
-  height: 100dvh;
-  max-height: 100dvh;
-}
-
-.app-main {
-  height: 100%;
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  overflow: hidden;
-}
-
-.app-viewport {
-  grid-row: 1 / -1;
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
-}
 
 .route-transition {
   width: 100%;
@@ -664,8 +643,9 @@ body.app-authenticated #root {
   min-height: 0;
 }
 
-/* Keep authenticated controls compact while preserving the login contract. */
-.workspace-page :is(
+/* Low-specificity workspace defaults. Feature components keep ownership of
+   their exact control geometry instead of fighting a global button rule. */
+.workspace-page :where(
   .primary-button,
   .secondary-button,
   .danger-button,
@@ -714,8 +694,7 @@ body.app-authenticated #root {
   flex: 0 0 auto;
 }
 
-.workspace-page button > svg,
-.modal-layer button > svg {
+:where(.workspace-page, .modal-layer) button > svg {
   max-width: 14px;
   max-height: 14px;
   flex: 0 0 auto;
@@ -1887,87 +1866,7 @@ body.app-authenticated #root {
   .inventory-history-tabs button{flex:1}
 }
 
-/* Super-admin responsive preview and mobile layout repair. */
-.app-shell--has-view-switch .app-main {
-  grid-template-rows: 48px minmax(0, 1fr);
-}
-
-.app-shell--has-view-switch .app-topbar {
-  min-width: 0;
-  min-height: 48px;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 10px;
-  padding: 0 12px;
-  border-bottom: 1px solid var(--workspace-border);
-  background: rgba(255, 255, 255, .86);
-  backdrop-filter: blur(16px);
-  z-index: 20;
-}
-
-.app-shell--has-view-switch .app-viewport {
-  grid-row: 2;
-}
-
-.layout-view-switch {
-  min-width: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  padding: 3px;
-  border: 1px solid var(--workspace-border);
-  border-radius: 10px;
-  background: #f2f3f3;
-}
-
-.layout-view-switch > span {
-  padding: 0 6px;
-  color: #7a8490;
-  font-size: 9px;
-  font-weight: 800;
-  letter-spacing: .55px;
-  text-transform: uppercase;
-}
-
-.layout-view-switch button {
-  min-height: 32px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 0 10px;
-  border: 0;
-  border-radius: 7px;
-  color: #6b7682;
-  background: transparent;
-  font: inherit;
-  font-size: 10px;
-  font-weight: 750;
-  cursor: pointer;
-}
-
-.layout-view-switch button:hover {
-  color: #263a4d;
-  background: rgba(255, 255, 255, .72);
-}
-
-.layout-view-switch button.is-active {
-  color: #233d54;
-  background: #fff;
-  box-shadow: 0 2px 8px rgba(28, 42, 54, .11);
-}
-
-/* Mobile preview is a real narrow shell, so navigation, cards and scrolling can
-   be checked without resizing the browser. */
-.app-shell--view-mobile {
-  position: relative;
-  width: min(430px, 100%);
-  grid-template-columns: minmax(0, 1fr);
-  margin: 0 auto;
-  box-shadow: 0 0 0 1px rgba(25, 40, 53, .08), 0 20px 60px rgba(25, 40, 53, .12);
-}
-
+/* Responsive workspace content inside real and simulated phone shells. */
 .app-shell--view-mobile .workspace-page,
 .app-shell--view-mobile .workspace-page.erp-page,
 .app-shell--view-mobile .workspace-page.admin-page,
@@ -2069,15 +1968,6 @@ body.app-authenticated #root {
     --workspace-control-height: var(--workspace-touch-height);
   }
 
-  .app-shell--has-view-switch .layout-view-switch > span { display: none; }
-
-  .app-viewport,
-  .app-shell--has-view-switch .app-viewport {
-    height: auto;
-    min-height: 0;
-    grid-row: 2;
-  }
-
   .workspace-page,
   .workspace-page.erp-page,
   .workspace-page.admin-page,
@@ -2158,9 +2048,6 @@ body.app-authenticated #root {
 }
 
 @media (max-width: 380px) {
-  .layout-view-switch button { padding-inline: 8px; }
-  .layout-view-switch button span { display: none; }
-
   .workspace-kpi-grid,
   .workspace-page > :is(.erp-kpi-grid, .agent-kpi-grid, .finance-kpis),
   .dashboard-operation-grid,

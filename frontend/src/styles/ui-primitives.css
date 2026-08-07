@@ -1,10 +1,4 @@
-/* Isolated shared primitives. These selectors intentionally use ui-* names so
- * legacy route styles can remain in place during the incremental migration. */
-.app-viewport {
-  container-type: inline-size;
-  container-name: workspace;
-}
-
+/* Shared ui-* primitives only. Application-shell ownership lives in shell.css. */
 .ui-button {
   min-width: 0;
   min-height: var(--ui-control-height-default);

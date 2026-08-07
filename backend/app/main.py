@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from starlette.concurrency import run_in_threadpool
 
-from app.api.routes import admin, agents, auth, customer_flow, dashboard, events, files, finance, health, operations, workflow
+from app.api.routes import admin, agents, auth, customer_flow, dashboard, events, files, finance, health, notifications, operations, tasks, workflow
 from app.core.concurrency import configure_thread_pool
 from app.core.config import settings
 from app.core.middleware import RequestBodyLimitMiddleware, add_error_handlers, add_request_middleware
@@ -43,7 +43,7 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(
     title=settings.app_name,
-    version="0.5.0",
+    version="0.6.0",
     lifespan=lifespan,
     docs_url=None if settings.is_production else "/docs",
     redoc_url=None if settings.is_production else "/redoc",
@@ -83,3 +83,5 @@ app.include_router(operations.router, prefix="/api/v1")
 app.include_router(dashboard.router, prefix="/api/v1")
 app.include_router(files.router, prefix="/api/v1")
 app.include_router(events.router, prefix="/api/v1")
+app.include_router(tasks.router, prefix="/api/v1")
+app.include_router(notifications.router, prefix="/api/v1")

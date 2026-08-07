@@ -17,6 +17,7 @@ export const PERMISSIONS = {
   roles: { view: 'roles.view', edit: 'roles.manage' },
   security: { view: 'security.sessions.view', edit: 'security.sessions.manage' },
   events: { view: 'events.view' },
+  tasks: { view: 'tasks.view', create: 'tasks.create', assign: 'tasks.assign', manage: 'tasks.manage' },
 } as const
 
 export type ModulePermissionKey = keyof typeof PERMISSIONS

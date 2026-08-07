@@ -4,6 +4,7 @@ type DateFilterInputProps = {
   value: string
   onChange: (value: string) => void
   ariaLabel: string
+  label?: string
   className?: string
   min?: string
   max?: string
@@ -20,6 +21,7 @@ export function DateFilterInput({
   value,
   onChange,
   ariaLabel,
+  label,
   className = '',
   min,
   max,
@@ -27,8 +29,9 @@ export function DateFilterInput({
 }: DateFilterInputProps) {
   return (
     <label className={`date-filter-control ${className}`.trim()}>
-      <span className="date-filter-control__value" aria-hidden="true">
-        {formatDateForDisplay(value)}
+      <span className="date-filter-control__copy" aria-hidden="true">
+        {label && <small>{label}</small>}
+        <span className="date-filter-control__value">{formatDateForDisplay(value)}</span>
       </span>
       <CalendarDays size={14} aria-hidden="true" />
       <input

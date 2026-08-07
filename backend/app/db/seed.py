@@ -56,13 +56,17 @@ PERMISSIONS = {
     "finance.view": ("View finance", "View ledgers, bills, accounts and company financial reports."),
     "finance.manage": ("Manage finance", "Create and post finance transactions, bills and account movements."),
     "events.view": ("View event history", "View the append-only event history."),
+    "tasks.view": ("Show Tasks tab", "View personal and assigned tasks."),
+    "tasks.create": ("Create tasks", "Create personal tasks and task drafts."),
+    "tasks.assign": ("Assign tasks", "Assign tasks to company users and roles."),
+    "tasks.manage": ("Manage tasks", "Edit, reassign and delete company tasks."),
 }
 
 ROLE_BLUEPRINTS = {
     "customer": {
         "name": "Customer",
         "description": "Limited customer portal access for projects and documents.",
-        "permissions": ["dashboard.view", "projects.view", "documents.view"],
+        "permissions": ["dashboard.view", "projects.view", "documents.view", "tasks.view", "tasks.create"],
     },
     "agent": {
         "name": "Agent",
@@ -80,6 +84,8 @@ ROLE_BLUEPRINTS = {
             "customers.create",
             "quotations.create",
             "agents.transactions.submit",
+            "tasks.view",
+            "tasks.create",
         ],
     },
     "accounts_admin": {
@@ -100,6 +106,10 @@ ROLE_BLUEPRINTS = {
             "projects.view",
             "agents.transactions.approve",
             "events.view",
+            "tasks.view",
+            "tasks.create",
+            "tasks.assign",
+            "tasks.manage",
         ],
     },
     "company_admin": {

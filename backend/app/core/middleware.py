@@ -536,6 +536,17 @@ def add_request_middleware(app: FastAPI) -> None:
 
 
 def add_error_handlers(app: FastAPI) -> None:
+    # Access checks are shared by several service modules. Register one
+    # consistent boundary so an uncaught tenant/resource access error can
+    # never degrade into a generic 500 response.
+    from app.services.access_service import AccessError
+
+    @app.exception_handler(AccessError)
+    async def access_error(request: Request, exc: AccessError):
+        request_id = getattr(request.state, "request_id", request_id_var.get())
+        code = "resource_not_found" if exc.status_code == 404 else "access_denied"
+        return _error(exc.status_code, code, str(exc), request_id)
+
     @app.exception_handler(HTTPException)
     async def http_error(request: Request, exc: HTTPException):
         request_id = getattr(request.state, "request_id", request_id_var.get())

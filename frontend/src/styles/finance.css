@@ -181,9 +181,9 @@
   margin-bottom:8px;
 }
 .finance-date-field{
-  width:124px;
+  width:148px;
   min-width:0;
-  flex:0 0 124px;
+  flex:0 0 148px;
 }
 .date-filter-control{
   position:relative;
@@ -202,6 +202,20 @@
   cursor:pointer;
 }
 .date-filter-control:focus-within{border-color:#d5a344;box-shadow:0 0 0 3px rgba(217,154,20,.1)}
+.date-filter-control__copy{
+  min-width:0;
+  display:flex;
+  align-items:center;
+  gap:5px;
+  overflow:hidden;
+}
+.date-filter-control__copy small{
+  flex:0 0 auto;
+  color:#7a8591;
+  font-size:9px;
+  font-weight:800;
+  line-height:1;
+}
 .date-filter-control__value{
   min-width:0;
   overflow:hidden;
@@ -316,25 +330,6 @@
   gap:7px;
   margin-bottom:8px;
 }
-.finance-all-dates{
-  height:32px;
-  min-width:92px;
-  flex:0 0 auto;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  gap:6px;
-  padding:0 9px;
-  border:1px solid #dce2e7;
-  border-radius:7px;
-  background:#fff;
-  color:#4d5966;
-  font-size:10px;
-  font-weight:800;
-  white-space:nowrap;
-  cursor:pointer;
-}
-.finance-all-dates input{width:13px;height:13px;margin:0;accent-color:#c98310}
 .finance-bill-type{
   width:130px;
   flex:0 0 130px;
@@ -397,7 +392,7 @@
 .finance-bill-payment>button:hover{border-color:#d59b96;background:#fff1ef}
 @media(max-width:700px){
   .finance-bills-toolbar{align-items:stretch;flex-wrap:wrap}
-  .finance-bills-toolbar .finance-date-field{flex:1 1 124px}
+  .finance-bills-toolbar .finance-date-field{flex:1 1 148px}
   .finance-bill-type{min-width:0;flex:1 1 130px}
 }
 @media(max-width:520px){
@@ -439,9 +434,9 @@
 }
 .finance-expense-presets button:hover{border-color:#d5a344;color:#8a5c0c;background:#fff9ec}
 .finance-expense-date{
-  width:116px;
+  width:140px;
   min-width:0;
-  flex:0 0 116px;
+  flex:0 0 140px;
 }
 .finance-expense-apply,.finance-expense-create{
   min-height:32px!important;
@@ -458,7 +453,7 @@
 }
 @media(max-width:760px){
   .finance-expense-presets{max-width:100%;overflow-x:auto}
-  .finance-expense-date{min-width:0;flex:1 1 116px}
+  .finance-expense-date{min-width:0;flex:1 1 140px}
 }
 @media(max-width:520px){
   .finance-tab-panel--expenses>.finance-expense-kpis{grid-template-columns:1fr}
@@ -484,9 +479,9 @@
   margin-bottom:8px;
 }
 .finance-ledger-field{
-  width:112px;
+  width:140px;
   min-width:0;
-  flex:0 0 112px;
+  flex:0 0 140px;
 }
 .finance-ledger-direction{width:104px;flex-basis:104px}
 .finance-ledger-direction select{
@@ -548,7 +543,7 @@
     max-width:none;
     flex:none;
   }
-  .finance-all-dates,.finance-ledger-direction,.finance-ledger-search,.finance-ledger-actions{grid-column:1/-1;width:100%}
+  .finance-ledger-direction,.finance-ledger-search,.finance-ledger-actions{grid-column:1/-1;width:100%}
   .finance-ledger-search{height:32px}
   .finance-ledger-actions{
     display:grid;

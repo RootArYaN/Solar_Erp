@@ -3,7 +3,7 @@ from __future__ import annotations
 import tempfile
 from contextlib import ExitStack
 from dataclasses import dataclass
-from datetime import UTC, date, datetime
+from datetime import date
 from decimal import Decimal
 from io import BytesIO
 from pathlib import Path

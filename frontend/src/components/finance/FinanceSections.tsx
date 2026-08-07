@@ -15,8 +15,8 @@ type DateRangeProps = {
 
 function DateRangeFields({ dateFrom, setDateFrom, dateTo, setDateTo }: DateRangeProps) {
   return <>
-    <DateFilterInput className="finance-date-field" value={dateFrom} max={dateTo} onChange={setDateFrom} ariaLabel="From date" required />
-    <DateFilterInput className="finance-date-field" value={dateTo} min={dateFrom} onChange={setDateTo} ariaLabel="To date" required />
+    <DateFilterInput className="finance-date-field" value={dateFrom} max={dateTo} onChange={setDateFrom} ariaLabel="From date" label="From" required />
+    <DateFilterInput className="finance-date-field" value={dateTo} min={dateFrom} onChange={setDateTo} ariaLabel="To date" label="To" required />
   </>
 }
 
@@ -66,7 +66,7 @@ export function Overview({ data, dateFrom, setDateFrom, dateTo, setDateTo, reloa
   </>
 }
 
-export function Transactions({ data, rows, search, setSearch, direction, setDirection, dateFrom, setDateFrom, dateTo, setDateTo, allDates, setAllDates, reload, reportMode, canEdit, onEdit, onReverse, onDelete }: { data: FinanceTransactionList | null; rows: FinanceTransactionList['data']; search: string; setSearch: (value: string) => void; direction: string; setDirection: (value: string) => void; dateFrom: string; setDateFrom: (value: string) => void; dateTo: string; setDateTo: (value: string) => void; allDates: boolean; setAllDates: (value: boolean) => void; reload: () => void; reportMode: boolean; canEdit: boolean; onEdit: (row: FinanceTransaction) => void; onReverse: (row: FinanceTransaction) => void; onDelete: (row: FinanceTransaction) => void }) {
+export function Transactions({ data, rows, search, setSearch, direction, setDirection, dateFrom, setDateFrom, dateTo, setDateTo, reload, reportMode, canEdit, onEdit, onReverse, onDelete }: { data: FinanceTransactionList | null; rows: FinanceTransactionList['data']; search: string; setSearch: (value: string) => void; direction: string; setDirection: (value: string) => void; dateFrom: string; setDateFrom: (value: string) => void; dateTo: string; setDateTo: (value: string) => void; reload: () => void; reportMode: boolean; canEdit: boolean; onEdit: (row: FinanceTransaction) => void; onReverse: (row: FinanceTransaction) => void; onDelete: (row: FinanceTransaction) => void }) {
   return <>
     <section className="mini-kpis finance-ledger-kpis">
       <article><span>Money in</span><strong>{money.format(data?.money_in ?? 0)}</strong></article>
@@ -75,11 +75,8 @@ export function Transactions({ data, rows, search, setSearch, direction, setDire
       <article><span>Entries</span><strong>{data?.total ?? 0}</strong></article>
     </section>
     <div className="finance-ledger-toolbar">
-      <label className="finance-all-dates"><input type="checkbox" checked={allDates} onChange={(event) => setAllDates(event.target.checked)} /><span>All history</span></label>
-      {!allDates && <>
-        <DateFilterInput className="finance-ledger-field" value={dateFrom} max={dateTo} onChange={setDateFrom} ariaLabel="From date" />
-        <DateFilterInput className="finance-ledger-field" value={dateTo} min={dateFrom} onChange={setDateTo} ariaLabel="To date" />
-      </>}
+      <DateFilterInput className="finance-ledger-field" value={dateFrom} max={dateTo} onChange={setDateFrom} ariaLabel="From date" label="From" required />
+      <DateFilterInput className="finance-ledger-field" value={dateTo} min={dateFrom} onChange={setDateTo} ariaLabel="To date" label="To" required />
       <label className="finance-ledger-field finance-ledger-direction"><select value={direction} onChange={(event) => setDirection(event.target.value)} aria-label="Transaction direction"><option value="">All</option><option value="credit">Money in</option><option value="debit">Money out</option></select></label>
       <label className="finance-ledger-search"><Search size={13} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search ledger" aria-label="Search ledger" /></label>
       <div className={`finance-ledger-actions ${reportMode ? 'finance-ledger-actions--report' : ''}`.trim()}>
@@ -109,8 +106,8 @@ export function Expenses({ data, dateFrom, setDateFrom, dateTo, setDateTo, reloa
         <button onClick={() => { const d = new Date(); d.setDate(d.getDate() - 6); setDateFrom(toDateInputValue(d)); setDateTo(today()) }}>This week</button>
         <button onClick={() => { setDateFrom(monthStart()); setDateTo(today()) }}>This month</button>
       </div>
-      <DateFilterInput className="finance-expense-date" value={dateFrom} max={dateTo} onChange={setDateFrom} ariaLabel="Expense from date" />
-      <DateFilterInput className="finance-expense-date" value={dateTo} min={dateFrom} onChange={setDateTo} ariaLabel="Expense to date" />
+      <DateFilterInput className="finance-expense-date" value={dateFrom} max={dateTo} onChange={setDateFrom} ariaLabel="Expense from date" label="From" />
+      <DateFilterInput className="finance-expense-date" value={dateTo} min={dateFrom} onChange={setDateTo} ariaLabel="Expense to date" label="To" />
       <button className="secondary-button finance-expense-apply" onClick={reload}>Apply</button>
       {canEdit && <button className="primary-button finance-expense-create" onClick={onAdd}><Plus size={14} /> Add expense</button>}
     </div>
@@ -118,7 +115,7 @@ export function Expenses({ data, dateFrom, setDateFrom, dateTo, setDateTo, reloa
   </>
 }
 
-export function Bills({ data, billType, setBillType, dateFrom, setDateFrom, dateTo, setDateTo, allDates, setAllDates, reload, canEdit, onAdd, onEdit, onPay, onDelete, onUpload, onDownload, onRemoveAttachment, onRemovePayment, onDownloadMerged, downloadingMerged }: { data: BillList | null; billType: string; setBillType: (value: string) => void; allDates: boolean; setAllDates: (value: boolean) => void; reload: () => void; canEdit: boolean; onAdd: () => void; onEdit: (bill: Bill) => void; onPay: (bill: Bill) => void; onDelete: (bill: Bill) => void; onUpload: (bill: Bill, file: File) => void; onDownload: (bill: Bill) => void; onRemoveAttachment: (bill: Bill) => void; onRemovePayment: (bill: Bill, payment: BillPayment) => void; onDownloadMerged: () => void; downloadingMerged: boolean } & DateRangeProps) {
+export function Bills({ data, billType, setBillType, dateFrom, setDateFrom, dateTo, setDateTo, reload, canEdit, onAdd, onEdit, onPay, onDelete, onUpload, onDownload, onRemoveAttachment, onRemovePayment, onDownloadMerged, downloadingMerged }: { data: BillList | null; billType: string; setBillType: (value: string) => void; reload: () => void; canEdit: boolean; onAdd: () => void; onEdit: (bill: Bill) => void; onPay: (bill: Bill) => void; onDelete: (bill: Bill) => void; onUpload: (bill: Bill, file: File) => void; onDownload: (bill: Bill) => void; onRemoveAttachment: (bill: Bill) => void; onRemovePayment: (bill: Bill, payment: BillPayment) => void; onDownloadMerged: () => void; downloadingMerged: boolean } & DateRangeProps) {
   return <>
     <section className="mini-kpis finance-bill-kpis">
       <article><span>Total bills</span><strong>{data?.total ?? 0}</strong></article>
@@ -126,8 +123,7 @@ export function Bills({ data, billType, setBillType, dateFrom, setDateFrom, date
       <article><span>Paid</span><strong>{money.format(data?.data.reduce((sum, row) => sum + row.paid_amount, 0) ?? 0)}</strong></article>
     </section>
     <div className="finance-bills-toolbar">
-      <label className="finance-all-dates"><input type="checkbox" checked={allDates} onChange={(event) => setAllDates(event.target.checked)} /><span>All history</span></label>
-      {!allDates && <DateRangeFields dateFrom={dateFrom} setDateFrom={setDateFrom} dateTo={dateTo} setDateTo={setDateTo} />}
+      <DateRangeFields dateFrom={dateFrom} setDateFrom={setDateFrom} dateTo={dateTo} setDateTo={setDateTo} />
       <label className="finance-bill-type">
         <select value={billType} onChange={(event) => setBillType(event.target.value)}>
           <option value="">All bills</option>

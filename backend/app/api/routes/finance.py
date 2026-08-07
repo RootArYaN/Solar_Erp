@@ -45,8 +45,8 @@ def _raise(exc: FinanceServiceError) -> None:
 
 @router.get('/overview', response_model=FinanceOverview)
 def get_overview(
-    date_from: date | None = None,
-    date_to: date | None = None,
+    date_from: date = Query(...),
+    date_to: date = Query(...),
     db: Session = Depends(get_db),
     session: CurrentSession = Depends(require_any_permissions('finance.view', 'finance.manage')),
 ):
@@ -79,8 +79,8 @@ def get_transactions(
     project_id: str | None = None,
     source_type: str | None = None,
     status: str | None = None,
-    date_from: date | None = None,
-    date_to: date | None = None,
+    date_from: date = Query(...),
+    date_to: date = Query(...),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=settings.default_page_size, ge=1, le=settings.max_page_size),
     db: Session = Depends(get_db),
@@ -123,8 +123,8 @@ def post_transfer(payload: AccountTransferRequest, db: Session = Depends(get_db)
 
 @router.get('/expenses', response_model=FinanceTransactionList)
 def get_expenses(
-    date_from: date | None = None,
-    date_to: date | None = None,
+    date_from: date = Query(...),
+    date_to: date = Query(...),
     project_id: str | None = None,
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=settings.default_page_size, ge=1, le=settings.max_page_size),
@@ -140,8 +140,8 @@ def get_bills(
     payment_status: str | None = None,
     customer_id: str | None = None,
     project_id: str | None = None,
-    date_from: date | None = None,
-    date_to: date | None = None,
+    date_from: date = Query(...),
+    date_to: date = Query(...),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=settings.default_page_size, ge=1, le=settings.max_page_size),
     db: Session = Depends(get_db),
@@ -158,8 +158,8 @@ def get_merged_bills(
     payment_status: str | None = None,
     customer_id: str | None = None,
     project_id: str | None = None,
-    date_from: date | None = None,
-    date_to: date | None = None,
+    date_from: date = Query(...),
+    date_to: date = Query(...),
     db: Session = Depends(get_db),
     session: CurrentSession = Depends(require_any_permissions('finance.view', 'finance.manage')),
 ):
@@ -276,8 +276,8 @@ def delete_company_loan(loan_id: str, db: Session = Depends(get_db), session: Cu
 
 @router.get('/profitability', response_model=ProfitabilitySummary)
 def get_profitability(
-    date_from: date | None = None,
-    date_to: date | None = None,
+    date_from: date = Query(...),
+    date_to: date = Query(...),
     db: Session = Depends(get_db),
     session: CurrentSession = Depends(require_any_permissions('finance.view', 'finance.manage')),
 ):

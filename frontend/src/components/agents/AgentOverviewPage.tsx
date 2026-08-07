@@ -8,7 +8,6 @@ import {
   Edit3,
   FileText,
   Mail,
-  MapPin,
   Phone,
   Search,
   Trash2,
@@ -59,12 +58,6 @@ const currency = new Intl.NumberFormat('en-IN', {
 
 const dateFormatter = new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium' })
 
-function formatAddress(overview: AgentOverview) {
-  const { profile } = overview
-  return [profile.address_line_1, profile.address_line_2, profile.city, profile.state, profile.postal_code]
-    .filter(Boolean)
-    .join(', ')
-}
 
 function transactionLabel(value: string) {
   return value.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase())

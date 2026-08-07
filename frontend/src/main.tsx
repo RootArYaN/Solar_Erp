@@ -13,6 +13,7 @@ import './styles/design-tokens.css'
 import './styles/base.css'
 import './styles/ui-primitives.css'
 import './styles/erp-shared.css'
+import './styles/shell.css'
 import './styles/shell-admin.css'
 import './styles/agents.css'
 import './styles/documents-posters.css'
@@ -22,6 +23,7 @@ import './styles/workflow.css'
 import './styles/finance.css'
 import './styles/workspace.css'
 import './styles/ui-system.css'
+import './styles/tasks.css'
 
 type AppIcon = {
   id: string

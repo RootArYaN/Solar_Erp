@@ -21,6 +21,7 @@ const SolarPricingPage = lazy(() => import('./components/pricing/SolarPricingPag
 const ActiveDevicesPage = lazy(() => import('./components/security/ActiveDevicesPage').then((module) => ({ default: module.ActiveDevicesPage })))
 const ApprovalCenterPage = lazy(() => import('./components/workflow/ApprovalCenterPage').then((module) => ({ default: module.ApprovalCenterPage })))
 const ProjectTimelinePage = lazy(() => import('./components/workflow/ProjectTimelinePage').then((module) => ({ default: module.ProjectTimelinePage })))
+const TaskPage = lazy(() => import('./components/tasks/TaskPage').then((module) => ({ default: module.TaskPage })))
 
 const sessionMessages: Partial<Record<SessionEndReason, string>> = {
   expired: 'Your session expired. Sign in again to continue.',
@@ -139,6 +140,7 @@ export default function App() {
           <Route path="administration" element={session && <ProtectedRoute session={session} permissions={WORKSPACE_ROUTE_ACCESS.administration.permissions} mode={WORKSPACE_ROUTE_ACCESS.administration.mode}><AdminPage session={session} onSessionRefresh={syncCurrentSession} /></ProtectedRoute>} />
           <Route path="agents" element={session && <ProtectedRoute session={session} permissions={WORKSPACE_ROUTE_ACCESS.agents.permissions}><AgentOverviewPage session={session} /></ProtectedRoute>} />
           <Route path="projects" element={session && <ProtectedRoute session={session} permissions={WORKSPACE_ROUTE_ACCESS.projects.permissions}><ProjectTimelinePage /></ProtectedRoute>} />
+          <Route path="tasks" element={session && <ProtectedRoute session={session} permissions={WORKSPACE_ROUTE_ACCESS.tasks.permissions}><TaskPage session={session} /></ProtectedRoute>} />
           <Route path="approvals" element={session && <ProtectedRoute session={session} permissions={WORKSPACE_ROUTE_ACCESS.approvals.permissions}><ApprovalCenterPage /></ProtectedRoute>} />
           <Route path="customer-documents" element={session && <ProtectedRoute session={session} permissions={WORKSPACE_ROUTE_ACCESS.documents.permissions}><CustomerDataUploadPage session={session} /></ProtectedRoute>} />
           <Route path="posters" element={session && <ProtectedRoute session={session} permissions={WORKSPACE_ROUTE_ACCESS.posters.permissions}><PosterUploadPage session={session} /></ProtectedRoute>} />

@@ -33,6 +33,7 @@ describe('workspace route access', () => {
       '/app/customers',
       '/app/agents',
       '/app/projects',
+      '/app/tasks',
       '/app/approvals',
       '/app/finance',
       '/app/inventory',
