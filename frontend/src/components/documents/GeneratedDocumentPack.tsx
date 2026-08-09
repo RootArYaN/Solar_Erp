@@ -189,7 +189,7 @@ export function GeneratedDocumentPackPanel({
         return
       }
       if (missingRequiredDocuments.length) {
-        setValidationError(`Upload ${missingRequiredDocuments.join(' and ')} before generating the full pack.`)
+        setValidationError(`Upload ${missingRequiredDocuments.join(' and ')} before creating the document set.`)
         return
       }
     }
@@ -213,7 +213,7 @@ export function GeneratedDocumentPackPanel({
     try {
       await downloadStoredFile(storedPackFile.id, storedPackFile.name)
     } catch (reason) {
-      setValidationError(reason instanceof Error ? reason.message : 'Could not download the stored full pack.')
+      setValidationError(reason instanceof Error ? reason.message : 'Could not download the saved document set.')
     } finally {
       setExportingPdf(null)
     }
@@ -229,7 +229,7 @@ export function GeneratedDocumentPackPanel({
         `${storedPackFile.name.replace(/\.pdf$/i, '')}_With_Attachments.pdf`,
       )
     } catch (reason) {
-      setValidationError(reason instanceof Error ? reason.message : 'Could not merge the full pack and customer attachments.')
+      setValidationError(reason instanceof Error ? reason.message : 'Could not combine the document set and customer files.')
     } finally {
       setExportingPdf(null)
     }
@@ -245,23 +245,23 @@ export function GeneratedDocumentPackPanel({
     <div className="generated-pack-toolbar">
       <div className="generated-pack-actions generated-pack-actions--workflow">
         {canEdit && <button type="button" className="secondary-button" disabled={working} onClick={() => void save('draft')}><Save size={14} /> {locked ? 'New draft' : 'Save draft'}</button>}
-        {canEdit && <button type="button" className="primary-button" disabled={working} onClick={() => void save('generated')}>{working ? <LoaderCircle className="spin" size={14} /> : <Sparkles size={14} />} {locked ? 'Regenerate full pack' : 'Generate full pack'}</button>}
-        {canApprove && selectedPack?.status === 'generated' && <button type="button" className="secondary-button generated-pack-finalize" disabled={working} onClick={() => void onFinalize(selectedPack)}><LockKeyhole size={14} /> Finalize</button>}
+        {canEdit && <button type="button" className="primary-button" disabled={working} onClick={() => void save('generated')}>{working ? <LoaderCircle className="spin" size={14} /> : <Sparkles size={14} />} {locked ? 'Create new document set' : 'Create document set'}</button>}
+        {canApprove && selectedPack?.status === 'generated' && <button type="button" className="secondary-button generated-pack-finalize" disabled={working} onClick={() => void onFinalize(selectedPack)}><LockKeyhole size={14} /> Mark final</button>}
       </div>
       <div className="generated-pack-actions generated-pack-actions--exports">
         {packs.length > 0 && <label className="generated-pack-version"><span>Version</span><select value={selectedPack?.id || ''} onChange={(event) => {
           const pack = packs.find((row) => row.id === event.target.value)
           if (pack) onSelectPack(pack)
         }}>{packs.map((pack) => <option key={pack.id} value={pack.id}>v{pack.version} · {statusLabel(pack.status)}</option>)}</select></label>}
-        <button type="button" className="secondary-button" disabled={working || exportingPdf !== null || !storedPackFile} onClick={() => void downloadStoredPack()} title={storedPackFile ? `Download the stored full pack for version ${selectedPack?.version}` : 'Generate this version to create its full-pack PDF'}>{exportingPdf === 'stored' ? <LoaderCircle className="spin" size={14} /> : <Download size={14} />} {exportingPdf === 'stored' ? 'Downloading' : selectedPack ? `Download v${selectedPack.version}` : 'Download full pack'}</button>
-        <button type="button" className="secondary-button" disabled={working || exportingPdf !== null || !storedPackFile} onClick={() => void downloadMergedPack()} title="Download one PDF containing the full pack and all uploaded customer documents">{exportingPdf === 'merged' ? <LoaderCircle className="spin" size={14} /> : <Files size={14} />} {exportingPdf === 'merged' ? 'Merging files' : 'Full pack + attachments'}</button>
+        <button type="button" className="secondary-button" disabled={working || exportingPdf !== null || !storedPackFile} onClick={() => void downloadStoredPack()} title={storedPackFile ? `Download document set version ${selectedPack?.version}` : 'Create this version before downloading it'}>{exportingPdf === 'stored' ? <LoaderCircle className="spin" size={14} /> : <Download size={14} />} {exportingPdf === 'stored' ? 'Downloading' : selectedPack ? `Download v${selectedPack.version}` : 'Download document set'}</button>
+        <button type="button" className="secondary-button" disabled={working || exportingPdf !== null || !storedPackFile} onClick={() => void downloadMergedPack()} title="Download one PDF with the document set and all customer files">{exportingPdf === 'merged' ? <LoaderCircle className="spin" size={14} /> : <Files size={14} />} {exportingPdf === 'merged' ? 'Combining files' : 'Documents + customer files'}</button>
         <button type="button" className="secondary-button" onClick={() => printDocumentPack(input, settings, activeTab, renderAssets)}><Printer size={14} /> Print</button>
         {activeTab !== 'full' && activeTab !== 'quotation' && <button type="button" className="secondary-button" onClick={() => downloadDocumentWord(input, settings, activeTab, renderAssets)}><FileText size={14} /> Word</button>}
         {activeTab === 'quotation' && <button type="button" className="secondary-button" onClick={() => downloadQuotationCsv(input)}><FileSpreadsheet size={14} /> Excel CSV</button>}
       </div>
     </div>
 
-    {locked && <div className="generated-pack-lock"><CheckCircle2 size={16} /><span>This final version remains immutable. Editing and saving creates a new version without changing this record.</span></div>}
+    {locked && <div className="generated-pack-lock"><CheckCircle2 size={16} /><span>This final version cannot be changed. Saving edits creates a new version.</span></div>}
     {validationError && <div className="generated-pack-validation"><span>{validationError}</span></div>}
 
     <div className="generated-pack-workspace">
@@ -279,7 +279,7 @@ export function GeneratedDocumentPackPanel({
         </div>
 
         <div className="generated-pack-form__section generated-pack-form__section--agent">
-          <div><strong>Agent completion fields</strong></div>
+          <div><strong>Details to complete</strong></div>
           <span className="generated-pack-section-badge generated-pack-section-badge--required">Required</span>
         </div>
         <div className="generated-pack-fields erp-form-grid">
@@ -309,7 +309,7 @@ export function GeneratedDocumentPackPanel({
         </header>
         <nav className="generated-pack-tabs" aria-label="Document preview tabs">
           {documentTabs.map((tab) => <button type="button" key={tab.key} className={activeTab === tab.key ? 'is-active' : ''} onClick={() => setActiveTab(tab.key)}>{tab.label}</button>)}
-          <button type="button" className={activeTab === 'full' ? 'is-active' : ''} onClick={() => setActiveTab('full')}>Full pack</button>
+          <button type="button" className={activeTab === 'full' ? 'is-active' : ''} onClick={() => setActiveTab('full')}>All documents</button>
         </nav>
         <div ref={previewViewportRef} className={`generated-pack-preview__scroll ${activeTab === 'full' ? 'is-full' : ''}`}>
           <div

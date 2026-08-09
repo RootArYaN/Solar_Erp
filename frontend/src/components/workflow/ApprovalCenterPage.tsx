@@ -169,8 +169,8 @@ export function ApprovalCenterPage() {
     <div className="approval-split-layout">
       <section className="approval-panel approval-panel--quotation">
         <header>
-          <div><FileCheck2 size={18} /><span><strong>Quotations</strong><small>Review and approve quotes</small></span></div>
-          <em title={`${visibleQuotationRequests.length} visible of ${data.quotation_requests.length}`}>{quotationSearch.trim() ? `${visibleQuotationRequests.length}/${data.quotation_requests.length}` : data.quotation_requests.length}</em>
+          <div><FileCheck2 size={18} /><span><strong>Quotations</strong><small>Check quotes and make a decision</small></span></div>
+          <em title={`${visibleQuotationRequests.length} shown out of ${data.quotation_requests.length}`}>{quotationSearch.trim() ? `${visibleQuotationRequests.length}/${data.quotation_requests.length}` : data.quotation_requests.length}</em>
         </header>
         {data.quotation_requests.length > 0 && <Field label="Search quotation approvals" hideLabel prefix={<Search size={15} />} className="approval-search">
           <input type="search" value={quotationSearch} onChange={(event) => setQuotationSearch(event.target.value)} placeholder="Customer, project, quote or status" />
@@ -205,13 +205,13 @@ export function ApprovalCenterPage() {
                     <td data-label="Quote">
                       {quotation
                         ? <div className="approval-quote-summary"><strong>{projectDisplayName(quotation.title, item.customer_name)}</strong><span>{currency.format(quotation.grand_total)}</span><small>{quotation.quotation_number} · {quotation.lines.length} item{quotation.lines.length === 1 ? '' : 's'}</small></div>
-                        : <span className="approval-muted">Not generated</span>}
+                        : <span className="approval-muted">Not created</span>}
                     </td>
                     <td data-label="Status"><span className={`workflow-status workflow-status--${quotation?.status || item.status}`}>{prettyStatus(quotation?.status || item.status)}</span></td>
                     <td data-label="Action">
                       <div className="approval-row-actions">
                         {quotation && <button className="table-action-button table-action-button--neutral" type="button" onClick={() => setPreviewRequest(item)}><Eye size={13} /> View</button>}
-                        {(!quotation || ['condition', 'rejected'].includes(quotation.status)) && ['pending', 'quotation_ready', 'condition', 'rejected'].includes(item.status) && <button className="table-action-button table-action-button--neutral" type="button" onClick={() => setBuilderRequest(item)}><FilePlus2 size={13} /> Generate</button>}
+                        {(!quotation || ['condition', 'rejected'].includes(quotation.status)) && ['pending', 'quotation_ready', 'condition', 'rejected'].includes(item.status) && <button className="table-action-button table-action-button--neutral" type="button" onClick={() => setBuilderRequest(item)}><FilePlus2 size={13} /> Create quote</button>}
                         {quotation?.status === 'pending_approval' && <>
                           <button className="approval-action approval-action--approve" type="button" onClick={() => setDecisionTarget({ kind: 'quotation', item, decision: 'approved' })}><Check size={13} /> Approve</button>
                           <button className="approval-action approval-action--reject" type="button" onClick={() => setDecisionTarget({ kind: 'quotation', item, decision: 'rejected' })}><X size={13} /> Reject</button>
@@ -225,7 +225,7 @@ export function ApprovalCenterPage() {
       </section>
 
       <section className="approval-panel approval-panel--transactions">
-        <header><div><ClipboardCheck size={18} /><span><strong>Transactions</strong><small>Pending entries require approval</small></span></div><em title={`${visibleTransactions.length} visible of ${data.transactions.length}`}>{transactionSearch.trim() ? `${visibleTransactions.length}/${data.transactions.length}` : data.transactions.length}</em></header>
+        <header><div><ClipboardCheck size={18} /><span><strong>Transactions</strong><small>Review transactions waiting for approval</small></span></div><em title={`${visibleTransactions.length} shown out of ${data.transactions.length}`}>{transactionSearch.trim() ? `${visibleTransactions.length}/${data.transactions.length}` : data.transactions.length}</em></header>
         {data.transactions.length > 0 && <label className="approval-search">
           <Search size={15} />
           <input type="search" value={transactionSearch} onChange={(event) => setTransactionSearch(event.target.value)} placeholder="Search agent, reference or details" aria-label="Search transaction approvals" />

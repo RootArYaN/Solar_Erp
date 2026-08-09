@@ -265,7 +265,7 @@ export function AppShell({ session, onLogout }: { session: Session; onLogout: ()
                         <i>{count > 99 ? '99+' : count}</i>
                       </NavLink>
                     )) : notificationsUnavailable
-                      ? <div className="notification-panel__empty notification-panel__empty--warning"><Bell size={18} /><strong>Sync unavailable</strong><span>Open the relevant workspace to check current items.</span></div>
+                      ? <div className="notification-panel__empty notification-panel__empty--warning"><Bell size={18} /><strong>Could not update</strong><span>Open the related page to check current items.</span></div>
                       : <div className="notification-panel__empty"><CheckCircle2 size={18} /><strong>All clear</strong><span>No current action needs attention.</span></div>}
                   </div>
 
@@ -321,7 +321,7 @@ function RouteLoadingState() {
       <div className="route-loading__progress" aria-hidden="true" />
       <div className="route-loading__content">
         <span className="route-loading__spinner" aria-hidden="true"><i /><i /></span>
-        <span>Preparing workspace…</span>
+        <span>Loading page…</span>
       </div>
     </div>
   )

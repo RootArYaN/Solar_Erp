@@ -25,7 +25,7 @@ const TaskPage = lazy(() => import('./components/tasks/TaskPage').then((module) 
 
 const sessionMessages: Partial<Record<SessionEndReason, string>> = {
   expired: 'Your session expired. Sign in again to continue.',
-  revoked: 'This session was revoked from another device.',
+  revoked: 'You were signed out from another device.',
   invalid: 'The saved session was invalid and has been cleared.',
 }
 
@@ -38,8 +38,8 @@ function WorkspaceLanding({ session }: { session: Session }) {
   return (
     <section className="workspace-page erp-page">
       <div className="erp-state">
-        <strong>No workspace access</strong>
-        <span>Ask an administrator to assign at least one workspace permission.</span>
+        <strong>No page access</strong>
+        <span>Ask an administrator to give you access to at least one section.</span>
       </div>
     </section>
   )

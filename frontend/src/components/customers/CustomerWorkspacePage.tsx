@@ -187,7 +187,7 @@ export function CustomerWorkspacePage({ session }: { session: Session }) {
     if (session.user.is_super_admin && ['complete', 'archive', 'delete', 'purge'].includes(action)) {
       try { setLifecyclePreview(await repository.getDependencyPreview(snapshot.customer.id)) }
       catch (reason) {
-        toast({ message: reason instanceof Error ? reason.message : 'Could not calculate customer impact', variant: 'error' })
+        toast({ message: reason instanceof Error ? reason.message : 'Could not check linked records', variant: 'error' })
         return
       }
     }
@@ -198,11 +198,11 @@ export function CustomerWorkspacePage({ session }: { session: Session }) {
     if (!snapshot || !lifecycleAction) return
     const customerId = snapshot.customer.id
     if ((['delete', 'purge'].includes(lifecycleAction) || (lifecycleAction === 'complete' && forceCompletion)) && !lifecycleReason.trim()) {
-      toast({ message: 'A reason is required for destructive actions', variant: 'warning' })
+      toast({ message: 'Enter a reason for this change', variant: 'warning' })
       return
     }
-    if (lifecycleAction === 'purge' && purgeConfirmation !== 'PURGE') {
-      toast({ message: 'Type PURGE to confirm permanent deletion', variant: 'warning' })
+    if (lifecycleAction === 'purge' && purgeConfirmation !== 'DELETE') {
+      toast({ message: 'Type DELETE to confirm', variant: 'warning' })
       return
     }
     setWorking(true)
@@ -225,9 +225,9 @@ export function CustomerWorkspacePage({ session }: { session: Session }) {
       await loadCustomers()
       if (!['delete', 'purge'].includes(lifecycleAction)) await loadSnapshot(customerId, tab)
       window.dispatchEvent(new Event('solar-erp:notifications-changed'))
-      toast({ message: `Customer ${lifecycleAction} action completed`, variant: 'success' })
+      toast({ message: 'Customer updated', variant: 'success' })
     } catch (reason) {
-      toast({ message: reason instanceof Error ? reason.message : 'Could not update customer lifecycle', variant: 'error' })
+      toast({ message: reason instanceof Error ? reason.message : 'Could not update customer status', variant: 'error' })
     } finally { setWorking(false) }
   }
 
@@ -237,7 +237,7 @@ export function CustomerWorkspacePage({ session }: { session: Session }) {
     try {
       const next = await repository.approveQuotation(snapshot.customer.id, snapshot.quotations[0].id, 'Approved for B2C project conversion.')
       setSnapshot(next)
-      toast({ message: 'Quotation approved and project workspace updated', variant: 'success' })
+      toast({ message: 'Quotation approved and project updated', variant: 'success' })
     } catch (reason) {
       toast({ message: reason instanceof Error ? reason.message : 'Could not approve quotation', variant: 'error' })
     } finally { setWorking(false) }
@@ -432,13 +432,13 @@ export function CustomerWorkspacePage({ session }: { session: Session }) {
                     leadingIcon={<MoreHorizontal size={16} />}
                     onClick={() => setLifecycleMenuOpen((open) => !open)}
                   />
-                  {lifecycleMenuOpen && <div className="customer-action-menu__panel" role="menu" aria-label="Customer lifecycle actions">
+                  {lifecycleMenuOpen && <div className="customer-action-menu__panel" role="menu" aria-label="Customer status actions">
                     {customerAccess.canEdit && !['completed', 'archived', 'deleted'].includes(snapshot.customer.status) && <button type="button" role="menuitem" onClick={() => { setLifecycleMenuOpen(false); void openLifecycle('complete') }}>Complete</button>}
                     {customerAccess.canEdit && snapshot.customer.status === 'completed' && <button type="button" role="menuitem" onClick={() => { setLifecycleMenuOpen(false); void openLifecycle('reactivate') }}>Reactivate</button>}
                     {session.user.is_super_admin && !['archived', 'deleted'].includes(snapshot.customer.status) && <button type="button" role="menuitem" onClick={() => { setLifecycleMenuOpen(false); void openLifecycle('archive') }}>Archive</button>}
                     {session.user.is_super_admin && snapshot.customer.status !== 'deleted' && <button type="button" role="menuitem" className="is-danger" onClick={() => { setLifecycleMenuOpen(false); void openLifecycle('delete') }}>Delete</button>}
                     {session.user.is_super_admin && ['archived', 'deleted'].includes(snapshot.customer.status) && <button type="button" role="menuitem" onClick={() => { setLifecycleMenuOpen(false); void openLifecycle('restore') }}>Restore</button>}
-                    {session.user.is_super_admin && snapshot.customer.status === 'deleted' && <button type="button" role="menuitem" className="is-danger" onClick={() => { setLifecycleMenuOpen(false); void openLifecycle('purge') }}>Permanent purge</button>}
+                    {session.user.is_super_admin && snapshot.customer.status === 'deleted' && <button type="button" role="menuitem" className="is-danger" onClick={() => { setLifecycleMenuOpen(false); void openLifecycle('purge') }}>Delete forever</button>}
                   </div>}
                 </div>
               </ActionBar>
@@ -473,25 +473,25 @@ export function CustomerWorkspacePage({ session }: { session: Session }) {
         </main>
       </div>
 
-      {lifecycleAction && snapshot && <Modal className="customer-lifecycle-modal" bodyClassName="customer-lifecycle-modal__body" title={`${label(lifecycleAction)} customer`} subtitle={lifecycleAction === 'purge' ? 'Permanent purge is deliberately restricted and cannot remove dependent financial history.' : 'Lifecycle changes are protected on the backend and recorded in audit history.'} onClose={() => !working && setLifecycleAction(null)}>
+      {lifecycleAction && snapshot && <Modal className="customer-lifecycle-modal" bodyClassName="customer-lifecycle-modal__body" title={lifecycleAction === 'purge' ? 'Delete customer forever' : `${label(lifecycleAction)} customer`} subtitle={lifecycleAction === 'purge' ? 'You cannot undo this. Customers with linked finance records cannot be deleted.' : 'This change is saved in the activity log.'} onClose={() => !working && setLifecycleAction(null)}>
         <div className="erp-form customer-lifecycle-form">
           {lifecyclePreview && <div className="customer-lifecycle-impact">
-            <strong>Dependency impact</strong>
+            <strong>Related records</strong>
             <p>{lifecyclePreview.projects} projects · {lifecyclePreview.finance_transactions} finance transactions · {lifecyclePreview.inventory_movements} inventory movements · {lifecyclePreview.documents} documents</p>
             {!!lifecyclePreview.completion_blockers.length && lifecycleAction === 'complete' && <p>{lifecyclePreview.completion_blockers.join(' · ')}</p>}
             {!!lifecyclePreview.purge_blockers.length && lifecycleAction === 'purge' && <p>{lifecyclePreview.purge_blockers.join(' · ')}</p>}
           </div>}
-          {lifecycleAction === 'complete' && session.user.is_super_admin && !!lifecyclePreview?.completion_blockers.length && <label className="inline-check"><input type="checkbox" checked={forceCompletion} onChange={(event) => setForceCompletion(event.target.checked)} /><span>Override completion blockers</span></label>}
-          <label><span>Reason {['delete', 'purge'].includes(lifecycleAction) || (lifecycleAction === 'complete' && forceCompletion) ? '(required)' : '(optional)'}</span><textarea value={lifecycleReason} onChange={(event) => setLifecycleReason(event.target.value)} placeholder="Short reason for the audit trail" /></label>
-          {lifecycleAction === 'purge' && <label><span>Type PURGE to confirm</span><input value={purgeConfirmation} onChange={(event) => setPurgeConfirmation(event.target.value)} /></label>}
-          <footer className="erp-form-actions"><Button variant={lifecycleAction === 'purge' || lifecycleAction === 'delete' ? 'danger' : 'primary'} disabled={working} onClick={() => void applyLifecycle()}>{working ? 'Working…' : `Confirm ${label(lifecycleAction)}`}</Button></footer>
+          {lifecycleAction === 'complete' && session.user.is_super_admin && !!lifecyclePreview?.completion_blockers.length && <label className="inline-check"><input type="checkbox" checked={forceCompletion} onChange={(event) => setForceCompletion(event.target.checked)} /><span>Complete despite these issues</span></label>}
+          <label><span>Reason {['delete', 'purge'].includes(lifecycleAction) || (lifecycleAction === 'complete' && forceCompletion) ? '(required)' : '(optional)'}</span><textarea value={lifecycleReason} onChange={(event) => setLifecycleReason(event.target.value)} placeholder="Brief reason for this change" /></label>
+          {lifecycleAction === 'purge' && <label><span>Type DELETE to confirm</span><input value={purgeConfirmation} onChange={(event) => setPurgeConfirmation(event.target.value)} /></label>}
+          <footer className="erp-form-actions"><Button variant={lifecycleAction === 'purge' || lifecycleAction === 'delete' ? 'danger' : 'primary'} disabled={working} onClick={() => void applyLifecycle()}>{working ? 'Working…' : lifecycleAction === 'purge' ? 'Delete forever' : `Confirm ${label(lifecycleAction)}`}</Button></footer>
         </div>
       </Modal>}
-      {editOpen && snapshot && <Modal title="Edit customer" subtitle="B2C customer and installation-site details" onClose={() => setEditOpen(false)}><CustomerEditForm snapshot={snapshot} working={working} onSubmit={saveCustomer} /></Modal>}
-      {paymentOpen && snapshot && <Modal title={editingPayment ? `Edit ${editingPayment.transaction_number}` : 'Record customer money'} subtitle={editingPayment ? 'Only harmless metadata can change after posting. Reverse the transaction to correct financial values.' : 'This posts once to the shared company finance ledger.'} onClose={() => { setPaymentOpen(false); setEditingPayment(null) }}><PaymentForm key={`${editingPayment?.id ?? 'new'}-${accounts.length}-${categories.length}`} accounts={accounts} categories={categories} payment={editingPayment} working={working} onSubmit={recordPayment} /></Modal>}
-      {reversingPayment && <Modal title={`Reverse ${reversingPayment.transaction_number}`} subtitle="The original ledger row remains traceable and an opposite transaction is posted." onClose={() => !working && setReversingPayment(null)}><div className="erp-form"><div className="customer-lifecycle-impact"><strong>Reversal impact</strong><p>{reversingPayment.direction === 'credit' ? 'Removes' : 'Restores'} {money.format(Number(reversingPayment.amount))} from the customer payment effect while preserving history.</p></div><label><span>Reversal date</span><input type="date" value={paymentReversalDate} onChange={(event) => setPaymentReversalDate(event.target.value)} /></label><label><span>Reason (required)</span><textarea value={paymentReversalReason} onChange={(event) => setPaymentReversalReason(event.target.value)} placeholder="Why is this transaction being reversed?" /></label><footer className="erp-form-actions"><Button variant="danger" disabled={working} onClick={() => void reverseCustomerPayment()}>{working ? 'Reversing…' : 'Reverse transaction'}</Button></footer></div></Modal>}
-      {billOpen && snapshot && <Modal title="Create customer sales bill" subtitle="The bill records the receivable; payment is posted separately." onClose={() => setBillOpen(false)}><SalesBillForm approvedValue={approvedValue} working={working} onSubmit={createSalesBill} /></Modal>}
-      {loanOpen && project && <Modal title="Customer solar loan" subtitle="Project-specific bank approval and disbursement details" onClose={() => setLoanOpen(false)}><LoanForm snapshot={snapshot!} working={working} onSubmit={saveLoan} /></Modal>}
+      {editOpen && snapshot && <Modal title="Edit customer" subtitle="Customer and installation site details" onClose={() => setEditOpen(false)}><CustomerEditForm snapshot={snapshot} working={working} onSubmit={saveCustomer} /></Modal>}
+      {paymentOpen && snapshot && <Modal title={editingPayment ? `Edit ${editingPayment.transaction_number}` : 'Record customer money'} subtitle={editingPayment ? 'You can edit basic details. Reverse the transaction to change the amount.' : 'This adds one transaction to company finance.'} onClose={() => { setPaymentOpen(false); setEditingPayment(null) }}><PaymentForm key={`${editingPayment?.id ?? 'new'}-${accounts.length}-${categories.length}`} accounts={accounts} categories={categories} payment={editingPayment} working={working} onSubmit={recordPayment} /></Modal>}
+      {reversingPayment && <Modal title={`Reverse ${reversingPayment.transaction_number}`} subtitle="The original stays unchanged. An opposite transaction is added." onClose={() => !working && setReversingPayment(null)}><div className="erp-form"><div className="customer-lifecycle-impact"><strong>What will change</strong><p>{reversingPayment.direction === 'credit' ? 'Removes' : 'Restores'} {money.format(Number(reversingPayment.amount))} from the customer balance. The original remains in history.</p></div><label><span>Reversal date</span><input type="date" value={paymentReversalDate} onChange={(event) => setPaymentReversalDate(event.target.value)} /></label><label><span>Reason (required)</span><textarea value={paymentReversalReason} onChange={(event) => setPaymentReversalReason(event.target.value)} placeholder="Why are you reversing this?" /></label><footer className="erp-form-actions"><Button variant="danger" disabled={working} onClick={() => void reverseCustomerPayment()}>{working ? 'Reversing…' : 'Reverse transaction'}</Button></footer></div></Modal>}
+      {billOpen && snapshot && <Modal title="Create customer sales bill" subtitle="This records what the customer owes. Record payment separately." onClose={() => setBillOpen(false)}><SalesBillForm approvedValue={approvedValue} working={working} onSubmit={createSalesBill} /></Modal>}
+      {loanOpen && project && <Modal title="Customer solar loan" subtitle="Bank approval and loan payout details for this project" onClose={() => setLoanOpen(false)}><LoanForm snapshot={snapshot!} working={working} onSubmit={saveLoan} /></Modal>}
     </WorkspacePage>
   )
 }

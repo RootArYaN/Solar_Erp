@@ -87,7 +87,7 @@ export function DocumentTemplateDialog({
     <Modal
       className="document-template-modal"
       title="Edit document template"
-      subtitle="Controls branding, document wording, specifications, legal clauses, and signature blocks for every generated customer pack."
+      subtitle="Set company details, document text, terms, and signatures."
       onClose={onClose}
       footer={(
         <footer className="document-template-actions">
@@ -95,7 +95,7 @@ export function DocumentTemplateDialog({
           <div className="document-template-actions__buttons">
             <button type="button" className="secondary-button" onClick={onClose} disabled={working}>Cancel</button>
             <button type="submit" form={formId} className="primary-button" disabled={working || preparingSignature}>
-              <Save size={14} /> {preparingSignature ? 'Preparing signature…' : working ? 'Saving…' : 'Save complete template'}
+              <Save size={14} /> {preparingSignature ? 'Preparing signature…' : working ? 'Saving…' : 'Save template'}
             </button>
           </div>
         </footer>
@@ -109,7 +109,7 @@ export function DocumentTemplateDialog({
         onSubmit={(event) => void submitTemplate(event)}
       >
         <fieldset>
-          <legend>Template and company identity</legend>
+          <legend>Template and company details</legend>
           <div className="erp-form-grid">
             <label><span>Template name</span><input name="name" defaultValue={template.name} required /></label>
             <label><span>Company name</span><input name="company_name" defaultValue={settings.company_name} /></label>
@@ -123,7 +123,7 @@ export function DocumentTemplateDialog({
         </fieldset>
 
         <fieldset>
-          <legend>Document titles and commercial text</legend>
+          <legend>Document titles and text</legend>
           <div className="erp-form-grid">
             <label><span>Feasibility report title</span><input name="feasibility_title" defaultValue={settings.feasibility_title} /></label>
             <label><span>Feasibility status</span><input name="feasibility_status" defaultValue={settings.feasibility_status} /></label>
@@ -165,8 +165,8 @@ export function DocumentTemplateDialog({
         </fieldset>
 
         <fieldset>
-          <legend>Signature blocks</legend>
-          <p className="document-template-help">Set signature captions and the vendor signature used in previews and generated exports.</p>
+          <legend>Signatures</legend>
+          <p className="document-template-help">Set signature labels and the company signature used in previews and downloads.</p>
           <div className="erp-form-grid">
             <label><span>Customer signature label</span><input name="customer_signature_label" defaultValue={settings.customer_signature_label} /></label>
             <label><span>Vendor signature label</span><input name="vendor_signature_label" defaultValue={settings.vendor_signature_label} /></label>

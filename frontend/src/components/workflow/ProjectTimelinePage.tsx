@@ -64,7 +64,7 @@ function TimelineStepRow({ step }: { step: ProjectTimelineStep }) {
             {formatDate(step.event_date || step.completed_at)}
             {step.completed_by && <> · {step.completed_by}</>}
           </p>
-        ) : step.status === 'current' ? <p>Ready for admin update</p> : <p>Upcoming</p>}
+        ) : step.status === 'current' ? <p>Ready to update</p> : <p>Coming up</p>}
         {step.note && <small>{step.note}</small>}
       </div>
     </article>
@@ -238,12 +238,12 @@ export function ProjectTimelinePage() {
   return (
     <WorkspacePage variant="split" className="project-timeline-page">
       {loading && !projects.length ? <LoadingSkeleton rows={8} /> : listError && !projects.length ? <ErrorState message={listError} onRetry={() => void refreshPage()} /> : !projects.length ? (
-        <EmptyState title="No projects yet" message="Approved quotations will appear here as project timelines." />
+        <EmptyState title="No projects yet" message="Approved quotations will appear here as projects." />
       ) : (
         <div className="project-timeline-layout">
           <aside className="timeline-projects-panel">
             <header>
-              <div><ListChecks size={17} /><span><strong>Projects</strong><small>{projects.length} active timelines</small></span></div>
+              <div><ListChecks size={17} /><span><strong>Projects</strong><small>{projects.length} active projects</small></span></div>
               <button type="button" onClick={() => void refreshPage(true)} disabled={loading || detailLoading} aria-label="Refresh projects and selected timeline"><RefreshCw className={loading || detailLoading ? 'spin' : ''} size={14} /></button>
             </header>
             <label className="timeline-project-search"><Search size={15} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search project" /></label>
@@ -274,7 +274,7 @@ export function ProjectTimelinePage() {
 
                 <div className={`timeline-content-grid ${timeline.can_manage ? '' : 'timeline-content-grid--read-only'}`}>
                   <section className="project-timeline-card">
-                    <header><div><strong>Project timeline</strong><small>Complete project flow in one view</small></div><span>{timeline.steps.filter((step) => step.status === 'completed').length}/{timeline.steps.length}</span></header>
+                    <header><div><strong>Project steps</strong><small>See every step in one place</small></div><span>{timeline.steps.filter((step) => step.status === 'completed').length}/{timeline.steps.length}</span></header>
                     <div className="project-timeline-list">{timeline.steps.map((step) => <TimelineStepRow key={step.key} step={step} />)}</div>
                   </section>
 
@@ -283,7 +283,7 @@ export function ProjectTimelinePage() {
                       <div className="timeline-admin-label">Admin control</div>
                       {currentStep ? (
                         <>
-                          <div className="timeline-admin-current"><small>Current step</small><strong>{currentStep.name}</strong><p>Update only the active milestone.</p></div>
+                          <div className="timeline-admin-current"><small>Current step</small><strong>{currentStep.name}</strong><p>Update this step when it is done.</p></div>
                           {currentStep.key === 'payment_mode' ? (
                             <label className="timeline-field"><span>Payment mode</span><select value={paymentMode} onChange={(event) => setPaymentMode(event.target.value as 'cash' | 'loan')}><option value="cash">Cash</option><option value="loan">Loan</option></select></label>
                           ) : (
@@ -293,12 +293,12 @@ export function ProjectTimelinePage() {
                             </>
                           )}
                           <button className="timeline-primary-action" onClick={() => void completeCurrentStep()} disabled={saving}><CheckCircle2 size={16} />{saving ? 'Saving…' : currentStep.key === 'payment_mode' ? 'Confirm payment mode' : 'Complete step'}</button>
-                          {previousStep && <button className="timeline-secondary-action" onClick={() => void reopenPreviousStep()} disabled={saving}><RotateCcw size={14} />Reverse</button>}
+                          {previousStep && <button className="timeline-secondary-action" onClick={() => void reopenPreviousStep()} disabled={saving}><RotateCcw size={14} />Reopen previous</button>}
                         </>
-                      ) : <div className="timeline-admin-current"><strong>Timeline complete</strong><p>All milestones have been completed.</p></div>}
+                      ) : <div className="timeline-admin-current"><strong>Project complete</strong><p>All steps are complete.</p></div>}
                     </aside>
                   ) : (
-                    <aside className="timeline-view-panel"><CheckCircle2 size={19} /><strong>View-only timeline</strong><p>Project progress is updated by the administrator.</p></aside>
+                    <aside className="timeline-view-panel"><CheckCircle2 size={19} /><strong>View only</strong><p>An admin updates project progress.</p></aside>
                   )}
                 </div>
               </>

@@ -1918,8 +1918,12 @@ body.app-preview-mobile .document-template-actions__buttons button {
 .movement-lines>header div{display:grid;gap:2px}
 .movement-lines>header strong{color:#293747;font-size:10px}
 .movement-lines>header small{color:#818b96;font-size:8px}
-.movement-line{position:relative;display:grid;grid-template-columns:24px minmax(160px,1.25fr) minmax(90px,.55fr) minmax(150px,1fr) minmax(190px,1.2fr) 28px;align-items:end;gap:7px;padding:9px;border:1px solid #e1e5e9;border-radius:9px;background:#fff}
-.movement-line__number{align-self:center;display:grid;place-items:center;width:22px;height:22px;border-radius:7px;color:#8c6010;background:#fff2d8;font-size:8px;font-weight:850}
+.movement-lines__add{flex:0 0 auto;white-space:nowrap}
+.movement-lines__list{min-width:0;display:grid;gap:7px;outline:0}
+.movement-line{position:relative;display:grid;grid-template-columns:minmax(160px,1.25fr) minmax(90px,.55fr) minmax(150px,1fr) minmax(190px,1.2fr);align-items:end;gap:8px;padding:10px;border:1px solid #e1e5e9;border-radius:9px;background:#fff}
+.movement-line__header{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;gap:10px;padding-bottom:8px;border-bottom:1px solid #edf0f2}
+.movement-line__header strong{display:flex;align-items:center;gap:7px;color:#394657;font-size:10px}
+.movement-line__header strong span{display:grid;place-items:center;min-width:24px;height:24px;padding:0 7px;border-radius:7px;color:#8c6010;background:#fff2d8;font-size:8px;font-weight:850}
 .movement-line label,.movement-endpoint{display:grid;gap:4px;color:#5c6877;font-size:8px;font-weight:800}
 .movement-line input,.movement-line select{width:100%;min-width:0;min-height:35px;padding:7px 8px;border:1px solid #dce2e7;border-radius:7px;background:#fff;color:#273443;font-size:9px}
 .movement-endpoint{grid-template-columns:auto 1fr}
@@ -1927,7 +1931,7 @@ body.app-preview-mobile .document-template-actions__buttons button {
 .movement-endpoint__toggle{justify-self:end;padding:2px}
 .movement-endpoint__toggle button{min-height:21px;padding:0 7px;font-size:7px}
 .movement-endpoint>input,.movement-endpoint>select{grid-column:1/-1}
-.movement-line__remove{align-self:center;display:grid;place-items:center;width:28px;height:28px;border:1px solid #efd2cf;border-radius:7px;color:#a94842;background:#fff8f7;cursor:pointer}
+.movement-line__remove{flex:0 0 auto;display:grid;place-items:center;width:30px;height:30px;border:1px solid #efd2cf;border-radius:7px;color:#a94842;background:#fff8f7;cursor:pointer}
 .movement-details{min-width:0;margin:0;padding:10px;border:1px solid #e0e5e9;border-radius:10px}
 .movement-details legend{padding:0 6px;color:#667383;font-size:8px;font-weight:850;letter-spacing:.45px;text-transform:uppercase}
 .inventory-history-panel>header{flex:0 0 auto;min-width:0}
@@ -1963,17 +1967,18 @@ body.app-preview-mobile .document-template-actions__buttons button {
 .agent-transaction-actions .danger-icon-button,.finance-transaction-delete{flex:0 0 auto}
 
 @media(max-width:820px){
-  .movement-line{grid-template-columns:24px 1fr 1fr}
-  .movement-line label:first-of-type,.movement-endpoint{grid-column:span 2}
-  .movement-line__remove{position:absolute;top:7px;right:7px}
+  .movement-line{grid-template-columns:1fr 1fr}
+  .movement-line label:first-of-type,.movement-endpoint{grid-column:1/-1}
 }
 @media(max-width:600px){
   .movement-choice{grid-template-columns:1fr}
   .movement-choice>div{display:grid;grid-template-columns:1fr 1fr}
   .movement-line{grid-template-columns:1fr}
-  .movement-line__number{position:absolute;top:9px;right:43px}
   .movement-line label:first-of-type,.movement-endpoint{grid-column:auto}
-  .movement-lines>header{align-items:flex-start;flex-direction:column}
+  .movement-lines>header{align-items:center;flex-direction:row}
+  .movement-lines>header>div{min-width:0}
+  .movement-lines__list{max-height:min(48dvh,430px);overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;padding-right:4px;scrollbar-gutter:stable;-webkit-overflow-scrolling:touch}
+  .movement-lines__list:focus-visible{border-radius:9px;box-shadow:0 0 0 3px rgba(209,154,50,.14)}
   .inventory-history-tabs{width:100%;margin-left:0}
   .inventory-history-tabs button{flex:1}
 }
@@ -4049,3 +4054,46 @@ body.app-preview-mobile .document-checklist article {
   letter-spacing: .04em;
 }
 .inventory-items-pagination { flex: 0 0 auto; }
+
+/* Keep mobile table results inside a bounded scroll surface. Toolbars,
+   section headings and pagers stay visible while records scroll inside their
+   own panel. This covers card-style and conventional tables consistently. */
+:is(.app-shell--view-mobile, body.app-preview-mobile) :is(
+  .inventory-items-panel,
+  .inventory-locations-panel,
+  .inventory-history-panel
+) > .erp-table-wrap,
+:is(.app-shell--view-mobile, body.app-preview-mobile) .approval-table-wrap,
+:is(.app-shell--view-mobile, body.app-preview-mobile) .finance-tab-panel .erp-table-wrap,
+:is(.app-shell--view-mobile, body.app-preview-mobile) .pricing-workspace-panel > .erp-table-wrap,
+:is(.app-shell--view-mobile, body.app-preview-mobile) .customer-tab-table,
+:is(.app-shell--view-mobile, body.app-preview-mobile) .admin-page .user-table-wrap,
+:is(.app-shell--view-mobile, body.app-preview-mobile) .agent-data-panel > .agent-table-wrap {
+  max-height: min(58dvh, 560px);
+  overflow-x: auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (max-width: 780px) {
+  :is(
+    .inventory-items-panel,
+    .inventory-locations-panel,
+    .inventory-history-panel
+  ) > .erp-table-wrap,
+  .approval-table-wrap,
+  .finance-tab-panel .erp-table-wrap,
+  .pricing-workspace-panel > .erp-table-wrap,
+  .customer-tab-table,
+  .admin-page .user-table-wrap,
+  .agent-data-panel > .agent-table-wrap {
+    max-height: min(58dvh, 560px);
+    overflow-x: auto;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+    -webkit-overflow-scrolling: touch;
+  }
+}

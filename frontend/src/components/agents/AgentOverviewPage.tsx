@@ -223,7 +223,7 @@ export function AgentOverviewPage({ session }: { session: Session }) {
       const transaction = await createAgentTransaction(overview.profile.membership_id, value)
       setPostingTransaction(false)
       await Promise.all([loadOverview(overview.profile.membership_id), loadAgentList()])
-      toast({ message: transaction.approval_status === 'pending' ? 'Transaction submitted for admin approval' : 'Transaction approved and posted', variant: 'success' })
+      toast({ message: transaction.approval_status === 'pending' ? 'Transaction sent for approval' : 'Transaction approved and saved', variant: 'success' })
     } catch (reason) {
       toast({ message: reason instanceof Error ? reason.message : 'Could not submit transaction', variant: 'error' })
     } finally {
@@ -275,7 +275,7 @@ export function AgentOverviewPage({ session }: { session: Session }) {
       await createAgentCustomer(overview.profile.membership_id, value)
       setRegisteringCustomer(false)
       await Promise.all([loadOverview(overview.profile.membership_id), loadAgentList()])
-      toast({ message: 'Customer registered and assigned to this agent', variant: 'success' })
+      toast({ message: 'Customer added and assigned to this agent', variant: 'success' })
     } catch (reason) {
       toast({ message: reason instanceof Error ? reason.message : 'Could not register customer', variant: 'error' })
     } finally {
@@ -294,7 +294,7 @@ export function AgentOverviewPage({ session }: { session: Session }) {
       )
       setEditingCustomer(null)
       await Promise.all([loadOverview(overview.profile.membership_id), loadAgentList()])
-      toast({ message: session.role === 'agent' ? 'Customer updated. Your one-time edit has been used.' : 'Customer updated', variant: 'success' })
+      toast({ message: session.role === 'agent' ? 'Customer updated. You cannot edit this customer again.' : 'Customer updated', variant: 'success' })
     } catch (reason) {
       toast({ message: reason instanceof Error ? reason.message : 'Could not update customer', variant: 'error' })
     } finally {
@@ -309,7 +309,7 @@ export function AgentOverviewPage({ session }: { session: Session }) {
       await createQuotationRequest(quotationCustomer.id, value)
       setQuotationCustomer(null)
       await loadOverview(overview.profile.membership_id)
-      toast({ message: 'Quotation request forwarded to admin and super admin', variant: 'success' })
+      toast({ message: 'Quotation request sent to admins', variant: 'success' })
     } catch (reason) {
       toast({ message: reason instanceof Error ? reason.message : 'Could not request quotation', variant: 'error' })
     } finally {
@@ -412,7 +412,7 @@ export function AgentOverviewPage({ session }: { session: Session }) {
               </motion.article>
               <motion.article initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.16 }}>
                 <div className="agent-kpi__icon"><BriefcaseBusiness size={20} /></div>
-                <span>Customer outstanding</span>
+                <span>Customer amount due</span>
                 <strong>{currency.format(overview.customer_outstanding)}</strong>
                 <small>Across assigned customers</small>
               </motion.article>
@@ -428,7 +428,7 @@ export function AgentOverviewPage({ session }: { session: Session }) {
               {filteredCustomers.length === 0 ? <div className="empty-state">No customers match this search.</div> : (
                 <><div className="agent-table-wrap">
                   <table className="agent-table customer-table">
-                    <thead><tr><th>Customer</th><th>Contact</th><th>Project</th><th>Status</th><th className="numeric-cell">Outstanding</th><th>Action</th></tr></thead>
+                    <thead><tr><th>Customer</th><th>Contact</th><th>Project</th><th>Status</th><th className="numeric-cell">Amount due</th><th>Action</th></tr></thead>
                     <tbody>
                       {filteredCustomers.map((customer) => (
                         <tr key={customer.id}>
@@ -436,7 +436,7 @@ export function AgentOverviewPage({ session }: { session: Session }) {
                           <td data-label="Contact"><div className="table-contact"><strong>{customer.phone || '—'}</strong></div></td>
                           <td data-label="Project"><strong className="project-name">{customer.project_name ? projectDisplayName(customer.project_name, customer.customer_name) : 'Not assigned'}</strong></td>
                           <td data-label="Status"><span className={`customer-status customer-status--${customer.status}`}>{customer.status.replaceAll('_', ' ')}</span></td>
-                          <td data-label="Outstanding" className="numeric-cell"><strong>{currency.format(customer.outstanding_balance)}</strong></td>
+                          <td data-label="Amount due" className="numeric-cell"><strong>{currency.format(customer.outstanding_balance)}</strong></td>
                           <td data-label="Action"><div className="agent-customer-actions">
                             {customer.approved_quotation && <button className="table-action-button table-action-button--download" type="button" onClick={() => void downloadApprovedQuotation(customer)}><Download size={12} /></button>}
                             {canOpenDocuments && customer.approved_quotation && customer.project_id && <button className="table-action-button table-action-button--neutral" type="button" onClick={() => navigate(`${WORKSPACE_ROUTE_ACCESS.documents.path}?customer=${encodeURIComponent(customer.id)}`)}><FileText size={12} /></button>}
@@ -502,7 +502,7 @@ export function AgentOverviewPage({ session }: { session: Session }) {
       <AlertDialog
         open={Boolean(transactionToDelete)}
         title="Delete agent transaction?"
-        description={transactionToDelete ? `${transactionLabel(transactionToDelete.transaction_type)} · ${currency.format(Math.max(transactionToDelete.debit, transactionToDelete.credit))}. The agent balance will be recalculated.` : ''}
+        description={transactionToDelete ? `${transactionLabel(transactionToDelete.transaction_type)} · ${currency.format(Math.max(transactionToDelete.debit, transactionToDelete.credit))}. The agent balance will be updated.` : ''}
         confirmLabel="Delete transaction"
         icon="delete"
         loading={busy}

@@ -226,7 +226,7 @@ export function CustomerDataUploadPage({ session }: { session: Session }) {
   async function savePack(input: DocumentPackInput, status: 'draft' | 'generated') {
     if (!snapshot?.project) return null
     if (status === 'generated' && !customerSignature) {
-      toast({ message: 'Upload a valid customer signature image before generating the document pack.', variant: 'warning' })
+      toast({ message: 'Upload the customer signature image before creating documents.', variant: 'warning' })
       return null
     }
     setWorking(true)
@@ -262,10 +262,10 @@ export function CustomerDataUploadPage({ session }: { session: Session }) {
           },
         } : current)
       }
-      toast({ message: status === 'generated' ? `Document pack v${pack.version} generated and stored` : 'Document pack draft saved', variant: 'success' })
+      toast({ message: status === 'generated' ? `Document set v${pack.version} created and saved` : 'Document draft saved', variant: 'success' })
       return pack
     } catch (reason) {
-      toast({ message: reason instanceof Error ? reason.message : 'Could not save document pack', variant: 'error' })
+      toast({ message: reason instanceof Error ? reason.message : 'Could not save documents', variant: 'error' })
       return null
     } finally { setWorking(false) }
   }
@@ -282,8 +282,8 @@ export function CustomerDataUploadPage({ session }: { session: Session }) {
         ...current,
         project: { ...current.project, documentation_status: 'approved' },
       } : current)
-      toast({ message: `Document pack v${finalized.version} finalized`, variant: 'success' })
-    } catch (reason) { toast({ message: reason instanceof Error ? reason.message : 'Could not finalize document pack', variant: 'error' }) }
+      toast({ message: `Document set v${finalized.version} marked final`, variant: 'success' })
+    } catch (reason) { toast({ message: reason instanceof Error ? reason.message : 'Could not mark documents as final', variant: 'error' }) }
     finally { setWorking(false) }
   }
 
@@ -332,7 +332,7 @@ export function CustomerDataUploadPage({ session }: { session: Session }) {
   return <WorkspacePage className="erp-page document-page">
     <WorkspaceHeader
       eyebrow="Customer records"
-      title="Documents and generated packs"
+      title="Customer documents"
       actions={<Button variant="secondary" leadingIcon={<RefreshCw className={loading ? 'spin' : ''} size={14} />} onClick={() => void load()} disabled={loading || working}>Refresh</Button>}
     />
     <KpiGrid columns={snapshot ? 5 : 1} phoneColumns={1} responsive className="document-summary-grid">
@@ -340,7 +340,7 @@ export function CustomerDataUploadPage({ session }: { session: Session }) {
         <Field label="Customer" compact>
           <select value={selectedId} onChange={(event) => void select(event.target.value)}><option value="">Select customer</option>{customers.map((row) => <option key={row.id} value={row.id}>{row.display_name} · {row.record_number}</option>)}</select>
         </Field>
-        <small className="document-customer-selector__note">{customer ? `${customer.consumer_number || 'No consumer number'} · ${project?.record_number || 'No active project'}` : 'Choose a customer workspace'}</small>
+        <small className="document-customer-selector__note">{customer ? `${customer.consumer_number || 'No consumer number'} · ${project?.record_number || 'No active project'}` : 'Choose a customer'}</small>
       </Card>
       {snapshot && <>
         <KpiCard icon={<FileText />} label="Customer" value={customer?.display_name || 'Customer'} note={`${customer?.customer_type || 'B2C'} · ${customer?.electricity_provider || 'DISCOM not set'}`} />
@@ -350,7 +350,7 @@ export function CustomerDataUploadPage({ session }: { session: Session }) {
       </>}
     </KpiGrid>
 
-    {!snapshot ? <div className="document-page__body document-empty-surface"><EmptyState title="Select a customer" message="The document checklist and customer data pack will appear here." /></div> : <>
+    {!snapshot ? <div className="document-page__body document-empty-surface"><EmptyState title="Select a customer" message="The document checklist and customer details will appear here." /></div> : <>
       <div className="document-page__body document-scroll-body">
 
       {project ? <GeneratedDocumentPackPanel
@@ -368,19 +368,19 @@ export function CustomerDataUploadPage({ session }: { session: Session }) {
         onSelectPack={(pack) => void selectPack(pack)}
         onSave={savePack}
         onFinalize={finalizePack}
-      /> : <section className="erp-panel generated-pack-gate"><FileText size={20} /><div><strong>Document generator unlocks after approval</strong><span>Create the project from an approved quotation to unlock it.</span></div></section>}
+      /> : <section className="erp-panel generated-pack-gate"><FileText size={20} /><div><strong>Documents are available after approval</strong><span>Approve the quotation and create the project first.</span></div></section>}
 
-      <div className="erp-two-column document-workspace-grid"><section className="erp-panel document-data-pack"><header><div><span>Auto-filled information</span><h2>Customer data pack</h2></div></header><dl className="erp-detail-grid document-data-grid"><div><dt>Customer name</dt><dd>{customer?.display_name}</dd></div><div><dt>Phone</dt><dd>{customer?.contacts[0]?.phone || '—'}</dd></div><div><dt>Consumer number</dt><dd>{customer?.consumer_number || '—'}</dd></div><div><dt>Electricity provider</dt><dd>{customer?.electricity_provider || '—'}</dd></div><div className="document-data-grid__wide"><dt>Site address</dt><dd>{customer?.site_address || customer?.addresses[0]?.line_1 || '—'}</dd></div><div><dt>System capacity</dt><dd>{project ? `${project.capacity_kw} kW` : '—'}</dd></div><div><dt>Approved value</dt><dd>{project ? money.format(Number(project.approved_value || 0)) : '—'}</dd></div><div><dt>Payment mode</dt><dd>{project?.payment_mode || 'Pending'}</dd></div><div><dt>Assigned agent</dt><dd>{customer?.assigned_agent_id ? 'Assigned' : 'Not assigned'}</dd></div></dl><div className="document-template-preview"><div><strong>{templateSettings.company_name || session.company.name}</strong><span>{templateSettings.address || 'Company address not configured'}</span><small>{templateSettings.gstin ? `GSTIN ${templateSettings.gstin}` : 'GSTIN not configured'}</small></div>{canManageTemplate && <button type="button" className="secondary-button secondary-button--compact" onClick={() => setModal('template')}><Settings2 size={13} /> Edit complete template</button>}</div></section>
+      <div className="erp-two-column document-workspace-grid"><section className="erp-panel document-data-pack"><header><div><span>Filled automatically</span><h2>Customer details</h2></div></header><dl className="erp-detail-grid document-data-grid"><div><dt>Customer name</dt><dd>{customer?.display_name}</dd></div><div><dt>Phone</dt><dd>{customer?.contacts[0]?.phone || '—'}</dd></div><div><dt>Consumer number</dt><dd>{customer?.consumer_number || '—'}</dd></div><div><dt>Electricity provider</dt><dd>{customer?.electricity_provider || '—'}</dd></div><div className="document-data-grid__wide"><dt>Site address</dt><dd>{customer?.site_address || customer?.addresses[0]?.line_1 || '—'}</dd></div><div><dt>System capacity</dt><dd>{project ? `${project.capacity_kw} kW` : '—'}</dd></div><div><dt>Approved value</dt><dd>{project ? money.format(Number(project.approved_value || 0)) : '—'}</dd></div><div><dt>Payment mode</dt><dd>{project?.payment_mode || 'Pending'}</dd></div><div><dt>Assigned agent</dt><dd>{customer?.assigned_agent_id ? 'Assigned' : 'Not assigned'}</dd></div></dl><div className="document-template-preview"><div><strong>{templateSettings.company_name || session.company.name}</strong><span>{templateSettings.address || 'Company address not set'}</span><small>{templateSettings.gstin ? `GSTIN ${templateSettings.gstin}` : 'GSTIN not set'}</small></div>{canManageTemplate && <button type="button" className="secondary-button secondary-button--compact" onClick={() => setModal('template')}><Settings2 size={13} /> Edit template</button>}</div></section>
 
       <section className="erp-panel document-checklist-panel">
-        <header><div><span>Customer files · 2 mandatory</span><h2>Document checklist</h2></div></header>
+        <header><div><span>Customer files · 2 required</span><h2>Document checklist</h2></div></header>
         <div className="document-checklist">
           {checklistEntries.map(({ key, label, file, required }) => {
             return <article key={key}>
               <span className={`document-check ${file ? 'is-done' : ''}`}><FileCheck2 size={15} /></span>
               <div className="document-checklist__copy">
-                <strong>{label} <em className={required ? 'is-required' : 'is-optional'}>{required ? 'Mandatory' : 'Optional'}</em></strong>
-                <small className={file ? 'is-uploaded' : ''} title={file?.name}>{file ? `Uploaded · ${file.name}` : required ? 'Pending upload · required before generation' : 'Not uploaded'}</small>
+                <strong>{label} <em className={required ? 'is-required' : 'is-optional'}>{required ? 'Required' : 'Optional'}</em></strong>
+                <small className={file ? 'is-uploaded' : ''} title={file?.name}>{file ? `Uploaded · ${file.name}` : required ? 'Upload before creating documents' : 'Not uploaded'}</small>
               </div>
               {fileActions(key, label, file)}
             </article>

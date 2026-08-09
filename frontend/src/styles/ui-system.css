@@ -339,20 +339,23 @@ body.app-preview-mobile .modal-card .movement-choice > div {
 }
 
 body.app-preview-mobile .modal-card .movement-lines > header {
-  align-items: stretch;
-  flex-direction: column;
+  align-items: center;
+  flex-direction: row;
 }
 
-body.app-preview-mobile .modal-card .movement-line__number {
-  position: absolute;
-  top: 9px;
-  right: 43px;
+body.app-preview-mobile .modal-card .movement-lines__add {
+  width: auto;
+  min-width: 104px;
 }
 
-body.app-preview-mobile .modal-card .movement-line__remove {
-  position: absolute;
-  top: 7px;
-  right: 7px;
+body.app-preview-mobile .modal-card .movement-lines__list {
+  max-height: min(48dvh, 430px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 4px;
+  scrollbar-gutter: stable;
+  -webkit-overflow-scrolling: touch;
 }
 
 body.app-preview-mobile .modal-card__body :is(.erp-form-actions, .modal-actions),
@@ -431,20 +434,23 @@ body.app-preview-mobile .alert-dialog footer button {
   }
 
   .modal-card .movement-lines > header {
-    align-items: stretch;
-    flex-direction: column;
+    align-items: center;
+    flex-direction: row;
   }
 
-  .modal-card .movement-line__number {
-    position: absolute;
-    top: 9px;
-    right: 43px;
+  .modal-card .movement-lines__add {
+    width: auto;
+    min-width: 104px;
   }
 
-  .modal-card .movement-line__remove {
-    position: absolute;
-    top: 7px;
-    right: 7px;
+  .modal-card .movement-lines__list {
+    max-height: min(48dvh, 430px);
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-right: 4px;
+    scrollbar-gutter: stable;
+    -webkit-overflow-scrolling: touch;
   }
 
   .modal-card__body :is(.erp-form-actions, .modal-actions),

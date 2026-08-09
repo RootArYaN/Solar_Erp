@@ -235,7 +235,7 @@ export function AdminPage({
     <WorkspacePage variant="fixed-tabs" className="admin-page">
       <WorkspaceHeader
         eyebrow="Administration"
-        title={tab === 'data' ? 'Data Control' : 'Users and roles'}
+        title={tab === 'data' ? 'Records and history' : 'Users and roles'}
         actions={
           <>
             {tab === 'users' && canManageUsers && (
@@ -261,7 +261,7 @@ export function AdminPage({
       <TabStrip className="segmented-tabs" label="Administration sections">
         {canViewUsers && <TabButton active={tab === 'users'} onClick={() => setTab('users')}>Users</TabButton>}
         {canViewRoles && <TabButton active={tab === 'roles'} onClick={() => setTab('roles')}>Roles</TabButton>}
-        {isSuperAdmin && <TabButton active={tab === 'data'} onClick={() => setTab('data')}>Data Control</TabButton>}
+        {isSuperAdmin && <TabButton active={tab === 'data'} onClick={() => setTab('data')}>Records</TabButton>}
       </TabStrip>
 
       {tab === 'data' && isSuperAdmin ? (

@@ -56,7 +56,7 @@ export function DataControlPanel() {
         setTotal(0)
       }
     } catch (reason) {
-      toast({ message: reason instanceof Error ? reason.message : 'Could not load data-control history', variant: 'error' })
+      toast({ message: reason instanceof Error ? reason.message : 'Could not load records', variant: 'error' })
     } finally {
       setLoading(false)
     }
@@ -79,7 +79,7 @@ export function DataControlPanel() {
       }
       setCustomerAction(null)
       await load()
-      toast({ message: `${customer.display_name} ${type === 'restore' ? 'restored' : 'permanently purged'}`, variant: 'success' })
+      toast({ message: `${customer.display_name} ${type === 'restore' ? 'restored' : 'deleted forever'}`, variant: 'success' })
     } catch (reason) {
       toast({ message: reason instanceof Error ? reason.message : `Could not ${type} customer`, variant: 'error' })
     } finally {
@@ -90,29 +90,29 @@ export function DataControlPanel() {
   return (
     <section className="data-panel">
       <div className="data-panel__toolbar">
-        <TabStrip className="segmented-tabs" label="Data control sections">
+        <TabStrip className="segmented-tabs" label="Records and history sections">
           <TabButton active={tab === 'deleted'} onClick={() => { setTab('deleted'); setQuery(''); setPage(1) }}><Trash2 size={14} /> Deleted</TabButton>
-          <TabButton active={tab === 'corrections'} onClick={() => { setTab('corrections'); setQuery(''); setPage(1) }}><Wrench size={14} /> Corrections</TabButton>
-          <TabButton active={tab === 'reversals'} onClick={() => { setTab('reversals'); setQuery(''); setPage(1) }}><RotateCcw size={14} /> Reversals</TabButton>
-          <TabButton active={tab === 'audit'} onClick={() => { setTab('audit'); setQuery(''); setPage(1) }}><History size={14} /> Audit</TabButton>
-          <TabButton active={tab === 'health'} onClick={() => { setTab('health'); setQuery(''); setPage(1) }}><Activity size={14} /> Data Health</TabButton>
+          <TabButton active={tab === 'corrections'} onClick={() => { setTab('corrections'); setQuery(''); setPage(1) }}><Wrench size={14} /> Stock fixes</TabButton>
+          <TabButton active={tab === 'reversals'} onClick={() => { setTab('reversals'); setQuery(''); setPage(1) }}><RotateCcw size={14} /> Reversed stock</TabButton>
+          <TabButton active={tab === 'audit'} onClick={() => { setTab('audit'); setQuery(''); setPage(1) }}><History size={14} /> Activity log</TabButton>
+          <TabButton active={tab === 'health'} onClick={() => { setTab('health'); setQuery(''); setPage(1) }}><Activity size={14} /> Data checks</TabButton>
         </TabStrip>
-        {(tab === 'deleted' || tab === 'audit') && <Field label="Search data control" hideLabel prefix={<Search size={15} />}><input type="search" value={query} onChange={(event) => { setQuery(event.target.value); setPage(1) }} placeholder={tab === 'deleted' ? 'Customer name, phone, ID…' : 'Event, entity, ID, role…'} /></Field>}
-        <Button size="icon" variant="ghost" aria-label="Refresh data control" onClick={() => void load()}><RefreshCw size={15} /></Button>
+        {(tab === 'deleted' || tab === 'audit') && <Field label="Search records" hideLabel prefix={<Search size={15} />}><input type="search" value={query} onChange={(event) => { setQuery(event.target.value); setPage(1) }} placeholder={tab === 'deleted' ? 'Customer name, phone, or ID…' : 'Action, record, user, or ID…'} /></Field>}
+        <Button size="icon" variant="ghost" aria-label="Refresh records" onClick={() => void load()}><RefreshCw size={15} /></Button>
       </div>
 
       {loading ? <LoadingSkeleton rows={6} /> : tab === 'deleted' ? (
         deleted.length ? <div className="user-table-wrap"><table className="user-table"><thead><tr><th>Customer</th><th>Status</th><th>Balance</th><th>Deleted</th><th /></tr></thead><tbody>
-          {deleted.map((row) => <tr key={row.id}><td><strong>{row.display_name}</strong><small>{row.record_number}</small></td><td><span className="status-badge">Deleted</span></td><td>₹{Number(row.outstanding_balance || 0).toLocaleString('en-IN')}</td><td>{row.deleted_at ? dateTime.format(new Date(row.deleted_at)) : '—'}</td><td><div className="row-actions"><Button size="icon" variant="ghost" disabled={busyId === row.id} onClick={() => setCustomerAction({ type: 'restore', customer: row })} aria-label={`Restore ${row.display_name}`} title="Restore customer"><RotateCcw size={16} /></Button><button type="button" className="danger-icon-button" disabled={busyId === row.id} onClick={() => setCustomerAction({ type: 'purge', customer: row })} aria-label={`Permanently purge ${row.display_name}`} title="Permanently purge customer"><Trash2 size={16} /></button></div></td></tr>)}
+          {deleted.map((row) => <tr key={row.id}><td><strong>{row.display_name}</strong><small>{row.record_number}</small></td><td><span className="status-badge">Deleted</span></td><td>₹{Number(row.outstanding_balance || 0).toLocaleString('en-IN')}</td><td>{row.deleted_at ? dateTime.format(new Date(row.deleted_at)) : '—'}</td><td><div className="row-actions"><Button size="icon" variant="ghost" disabled={busyId === row.id} onClick={() => setCustomerAction({ type: 'restore', customer: row })} aria-label={`Restore ${row.display_name}`} title="Restore customer"><RotateCcw size={16} /></Button><button type="button" className="danger-icon-button" disabled={busyId === row.id} onClick={() => setCustomerAction({ type: 'purge', customer: row })} aria-label={`Delete ${row.display_name} forever`} title="Delete customer forever"><Trash2 size={16} /></button></div></td></tr>)}
         </tbody></table></div> : <EmptyState title="No deleted customers" />
       ) : tab === 'audit' ? (
         events.length ? <div className="user-table-wrap"><table className="user-table"><thead><tr><th>Event</th><th>Entity</th><th>Actor</th><th>Date</th></tr></thead><tbody>
           {events.map((row) => <tr key={row.id}><td><strong>{title(row.event)}</strong><small>{row.request_id || 'No request ID'}</small></td><td>{title(row.entity)}<small>{row.entity_id}</small></td><td>{title(row.user_role)}</td><td>{dateTime.format(new Date(row.created_at))}</td></tr>)}
-        </tbody></table></div> : <EmptyState title="No audit events found" />
+        </tbody></table></div> : <EmptyState title="No activity found" />
       ) : tab === 'health' ? (
         health ? <div className="user-table-wrap"><table className="user-table"><thead><tr><th>Check</th><th>State</th><th>Count</th><th>Details</th></tr></thead><tbody>
           {health.checks.map((row) => <tr key={row.key}><td><strong>{row.label}</strong><small>{row.description}</small></td><td><span className={`status-badge ${row.severity === 'ok' ? 'status-badge--active' : ''}`}>{title(row.severity)}</span></td><td>{row.count}</td><td>{row.sample_ids.length ? <small>Samples: {row.sample_ids.join(', ')}</small> : 'Clean'}</td></tr>)}
-        </tbody></table></div> : <EmptyState title="Data Health unavailable" />
+        </tbody></table></div> : <EmptyState title="Data checks unavailable" />
       ) : movements.length ? (
         <div className="user-table-wrap"><table className="user-table"><thead><tr><th>Movement</th><th>Item</th><th>Quantity</th><th>Reason</th><th>Date</th></tr></thead><tbody>
           {movements.map((row) => <tr key={row.id}><td><strong>{row.reference_number}</strong><small>{title(row.movement_type)} · {title(row.status)}</small></td><td>{row.item_name}</td><td>{row.corrected_quantity != null ? `${row.quantity} → ${row.corrected_quantity}` : row.quantity}</td><td>{row.reason || '—'}</td><td>{dateTime.format(new Date(row.created_at))}</td></tr>)}
@@ -121,11 +121,11 @@ export function DataControlPanel() {
       {tab !== 'health' && <Pagination page={page} pageSize={pageSize} total={total} loading={loading} onPageChange={setPage} />}
       <AlertDialog
         open={Boolean(customerAction)}
-        title={customerAction?.type === 'purge' ? 'Permanently purge this customer?' : 'Restore this customer?'}
+        title={customerAction?.type === 'purge' ? 'Delete this customer forever?' : 'Restore this customer?'}
         description={customerAction ? customerAction.type === 'purge'
-          ? `${customerAction.customer.display_name} will be permanently removed. This cannot be undone, and the server will block the purge if historical dependencies exist.`
-          : `${customerAction.customer.display_name} will return to the active customer directory.` : undefined}
-        confirmLabel={customerAction?.type === 'purge' ? 'Permanently purge' : 'Restore customer'}
+          ? `${customerAction.customer.display_name} will be deleted forever. You cannot undo this. Deletion will stop if the customer has linked records.`
+          : `${customerAction.customer.display_name} will return to the active customer list.` : undefined}
+        confirmLabel={customerAction?.type === 'purge' ? 'Delete forever' : 'Restore customer'}
         variant={customerAction?.type === 'purge' ? 'danger' : 'warning'}
         icon={customerAction?.type === 'purge' ? 'delete' : 'reset'}
         loading={Boolean(customerAction && busyId === customerAction.customer.id)}

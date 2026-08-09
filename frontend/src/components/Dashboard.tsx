@@ -45,8 +45,8 @@ export function Dashboard({ session }: { session: Session }) {
     ['Money received', summary.money_received_month, 'This month', ArrowDownLeft, `${WORKSPACE_ROUTE_ACCESS.finance.path}?tab=transactions&direction=credit`],
     ['Money paid', summary.money_paid_month, 'This month', ArrowUpRight, `${WORKSPACE_ROUTE_ACCESS.finance.path}?tab=transactions&direction=debit`],
     ['Expenses', summary.expenses_month, 'This month', WalletCards, `${WORKSPACE_ROUTE_ACCESS.finance.path}?tab=expenses`],
-    ['Customer receivables', summary.customer_receivables, 'Pending collection', HandCoins, `${WORKSPACE_ROUTE_ACCESS.finance.path}?tab=bills&bill_type=sales`],
-    ['Supplier payables', summary.supplier_payables, 'Pending payment', ReceiptText, `${WORKSPACE_ROUTE_ACCESS.finance.path}?tab=bills&bill_type=purchase`],
+    ['Customer payments due', summary.customer_receivables, 'Waiting to be paid', HandCoins, `${WORKSPACE_ROUTE_ACCESS.finance.path}?tab=bills&bill_type=sales`],
+    ['Supplier payments due', summary.supplier_payables, 'Waiting for payment', ReceiptText, `${WORKSPACE_ROUTE_ACCESS.finance.path}?tab=bills&bill_type=purchase`],
   ] as const
   const canViewFinance = hasPermission(session, PERMISSIONS.finance.view)
 
@@ -87,7 +87,7 @@ export function Dashboard({ session }: { session: Session }) {
         return <article key={title}><span className="dashboard-operation-icon"><Icon size={18} /></span><div><small>{title}</small><strong>{value}</strong><p>{note}</p></div>{allowed && <Link to={to} aria-label={`Open ${title}`}><ArrowUpRight size={15} /></Link>}</article>
       })}</div></section>
 
-      <div className="erp-two-column"><section className="erp-panel"><header><div><h2>Current work</h2></div></header><div className="dashboard-status-list"><div><SunMedium /><span>Installations in progress</span><strong>{summary.installations_in_progress}</strong></div><div><BadgeIndianRupee /><span>DCR pending</span><strong>{summary.dcr_pending}</strong></div><div><IndianRupee /><span>Subsidy pending</span><strong>{summary.subsidy_pending}</strong></div><div><CheckCircle2 /><span>Completed projects</span><strong>{summary.completed_projects}</strong></div></div></section><section className="erp-panel"><header><div><h2>Your workspace</h2></div></header><div className="dashboard-status-list"><div><UsersRound /><span>Role</span><strong>{session.role.replaceAll('_', ' ')}</strong></div><div><ClipboardCheck /><span>Permissions</span><strong>{session.permissions.length}</strong></div><div><Landmark /><span>Company</span><strong>{session.company.code}</strong></div></div></section></div>
+      <div className="erp-two-column"><section className="erp-panel"><header><div><h2>Current work</h2></div></header><div className="dashboard-status-list"><div><SunMedium /><span>Installations in progress</span><strong>{summary.installations_in_progress}</strong></div><div><BadgeIndianRupee /><span>DCR pending</span><strong>{summary.dcr_pending}</strong></div><div><IndianRupee /><span>Subsidy pending</span><strong>{summary.subsidy_pending}</strong></div><div><CheckCircle2 /><span>Completed projects</span><strong>{summary.completed_projects}</strong></div></div></section><section className="erp-panel"><header><div><h2>Your account</h2></div></header><div className="dashboard-status-list"><div><UsersRound /><span>Role</span><strong>{session.role.replaceAll('_', ' ')}</strong></div><div><ClipboardCheck /><span>Permissions</span><strong>{session.permissions.length}</strong></div><div><Landmark /><span>Company</span><strong>{session.company.code}</strong></div></div></section></div>
     </ScrollSurface>
   </WorkspacePage>
 }

@@ -28,7 +28,7 @@ describe('DocumentTemplateDialog', () => {
       />,
     )
 
-    const saveButton = screen.getByRole('button', { name: 'Save complete template' })
+    const saveButton = screen.getByRole('button', { name: 'Save template' })
     expect(saveButton.closest('.modal-card__body')).toBeNull()
     await user.click(saveButton)
 
@@ -53,12 +53,12 @@ describe('DocumentTemplateDialog', () => {
     )
 
     await user.type(screen.getByLabelText('Email'), 'invalid-email')
-    await user.click(screen.getByRole('button', { name: 'Save complete template' }))
+    await user.click(screen.getByRole('button', { name: 'Save template' }))
     expect(screen.getByRole('alert')).toHaveTextContent('Enter a valid company email address')
     expect(onSubmit).not.toHaveBeenCalled()
 
     await user.clear(screen.getByLabelText('Email'))
-    await user.click(screen.getByRole('button', { name: 'Save complete template' }))
+    await user.click(screen.getByRole('button', { name: 'Save template' }))
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Template service is unavailable'))
   })
 })

@@ -115,12 +115,12 @@ export function RoleDialog({
 
         {role && role.member_count > 0 && (
           <div className="permission-editor__notice">
-            Saving this role immediately updates access for {role.member_count} {role.member_count === 1 ? 'user' : 'users'}.
+            Saving changes updates access for {role.member_count} {role.member_count === 1 ? 'user' : 'users'} right away.
           </div>
         )}
         {isUnrestrictedRole && (
           <div className="permission-editor__notice permission-editor__notice--protected">
-            Super Admin always has unrestricted platform access. Its name and description can be updated, but its permissions cannot be reduced.
+            Super Admin always has full access. You can change its name and description, but not its access.
           </div>
         )}
 
@@ -143,7 +143,7 @@ export function RoleDialog({
 
         <section className="permission-editor">
           <div className="permission-editor__heading">
-            <div><strong>Allowed actions</strong><span>{value.permission_codes.length} total permissions selected</span></div>
+            <div><strong>Allowed actions</strong><span>{value.permission_codes.length} selected</span></div>
             {canEditPermissions && <button type="button" className="text-button" onClick={() => setValue({ ...value, permission_codes: permissions.map((permission) => permission.code) })}>Select all</button>}
           </div>
           <div className="permission-groups">

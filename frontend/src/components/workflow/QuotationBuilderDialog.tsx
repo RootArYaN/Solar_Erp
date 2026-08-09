@@ -45,7 +45,7 @@ export function QuotationBuilderDialog({ request, busy, onClose, onSubmit }: {
     await onSubmit({ title, valid_until: validUntil ? new Date(`${validUntil}T18:29:59Z`).toISOString() : null, lines })
   }
 
-  return <Modal className="quotation-builder-modal" title="Generate quotation" onClose={onClose} footer={
+  return <Modal className="quotation-builder-modal" title="Create quotation" onClose={onClose} footer={
     <footer className="quotation-builder-actions">
       <button type="button" className="secondary-button" onClick={onClose}>Cancel</button>
       <button type="submit" form={formId} className="primary-button primary-button--compact" disabled={busy || lines.some((line) => !line.description.trim() || line.quantity <= 0)}>{busy ? 'Saving…' : 'Save for approval'}</button>

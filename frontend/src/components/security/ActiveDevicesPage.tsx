@@ -25,7 +25,7 @@ export function ActiveDevicesPage({ session }: { session: Session }) {
     try {
       setDevices(await getActiveDevices())
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Could not load active devices')
+      setError(reason instanceof Error ? reason.message : 'Could not load signed-in devices')
       setRequestId(reason instanceof ApiError ? reason.requestId : null)
     } finally {
       setLoading(false)
@@ -49,9 +49,9 @@ export function ActiveDevicesPage({ session }: { session: Session }) {
   }
 
   return <WorkspacePage className="security-page">
-    <WorkspaceHeader className="security-header" eyebrow="Account security" title="Active devices" description="Review and revoke signed-in devices." actions={<Button variant="secondary" leadingIcon={<RefreshCw size={14} />} onClick={() => void load()}>Refresh</Button>} />
+    <WorkspaceHeader className="security-header" eyebrow="Account security" title="Signed-in devices" description="See where you are signed in and remove access." actions={<Button variant="secondary" leadingIcon={<RefreshCw size={14} />} onClick={() => void load()}>Refresh</Button>} />
     <ScrollSurface className="security-device-surface">
-    {loading ? <LoadingSkeleton rows={5} /> : error ? <ErrorState message={error} requestId={requestId} onRetry={() => void load()} /> : devices.length === 0 ? <EmptyState title="No active devices" message="The backend has not returned any sessions." /> : <div className="device-list">
+    {loading ? <LoadingSkeleton rows={5} /> : error ? <ErrorState message={error} requestId={requestId} onRetry={() => void load()} /> : devices.length === 0 ? <EmptyState title="No signed-in devices" message="No device details were found." /> : <div className="device-list">
       {devices.map((device) => <article key={device.id}>
         <div className="device-icon">{device.operating_system.toLowerCase().includes('ios') || device.operating_system.toLowerCase().includes('android') ? <Smartphone size={20} /> : <Laptop size={20} />}</div>
         <div><strong>{device.device_name} {device.is_current && <span>Current</span>}</strong><p>{device.browser} · {device.operating_system}</p><small>{device.approximate_location} · {device.ip_hint} · Last active {new Date(device.last_seen_at).toLocaleString('en-IN')}</small></div>
@@ -59,7 +59,7 @@ export function ActiveDevicesPage({ session }: { session: Session }) {
       </article>)}
     </div>}
     </ScrollSurface>
-    <footer className="security-actions"><div><strong>Lost a device?</strong><span>Revoke all other sessions.</span></div><Button variant="danger" leadingIcon={<LogOut size={14} />} disabled={!access.canEdit || devices.filter((device) => !device.is_current).length === 0} onClick={() => setConfirmOpen(true)}>Log out other devices</Button></footer>
-    <AlertDialog open={confirmOpen} title="Log out other devices?" description="Every other refresh session will be revoked. This browser will stay signed in." confirmLabel="Log out other devices" loading={working} onCancel={() => setConfirmOpen(false)} onConfirm={revokeOthers} />
+    <footer className="security-actions"><div><strong>Lost a device?</strong><span>Sign out all other devices.</span></div><Button variant="danger" leadingIcon={<LogOut size={14} />} disabled={!access.canEdit || devices.filter((device) => !device.is_current).length === 0} onClick={() => setConfirmOpen(true)}>Sign out other devices</Button></footer>
+    <AlertDialog open={confirmOpen} title="Sign out other devices?" description="All other devices will be signed out. This browser will stay signed in." confirmLabel="Sign out other devices" loading={working} onCancel={() => setConfirmOpen(false)} onConfirm={revokeOthers} />
   </WorkspacePage>
 }

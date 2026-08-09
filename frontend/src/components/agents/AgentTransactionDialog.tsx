@@ -40,8 +40,8 @@ export function AgentTransactionDialog({
 
   return (
     <Modal
-      title={transaction ? `Edit ${transaction.reference || 'agent transaction'}` : 'Submit transaction'}
-      subtitle={finalized ? 'Finalized ledger values are locked. Only reference and description metadata can be corrected.' : undefined}
+      title={transaction ? `Edit ${transaction.reference || 'agent transaction'}` : 'Add transaction'}
+      subtitle={finalized ? 'The amount and date cannot change. You can edit the reference and description.' : undefined}
       onClose={onClose}
     >
       <form className="admin-form" onSubmit={submit}>
@@ -58,7 +58,7 @@ export function AgentTransactionDialog({
 
         <div className="admin-form__grid">
           <label className="field">
-            <span>Movement type</span>
+            <span>Transaction type</span>
             <div className="field__control field__control--select">
               <select disabled={finalized} value={transactionType} onChange={(event) => setTransactionType(event.target.value)}>
                 <option value="commission">Commission</option>
@@ -70,11 +70,11 @@ export function AgentTransactionDialog({
             </div>
           </label>
           <label className="field">
-            <span>Debit or credit</span>
+            <span>Balance change</span>
             <div className="field__control field__control--select">
               <select disabled={finalized} value={entrySide} onChange={(event) => setEntrySide(event.target.value as EntrySide)}>
-                <option value="credit">Credit — increase balance</option>
-                <option value="debit">Debit — reduce balance</option>
+                <option value="credit">Increase balance</option>
+                <option value="debit">Reduce balance</option>
               </select>
             </div>
           </label>

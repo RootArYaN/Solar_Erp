@@ -577,7 +577,7 @@ function TaskEditorDialog({
   return (
     <Dialog
       title={<span className="task-dialog-title"><span className="task-dialog-title__icon"><ListTodo size={17} /></span><span>{task ? 'Edit task' : 'Create task'}</span></span>}
-      subtitle={task ? 'Update details, deadline and assignment without losing progress.' : 'Create a focused, trackable task with clear ownership.'}
+      subtitle={task ? 'Update the task details, due date, and assignees.' : 'Add a task and assign it to the right people.'}
       className="task-editor-dialog"
       headerClassName="task-dialog-header"
       bodyClassName="task-editor-dialog__body"
@@ -611,7 +611,7 @@ function TaskEditorDialog({
 
         <section className="task-form-section">
           <header className="task-form-section__header">
-            <div><strong>Planning</strong><span>Set urgency, deadline and the related workspace.</span></div>
+            <div><strong>Planning</strong><span>Set urgency, deadline, and the related area.</span></div>
           </header>
           <div className="task-form-section__grid">
             <label className="task-form-field">
@@ -625,13 +625,13 @@ function TaskEditorDialog({
               <input type="datetime-local" value={dueAt} onChange={(event) => setDueAt(event.target.value)} />
             </label>
             <label className="task-form-field">
-              <span>Workspace</span>
+              <span>Related area</span>
               <select value={contextType} onChange={(event) => setContextType(event.target.value as TaskContext)}>
                 {Object.entries(CONTEXT_LABELS).map(([value, label]) => <option value={value} key={value}>{label}</option>)}
               </select>
             </label>
             <label className="task-form-field">
-              <span>Reference ID <small>optional</small></span>
+              <span>Related record <small>optional</small></span>
               <input value={contextId} onChange={(event) => setContextId(event.target.value)} maxLength={80} placeholder="Project or record number" />
             </label>
           </div>
@@ -639,7 +639,7 @@ function TaskEditorDialog({
 
         {canAssign && (
           <section className="task-assignment-picker task-form-section">
-            <header><div><span>Assign task</span><small>Choose users, roles, or both. Duplicate users are merged automatically.</small></div><span className="task-assignment-count"><ShieldCheck size={15} /> {selectedUsers.size + selectedRoles.size} selected</span></header>
+            <header><div><span>Assign task</span><small>Choose users, roles, or both. Each person is added once.</small></div><span className="task-assignment-count"><ShieldCheck size={15} /> {selectedUsers.size + selectedRoles.size} selected</span></header>
             {options.roles.length > 0 && (
               <div className="task-assignment-picker__group">
                 <strong>Roles</strong>
@@ -784,7 +784,7 @@ function TaskProgressDialog({
 
         <label className="task-form-field task-form-field--wide">
           <span>Progress note <small>optional</small></span>
-          <textarea rows={3} maxLength={600} value={note} onChange={(event) => setNote(event.target.value)} placeholder="Add a blocker, handoff note or short update." />
+          <textarea rows={3} maxLength={600} value={note} onChange={(event) => setNote(event.target.value)} placeholder="Add a problem, note, or short update." />
         </label>
       </div>
     </Dialog>
