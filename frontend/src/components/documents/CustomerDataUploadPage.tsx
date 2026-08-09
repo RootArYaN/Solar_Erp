@@ -287,13 +287,16 @@ export function CustomerDataUploadPage({ session }: { session: Session }) {
     finally { setWorking(false) }
   }
 
-  async function saveTemplate(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); setWorking(true)
+  async function saveTemplate(values: Record<string, string>) {
+    setWorking(true)
     try {
-      const values = Object.fromEntries(new FormData(event.currentTarget).entries())
       setTemplate(await saveDocumentTemplate('customer_pack', { name: String(values.name || 'Company Document Template'), settings: Object.fromEntries(Object.entries(values).filter(([key]) => key !== 'name')) }))
       setModal(null); toast({ message: 'Shared company document template saved', variant: 'success' })
-    } catch (reason) { toast({ message: reason instanceof Error ? reason.message : 'Could not save template', variant: 'error' }) }
+    } catch (reason) {
+      const message = reason instanceof Error ? reason.message : 'Could not save template'
+      toast({ message, variant: 'error' })
+      throw reason instanceof Error ? reason : new Error(message)
+    }
     finally { setWorking(false) }
   }
 

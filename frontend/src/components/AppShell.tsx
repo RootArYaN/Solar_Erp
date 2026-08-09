@@ -109,7 +109,7 @@ export function AppShell({ session, onLogout }: { session: Session; onLogout: ()
       access.path === WORKSPACE_ROUTE_ACCESS.overview.path
         ? location.pathname === access.path
         : location.pathname.startsWith(access.path)
-    )) ?? { label: 'Workspace', title: 'PerfectSolar' }
+    )) ?? { label: 'Workspace', title: 'Shree Enterprise' }
   }, [links, location.pathname])
 
   useEffect(() => {

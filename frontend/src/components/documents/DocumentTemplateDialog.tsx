@@ -1,5 +1,5 @@
 import { Image, ImagePlus, RefreshCw, Save, Trash2 } from 'lucide-react'
-import { useRef, useState } from 'react'
+import { useId, useRef, useState } from 'react'
 import type { ChangeEvent, FormEvent } from 'react'
 import type { DocumentTemplate } from '../../erp-types'
 import { isSignatureDataUrl, prepareVendorSignature, type DocumentPackTemplate } from '../../lib/document-pack'
@@ -18,11 +18,13 @@ export function DocumentTemplateDialog({
   settings: DocumentPackTemplate
   working: boolean
   onClose: () => void
-  onSubmit: (event: FormEvent<HTMLFormElement>) => void
+  onSubmit: (values: Record<string, string>) => Promise<void>
 }) {
+  const formId = useId()
   const signatureInputRef = useRef<HTMLInputElement>(null)
   const [vendorSignatureImage, setVendorSignatureImage] = useState(() => isSignatureDataUrl(settings.vendor_signature_image) ? settings.vendor_signature_image : '')
   const [signatureError, setSignatureError] = useState('')
+  const [saveError, setSaveError] = useState('')
   const [preparingSignature, setPreparingSignature] = useState(false)
 
   async function selectVendorSignature(event: ChangeEvent<HTMLInputElement>) {
@@ -50,20 +52,62 @@ export function DocumentTemplateDialog({
     setSignatureError('')
   }
 
+  async function submitTemplate(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (working || preparingSignature) return
+
+    const form = event.currentTarget
+    const values = Object.fromEntries(
+      Array.from(new FormData(form).entries(), ([key, value]) => [key, String(value)]),
+    )
+    values.name = (values.name || '').trim()
+
+    if (values.name.length < 2) {
+      setSaveError('Enter a template name with at least 2 characters.')
+      ;(form.elements.namedItem('name') as HTMLInputElement | null)?.focus()
+      return
+    }
+
+    const emailInput = form.elements.namedItem('email') as HTMLInputElement | null
+    if (emailInput?.value && emailInput.validity.typeMismatch) {
+      setSaveError('Enter a valid company email address or leave it blank.')
+      emailInput.focus()
+      return
+    }
+
+    setSaveError('')
+    try {
+      await onSubmit(values)
+    } catch (reason) {
+      setSaveError(reason instanceof Error ? reason.message : 'Could not save the template. Please try again.')
+    }
+  }
+
   return (
     <Modal
       className="document-template-modal"
       title="Edit document template"
       subtitle="Controls branding, document wording, specifications, legal clauses, and signature blocks for every generated customer pack."
       onClose={onClose}
+      footer={(
+        <footer className="document-template-actions">
+          {saveError && <span className="document-template-actions__error" role="alert">{saveError}</span>}
+          <div className="document-template-actions__buttons">
+            <button type="button" className="secondary-button" onClick={onClose} disabled={working}>Cancel</button>
+            <button type="submit" form={formId} className="primary-button" disabled={working || preparingSignature}>
+              <Save size={14} /> {preparingSignature ? 'Preparing signature…' : working ? 'Saving…' : 'Save complete template'}
+            </button>
+          </div>
+        </footer>
+      )}
     >
-      <form className="erp-form document-template-form" onSubmit={(event) => {
-        if (preparingSignature) {
-          event.preventDefault()
-          return
-        }
-        onSubmit(event)
-      }}>
+      <form
+        id={formId}
+        className="erp-form document-template-form"
+        noValidate
+        onChange={() => { if (saveError) setSaveError('') }}
+        onSubmit={(event) => void submitTemplate(event)}
+      >
         <fieldset>
           <legend>Template and company identity</legend>
           <div className="erp-form-grid">
@@ -158,10 +202,6 @@ export function DocumentTemplateDialog({
           </div>
         </fieldset>
 
-        <footer className="erp-form-actions">
-          <button type="button" className="secondary-button" onClick={onClose}>Cancel</button>
-          <button className="primary-button" disabled={working || preparingSignature}><Save size={14} /> {preparingSignature ? 'Preparing signature…' : working ? 'Saving…' : 'Save complete template'}</button>
-        </footer>
       </form>
     </Modal>
   )

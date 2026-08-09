@@ -56,7 +56,7 @@ function layoutTemplate(companyName: string): DocumentPackTemplate {
   return {
     ...defaultDocumentPackTemplate,
     company_name: companyName || 'Shree EnterPrise',
-    brand_name: companyName || 'PerfectSolar',
+    brand_name: companyName || 'Shree Enterprise',
     footer: 'Computer-generated inventory challan.',
   }
 }
