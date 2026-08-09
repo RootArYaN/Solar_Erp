@@ -12,6 +12,3 @@ export function ErrorState({ message, onRetry, requestId }: { message: string; o
   return <div className="page-error"><AlertTriangle size={24} /><strong>Could not load this page</strong><span>{message}</span>{requestId && <small>Request ID: {requestId}</small>}<button className="secondary-button" onClick={onRetry}><RefreshCw size={14} /> Retry</button></div>
 }
 
-export function ReadOnlyNotice() {
-  return <div className="read-only-notice">You have view-only access. Editing and approval controls are disabled.</div>
-}

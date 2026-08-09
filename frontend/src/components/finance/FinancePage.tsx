@@ -47,7 +47,7 @@ import type { ProjectTimelineListItem, Session } from '../../types'
 import { Modal } from '../admin/Modal'
 import { AlertDialog } from '../ui/AlertDialog'
 import { Button } from '../ui/Button'
-import { ErrorState, LoadingSkeleton, ReadOnlyNotice } from '../ui/PageState'
+import { ErrorState, LoadingSkeleton} from '../ui/PageState'
 import { useToast } from '../ui/ToastProvider'
 import { TabButton, TabStrip, WorkspaceHeader, WorkspacePage } from '../workspace'
 import { Accounts, Bills, Expenses, Loans, Overview, ProfitabilityPanel, Transactions } from './FinanceSections'
@@ -430,7 +430,6 @@ export function FinancePage({ session }: { session: Session }) {
   if (error && !overview) return <WorkspacePage className="finance-page"><ErrorState message={error} onRetry={() => void loadBase()} /></WorkspacePage>
 
   return <WorkspacePage variant="fixed-tabs" className="finance-page">
-    {access.readOnly && <ReadOnlyNotice />}
     <WorkspaceHeader
       className="module-page-header finance-page-header"
       eyebrow="Company finance"

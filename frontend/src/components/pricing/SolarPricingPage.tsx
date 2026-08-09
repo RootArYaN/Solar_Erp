@@ -4,7 +4,7 @@ import type { PricingBook, PricingItem } from '../../erp-types'
 import { getPricingBook, savePricingBook } from '../../api/operations'
 import { getModuleAccess } from '../../lib/permissions'
 import type { Session } from '../../types'
-import { ErrorState, LoadingSkeleton, ReadOnlyNotice } from '../ui/PageState'
+import { ErrorState, LoadingSkeleton} from '../ui/PageState'
 import { useToast } from '../ui/ToastProvider'
 import { KpiGrid, WorkspaceHeader, WorkspacePage } from '../workspace'
 
@@ -58,7 +58,6 @@ export function SolarPricingPage({ session }: { session: Session }) {
 
   return <WorkspacePage className="erp-page">
     <WorkspaceHeader className="erp-page-head"><div><span>Commercial settings</span><h1>Solar pricing</h1></div><div className="erp-head-actions"><button className="secondary-button" onClick={() => void load()}><RefreshCw size={15} /> Refresh</button>{access.canEdit && <button className="primary-button" onClick={() => void save()} disabled={working}><Save size={15} /> Save pricing</button>}</div></WorkspaceHeader>
-    {access.readOnly && <ReadOnlyNotice />}
 
     <KpiGrid columns={3} phoneColumns={1} responsive className="erp-kpi-grid"><article><IndianRupee /><span>Calculated package</span><strong>{money.format(total)}</strong><small>Active rows including tax</small></article><article><Calculator /><span>Price book version</span><strong>v{book.version}</strong><small>Updated {new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(book.updated_at))}</small></article><article><Plus /><span>Active rows</span><strong>{book.items.filter((row) => row.is_active).length}</strong><small>{book.items.length} total pricing rows</small></article></KpiGrid>
 

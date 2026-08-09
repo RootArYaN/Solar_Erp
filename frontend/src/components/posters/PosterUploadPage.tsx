@@ -9,7 +9,7 @@ import { getModuleAccess } from '../../lib/permissions'
 import type { Session } from '../../types'
 import { Modal } from '../admin/Modal'
 import { AlertDialog } from '../ui/AlertDialog'
-import { EmptyState, ErrorState, LoadingSkeleton, ReadOnlyNotice } from '../ui/PageState'
+import { EmptyState, ErrorState, LoadingSkeleton} from '../ui/PageState'
 import { useToast } from '../ui/ToastProvider'
 import { ScrollSurface, TabButton, TabStrip, WorkspaceHeader, WorkspacePage } from '../workspace'
 
@@ -160,7 +160,6 @@ export function PosterUploadPage({ session }: { session: Session }) {
 
   return <WorkspacePage variant="fixed-tabs" className="erp-page">
     <WorkspaceHeader className="erp-page-head"><div><span>Marketing library</span><h1>Posters</h1></div><div className="erp-head-actions"><button className="secondary-button" onClick={() => void load()}><RefreshCw size={15} /> Refresh</button>{access.canCreate && <button className="primary-button" onClick={() => setUploadOpen(true)}><ImageUp size={15} /> Upload poster</button>}</div></WorkspaceHeader>
-    {access.readOnly && <ReadOnlyNotice />}
     <TabStrip className="erp-tabs" label="Poster status">{(['active', 'draft'] as const).map((value) => <TabButton active={status === value} key={value} onClick={() => setStatus(value)}>{value === 'active' ? 'Posters' : 'Drafts'}</TabButton>)}</TabStrip>
     <ScrollSurface className="poster-scroll-body">
       {posters.length ? <div className="poster-grid poster-grid--persistent">

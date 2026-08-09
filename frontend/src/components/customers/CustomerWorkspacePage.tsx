@@ -30,7 +30,7 @@ import { Button } from '../ui/Button'
 import { Field } from '../ui/Field'
 import { KpiCard } from '../ui/KpiCard'
 import { Pagination } from '../ui/Pagination'
-import { EmptyState, ErrorState, LoadingSkeleton, ReadOnlyNotice } from '../ui/PageState'
+import { EmptyState, ErrorState, LoadingSkeleton} from '../ui/PageState'
 import { useToast } from '../ui/ToastProvider'
 import { KpiGrid, TabButton, TabStrip, WorkspacePage } from '../workspace'
 import { ActivityTab, DocumentsTab, LoanTab, OverviewTab, PaymentsTab, ProjectsTab, QuotationsTab, TimelineTab } from './CustomerWorkspaceTabs'
@@ -374,7 +374,6 @@ export function CustomerWorkspacePage({ session }: { session: Session }) {
 
   return (
     <WorkspacePage variant="split" className="customer-detail-page">
-      {(customerAccess.readOnly || documentAccess.readOnly) && <ReadOnlyNotice />}
       <div className="customer-detail-layout">
         <aside className="customer-directory">
           <header><div><strong>Customers</strong><span>{totalCustomers} matching records</span></div><button onClick={() => void loadCustomers()} aria-label="Refresh customers"><RefreshCw size={15} /></button></header>

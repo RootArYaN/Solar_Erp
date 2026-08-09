@@ -5,7 +5,7 @@ import { getModuleAccess } from '../../lib/permissions'
 import type { Session } from '../../types'
 import { AlertDialog } from '../ui/AlertDialog'
 import { Button } from '../ui/Button'
-import { EmptyState, ErrorState, LoadingSkeleton, ReadOnlyNotice } from '../ui/PageState'
+import { EmptyState, ErrorState, LoadingSkeleton} from '../ui/PageState'
 import { useToast } from '../ui/ToastProvider'
 import { ScrollSurface, WorkspaceHeader, WorkspacePage } from '../workspace'
 
@@ -50,7 +50,6 @@ export function ActiveDevicesPage({ session }: { session: Session }) {
 
   return <WorkspacePage className="security-page">
     <WorkspaceHeader className="security-header" eyebrow="Account security" title="Active devices" description="Review and revoke signed-in devices." actions={<Button variant="secondary" leadingIcon={<RefreshCw size={14} />} onClick={() => void load()}>Refresh</Button>} />
-    {access.readOnly && <ReadOnlyNotice />}
     <ScrollSurface className="security-device-surface">
     {loading ? <LoadingSkeleton rows={5} /> : error ? <ErrorState message={error} requestId={requestId} onRetry={() => void load()} /> : devices.length === 0 ? <EmptyState title="No active devices" message="The backend has not returned any sessions." /> : <div className="device-list">
       {devices.map((device) => <article key={device.id}>
