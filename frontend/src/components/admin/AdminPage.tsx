@@ -21,9 +21,10 @@ import { KpiCard } from '../ui/KpiCard'
 import { useToast } from '../ui/ToastProvider'
 import { KpiGrid, ScrollSurface, TabButton, TabStrip, WorkspaceHeader, WorkspacePage } from '../workspace'
 import { RoleDialog } from './RoleDialog'
+import { DataControlPanel } from './DataControlPanel'
 import { UserDialog } from './UserDialog'
 
-type Tab = 'users' | 'roles'
+type Tab = 'users' | 'roles' | 'data'
 
 const protectedRoleCodes = new Set(['company_admin', 'super_admin'])
 
@@ -233,8 +234,8 @@ export function AdminPage({
   return (
     <WorkspacePage variant="fixed-tabs" className="admin-page">
       <WorkspaceHeader
-        eyebrow="Identity & access"
-        title="Users and roles"
+        eyebrow="Administration"
+        title={tab === 'data' ? 'Data Control' : 'Users and roles'}
         actions={
           <>
             {tab === 'users' && canManageUsers && (
@@ -260,9 +261,12 @@ export function AdminPage({
       <TabStrip className="segmented-tabs" label="Administration sections">
         {canViewUsers && <TabButton active={tab === 'users'} onClick={() => setTab('users')}>Users</TabButton>}
         {canViewRoles && <TabButton active={tab === 'roles'} onClick={() => setTab('roles')}>Roles</TabButton>}
+        {isSuperAdmin && <TabButton active={tab === 'data'} onClick={() => setTab('data')}>Data Control</TabButton>}
       </TabStrip>
 
-      {tab === 'users' && canViewUsers ? (
+      {tab === 'data' && isSuperAdmin ? (
+        <DataControlPanel />
+      ) : tab === 'users' && canViewUsers ? (
         <section className="data-panel">
           <div className="data-panel__toolbar">
             <Field label="Search users" hideLabel prefix={<Search size={16} />} className="admin-search-field"><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search users" /></Field>

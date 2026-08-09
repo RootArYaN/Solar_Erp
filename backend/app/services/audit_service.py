@@ -1,12 +1,18 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import json
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from app.api.deps import CurrentSession
+
+if TYPE_CHECKING:
+    from app.api.deps import CurrentSession
+
 from app.core.request_context import request_id_var
 from app.models.system import AuditEvent
 from app.schemas.audit import AuditEventList, AuditEventSummary
@@ -55,6 +61,10 @@ def list_events(
     customer_id: str | None,
     entity: str | None,
     event: str | None,
+    user_id: str | None,
+    query: str | None,
+    date_from: date | None,
+    date_to: date | None,
     page: int,
     page_size: int,
 ) -> AuditEventList:
@@ -75,6 +85,21 @@ def list_events(
         filters.append(AuditEvent.entity == entity)
     if event:
         filters.append(AuditEvent.event == event)
+    if user_id:
+        filters.append(AuditEvent.user_id == user_id)
+    if date_from:
+        filters.append(AuditEvent.created_at >= datetime.combine(date_from, time.min, tzinfo=UTC))
+    if date_to:
+        filters.append(AuditEvent.created_at < datetime.combine(date_to + timedelta(days=1), time.min, tzinfo=UTC))
+    term = (query or '').strip().lower()
+    if term:
+        like = f'%{term}%'
+        filters.append(or_(
+            func.lower(AuditEvent.event).like(like),
+            func.lower(AuditEvent.entity).like(like),
+            func.lower(AuditEvent.entity_id).like(like),
+            func.lower(AuditEvent.user_role).like(like),
+        ))
 
     total = db.scalar(select(func.count()).select_from(AuditEvent).where(*filters)) or 0
     rows = list(db.scalars(

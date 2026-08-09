@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import CurrentSession, require_any_permissions, require_permissions
@@ -34,11 +34,27 @@ def get_agents(
 @router.get("/{membership_id}/overview", response_model=AgentOverviewResponse)
 def get_agent_overview(
     membership_id: str,
+    customer_page: int = Query(default=1, ge=1),
+    customer_page_size: int = Query(default=25, ge=1, le=100),
+    customer_q: str | None = Query(default=None, max_length=120),
+    transaction_page: int = Query(default=1, ge=1),
+    transaction_page_size: int = Query(default=25, ge=1, le=100),
+    transaction_q: str | None = Query(default=None, max_length=120),
     db: Session = Depends(get_db),
     session: CurrentSession = Depends(require_permissions("agents.view")),
 ) -> AgentOverviewResponse:
     try:
-        return agent_service.get_agent_overview(db, session, membership_id)
+        return agent_service.get_agent_overview(
+            db,
+            session,
+            membership_id,
+            customer_page=customer_page,
+            customer_page_size=customer_page_size,
+            customer_query=customer_q,
+            transaction_page=transaction_page,
+            transaction_page_size=transaction_page_size,
+            transaction_query=transaction_q,
+        )
     except AgentServiceError as exc:
         _raise_service_error(exc)
 

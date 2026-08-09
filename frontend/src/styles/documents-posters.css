@@ -3,7 +3,11 @@
 /* Poster upload and framed library */
 
 .poster-grid { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(205px, 1fr)); align-content: start; gap: 10px; padding: 2px 2px 12px; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
-.poster-card { min-width: 0; padding: 0; border: 1px solid var(--line); border-radius: 10px; background: white; box-shadow: 0 7px 20px rgba(28,35,43,.045); overflow: hidden; }
+.poster-card { min-width: 0; display: flex; flex-direction: column; padding: 0; border: 1px solid var(--line); border-radius: 10px; background: white; box-shadow: 0 7px 20px rgba(28,35,43,.045); overflow: hidden; }
+.poster-card__body { display: grid; align-content: start; gap: 6px; flex: 1; padding: 11px; }
+.poster-card__body h2 { margin: 0; font-size: 12px; }
+.poster-card__body p { margin: 0; color: #727d89; font-size: 8.5px; line-height: 1.45; }
+.poster-card__body small { color: #929aa3; font-size: 7.5px; }
 .poster-frame { width: 100%; aspect-ratio: 4 / 5; display: block; padding: 0; border: 0; border-radius: 0; background: white; box-shadow: none; position: relative; cursor: zoom-in; overflow: hidden; }
 .poster-frame__mat { width: 100%; height: 100%; display: grid; place-items: center; align-content: center; gap: 8px; padding: 0; color: #607486; background: linear-gradient(145deg,#eff4f6,#fff7e8); box-shadow: none; overflow: hidden; }
 .poster-frame__mat small { color: #71808e; font-size: 9px; font-weight: 700; }

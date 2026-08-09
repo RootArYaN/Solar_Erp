@@ -138,3 +138,15 @@ def require_any_permissions(*allowed_permissions: str):
         return session
 
     return dependency
+
+
+def require_super_admin(
+    session: CurrentSession = Depends(get_current_session),
+) -> CurrentSession:
+    """Backend-authoritative guard for destructive/recovery operations."""
+    if not session.user.is_super_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Super administrator access required",
+        )
+    return session

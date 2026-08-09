@@ -37,6 +37,8 @@ class InventoryMovementSummary(BaseModel):
     id: str
     item_id: str
     item_name: str
+    item_sku: str = ''
+    item_unit: str = ''
     movement_type: str
     quantity: float
     source_location_id: str | None
@@ -60,6 +62,12 @@ class InventoryMovementSummary(BaseModel):
     eway_bill_number: str = ''
     note: str
     status: str
+    reversed_movement_id: str | None = None
+    correction_of_movement_id: str | None = None
+    reason: str = ''
+    is_reversed: bool = False
+    corrected_quantity: float | None = None
+    related_movement_id: str | None = None
     created_at: datetime
 
 
@@ -73,7 +81,16 @@ class InventorySummary(BaseModel):
     total_quantity: float
     item_page: int = 1
     item_page_size: int = 100
+    item_total: int = 0
+    item_categories: list[str] = Field(default_factory=list)
     items_has_more: bool = False
+
+
+class InventoryMovementList(BaseModel):
+    data: list[InventoryMovementSummary]
+    page: int
+    page_size: int
+    total: int
 
 
 class CreateInventoryItemRequest(BaseModel):
@@ -204,6 +221,25 @@ class CreateInventoryMovementBatchRequest(BaseModel):
             if line.destination_location_id and line.destination_location_manual:
                 raise ValueError(f'Line {index}: choose a saved or manual destination, not both')
         return self
+
+
+class InventoryMovementCorrectionRequest(BaseModel):
+    quantity: float = Field(gt=0)
+    reason: str = Field(min_length=3, max_length=400)
+
+    @field_validator('reason')
+    @classmethod
+    def clean_reason(cls, value: str) -> str:
+        return ' '.join(value.split())
+
+
+class InventoryMovementReversalRequest(BaseModel):
+    reason: str = Field(min_length=3, max_length=400)
+
+    @field_validator('reason')
+    @classmethod
+    def clean_reason(cls, value: str) -> str:
+        return ' '.join(value.split())
 
 
 class PricingItemInput(BaseModel):

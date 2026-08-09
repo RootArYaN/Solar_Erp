@@ -17,11 +17,8 @@ import {
   createCompanyLoan,
   createFinanceTransaction,
   createFinancialAccount,
-  deleteBill,
-  deleteBillPayment,
-  downloadMergedBills,
-  deleteCompanyLoan,
   deleteFinanceTransaction,
+  downloadMergedBills,
   getBills,
   getBillCustomers,
   getCompanyLoans,
@@ -33,11 +30,13 @@ import {
   getProfitability,
   recordBillPayment,
   recordCompanyLoanPayment,
+  reverseBillPayment,
   reverseFinanceTransaction,
   transferFinancialAccounts,
   updateBill,
   updateCompanyLoan,
   updateFinanceTransaction,
+  voidBill,
 } from '../../api/finance'
 import { downloadStoredFile, removeStoredFile, uploadStoredFile } from '../../api/files'
 import type { Bill, BillCustomerOption, BillList, BillPayment, CompanyLoan, FinanceCategory, FinanceOverview, FinanceTransaction, FinanceTransactionList, FinancialAccount, Profitability } from '../../erp-types'
@@ -56,7 +55,7 @@ import { AccountForm, BillForm, CompanyLoanForm, EditBillForm, EditCompanyLoanFo
 import { money, monthStart, today } from './finance-utils'
 
 type Tab = 'overview' | 'transactions' | 'expenses' | 'bills' | 'accounts' | 'loans' | 'profitability' | 'reports'
-type Dialog = 'transaction' | 'edit-transaction' | 'expense' | 'account' | 'transfer' | 'bill' | 'edit-bill' | 'bill-payment' | 'loan' | 'edit-loan' | 'loan-payment' | 'reverse-transaction' | null
+type Dialog = 'transaction' | 'edit-transaction' | 'expense' | 'account' | 'transfer' | 'bill' | 'edit-bill' | 'bill-payment' | 'loan' | 'edit-loan' | 'loan-payment' | 'reverse-transaction' | 'delete-transaction' | null
 const tabs: Tab[] = ['overview', 'transactions', 'expenses', 'bills', 'accounts', 'loans', 'profitability', 'reports']
 
 
@@ -82,11 +81,9 @@ export function FinancePage({ session }: { session: Session }) {
   const [selectedBill, setSelectedBill] = useState<Bill | null>(null)
   const [selectedLoan, setSelectedLoan] = useState<CompanyLoan | null>(null)
   const [selectedTransaction, setSelectedTransaction] = useState<FinanceTransaction | null>(null)
-  const [transactionToDelete, setTransactionToDelete] = useState<FinanceTransaction | null>(null)
   const [billToDelete, setBillToDelete] = useState<Bill | null>(null)
   const [billPaymentToDelete, setBillPaymentToDelete] = useState<{ bill: Bill; payment: BillPayment } | null>(null)
   const [billAttachmentToRemove, setBillAttachmentToRemove] = useState<Bill | null>(null)
-  const [loanToDelete, setLoanToDelete] = useState<CompanyLoan | null>(null)
   const [dateFrom, setDateFrom] = useState(monthStart())
   const [dateTo, setDateTo] = useState(today())
   const [direction, setDirection] = useState(() => ['credit', 'debit'].includes(searchParams.get('direction') ?? '') ? searchParams.get('direction') ?? '' : '')
@@ -113,9 +110,12 @@ export function FinancePage({ session }: { session: Session }) {
     if (!validDateRange()) return
     setLoading(true); setError('')
     try {
-      const projectRequest = session.permissions.includes(PERMISSIONS.projects.view) ? getProjectTimelines() : Promise.resolve([])
-      const [nextOverview, nextAccounts, nextCategories, nextProjects, nextBillCustomers] = await Promise.all([getFinanceOverview(rangeQuery().toString()), getFinancialAccounts(), getFinanceCategories(), projectRequest, getBillCustomers()])
-      setOverview(nextOverview); setAccounts(nextAccounts); setCategories(nextCategories); setProjects(nextProjects); setBillCustomers(nextBillCustomers)
+      const [nextOverview, nextAccounts, nextCategories] = await Promise.all([
+        getFinanceOverview(rangeQuery().toString()),
+        getFinancialAccounts(),
+        getFinanceCategories(),
+      ])
+      setOverview(nextOverview); setAccounts(nextAccounts); setCategories(nextCategories)
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not load company finance') }
     finally { setLoading(false) }
   }
@@ -146,9 +146,28 @@ export function FinancePage({ session }: { session: Session }) {
   useEffect(() => { void loadBase() }, [])
   const baseLoaded = overview !== null
   useEffect(() => { if (baseLoaded && tab !== 'overview') void loadTab(tab) }, [tab, baseLoaded])
+  useEffect(() => {
+    if (!dialog) return
+    const needsProjects = ['transaction', 'expense', 'bill', 'edit-bill'].includes(dialog)
+      && session.permissions.includes(PERMISSIONS.projects.view)
+    const needsBillCustomers = ['bill', 'edit-bill'].includes(dialog)
+    const requests: Promise<void>[] = []
+    if (needsProjects && !projects.length) {
+      requests.push(getProjectTimelines().then(setProjects))
+    }
+    if (needsBillCustomers && !billCustomers.length) {
+      requests.push(getBillCustomers().then(setBillCustomers))
+    }
+    if (requests.length) {
+      void Promise.all(requests).catch((reason) => {
+        toast({ message: reason instanceof Error ? reason.message : 'Could not load finance form options', variant: 'error' })
+      })
+    }
+  }, [dialog])
 
   async function refreshAll() {
-    await Promise.all([loadBase(), loadTab(tab)])
+    await loadBase()
+    if (tab !== 'overview') await loadTab(tab)
   }
 
   async function submitTransaction(event: FormEvent<HTMLFormElement>, expense = false) {
@@ -266,6 +285,15 @@ export function FinancePage({ session }: { session: Session }) {
     finally { setWorking(false) }
   }
 
+  async function submitTransactionDelete(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); if (!selectedTransaction) return; setWorking(true); const form = new FormData(event.currentTarget)
+    try {
+      await deleteFinanceTransaction(selectedTransaction.id, { transaction_date: form.get('transaction_date'), reason: form.get('reason') })
+      setDialog(null); setSelectedTransaction(null); await refreshAll(); toast({ message: 'Transaction deleted from active finance and retained in audit history', variant: 'success' })
+    } catch (reason) { toast({ message: reason instanceof Error ? reason.message : 'Could not delete transaction', variant: 'error' }) }
+    finally { setWorking(false) }
+  }
+
   async function submitTransactionEdit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!selectedTransaction) return
@@ -294,61 +322,35 @@ export function FinancePage({ session }: { session: Session }) {
     }
   }
 
-  async function confirmTransactionDelete() {
-    if (!transactionToDelete) return
-    setWorking(true)
-    try {
-      await deleteFinanceTransaction(transactionToDelete.id)
-      setTransactionToDelete(null)
-      await refreshAll()
-      toast({ message: 'Finance transaction deleted', variant: 'success' })
-    } catch (reason) {
-      toast({ message: reason instanceof Error ? reason.message : 'Could not delete transaction', variant: 'error' })
-    } finally {
-      setWorking(false)
-    }
-  }
-
-  async function confirmBillDelete() {
+  async function submitBillVoid(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
     if (!billToDelete) return
     setWorking(true)
+    const form = new FormData(event.currentTarget)
     try {
-      await deleteBill(billToDelete.id)
+      await voidBill(billToDelete.id, { transaction_date: form.get('transaction_date'), reason: form.get('reason') })
       setBillToDelete(null)
       await refreshAll()
-      toast({ message: 'Bill and linked payment entries deleted', variant: 'success' })
+      toast({ message: 'Bill voided; linked payments were reversed and history preserved', variant: 'success' })
     } catch (reason) {
-      toast({ message: reason instanceof Error ? reason.message : 'Could not delete bill', variant: 'error' })
+      toast({ message: reason instanceof Error ? reason.message : 'Could not void bill', variant: 'error' })
     } finally {
       setWorking(false)
     }
   }
 
-  async function confirmBillPaymentDelete() {
+  async function submitBillPaymentReversal(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
     if (!billPaymentToDelete) return
     setWorking(true)
+    const form = new FormData(event.currentTarget)
     try {
-      await deleteBillPayment(billPaymentToDelete.bill.id, billPaymentToDelete.payment.id)
+      await reverseBillPayment(billPaymentToDelete.bill.id, billPaymentToDelete.payment.id, { transaction_date: form.get('transaction_date'), reason: form.get('reason') })
       setBillPaymentToDelete(null)
       await refreshAll()
-      toast({ message: 'Bill payment removed; bill and bank balances recalculated', variant: 'success' })
+      toast({ message: 'Bill payment reversed; bill and account balances recalculated', variant: 'success' })
     } catch (reason) {
-      toast({ message: reason instanceof Error ? reason.message : 'Could not remove bill payment', variant: 'error' })
-    } finally {
-      setWorking(false)
-    }
-  }
-
-  async function confirmLoanDelete() {
-    if (!loanToDelete) return
-    setWorking(true)
-    try {
-      await deleteCompanyLoan(loanToDelete.id)
-      setLoanToDelete(null)
-      await refreshAll()
-      toast({ message: 'Company loan and linked ledger entries deleted', variant: 'success' })
-    } catch (reason) {
-      toast({ message: reason instanceof Error ? reason.message : 'Could not delete company loan', variant: 'error' })
+      toast({ message: reason instanceof Error ? reason.message : 'Could not reverse bill payment', variant: 'error' })
     } finally {
       setWorking(false)
     }
@@ -362,7 +364,13 @@ export function FinancePage({ session }: { session: Session }) {
         toast({ message: validation.message, variant: 'warning' })
         return
       }
-      await uploadStoredFile({ file, ownerType: 'finance_bill', ownerId: bill.id, projectId: bill.project_id || undefined, customerId: bill.customer_id || undefined })
+      await uploadStoredFile({
+        file,
+        ownerType: 'finance_bill',
+        ownerId: bill.id,
+        projectId: bill.project_id || undefined,
+        customerId: bill.customer_id || undefined,
+      })
       await loadTab('bills')
       toast({ message: `Attachment uploaded for ${bill.bill_number}`, variant: 'success' })
     } catch (reason) {
@@ -443,11 +451,11 @@ export function FinancePage({ session }: { session: Session }) {
     <div className={`finance-tab-panel finance-tab-panel--${tab}`} role="tabpanel" data-scroll-surface="tab-body">
       {loading ? <LoadingSkeleton rows={6} /> : <>
         {tab === 'overview' && overview && <Overview data={overview} dateFrom={dateFrom} setDateFrom={setDateFrom} dateTo={dateTo} setDateTo={setDateTo} reload={() => void loadTab('overview')} />}
-        {(tab === 'transactions' || tab === 'reports') && <Transactions data={transactions} rows={visibleTransactions} search={search} setSearch={setSearch} direction={direction} setDirection={setDirection} dateFrom={dateFrom} setDateFrom={setDateFrom} dateTo={dateTo} setDateTo={setDateTo} reload={() => void loadTab(tab)} reportMode={tab === 'reports'} canEdit={access.canEdit} onEdit={(row) => { setSelectedTransaction(row); setDialog('edit-transaction') }} onReverse={(row) => { setSelectedTransaction(row); setDialog('reverse-transaction') }} onDelete={setTransactionToDelete} />}
-        {tab === 'expenses' && <Expenses data={expenses} dateFrom={dateFrom} setDateFrom={setDateFrom} dateTo={dateTo} setDateTo={setDateTo} reload={() => void loadTab('expenses')} canEdit={access.canEdit} onAdd={() => setDialog('expense')} onEdit={(row) => { setSelectedTransaction(row); setDialog('edit-transaction') }} onDelete={setTransactionToDelete} />}
-        {tab === 'bills' && <Bills data={bills} billType={billType} setBillType={setBillType} dateFrom={dateFrom} setDateFrom={setDateFrom} dateTo={dateTo} setDateTo={setDateTo} reload={() => void loadTab('bills')} canEdit={access.canEdit} onAdd={() => setDialog('bill')} onEdit={(bill) => { setSelectedBill(bill); setDialog('edit-bill') }} onPay={(bill) => { setSelectedBill(bill); setDialog('bill-payment') }} onDelete={setBillToDelete} onUpload={(bill, file) => void uploadBillAttachment(bill, file)} onDownload={(bill) => void downloadBillAttachment(bill)} onRemoveAttachment={setBillAttachmentToRemove} onRemovePayment={(bill, payment) => setBillPaymentToDelete({ bill, payment })} onDownloadMerged={() => void downloadFilteredBills()} downloadingMerged={downloadingMergedBills} />}
+        {(tab === 'transactions' || tab === 'reports') && <Transactions data={transactions} rows={visibleTransactions} search={search} setSearch={setSearch} direction={direction} setDirection={setDirection} dateFrom={dateFrom} setDateFrom={setDateFrom} dateTo={dateTo} setDateTo={setDateTo} reload={() => void loadTab(tab)} reportMode={tab === 'reports'} canEdit={access.canEdit} onEdit={(row) => { setSelectedTransaction(row); setDialog('edit-transaction') }} onReverse={session.user.is_super_admin ? (row) => { setSelectedTransaction(row); setDialog('reverse-transaction') } : undefined} onDelete={session.user.is_super_admin ? (row) => { setSelectedTransaction(row); setDialog('delete-transaction') } : undefined} />}
+        {tab === 'expenses' && <Expenses data={expenses} dateFrom={dateFrom} setDateFrom={setDateFrom} dateTo={dateTo} setDateTo={setDateTo} reload={() => void loadTab('expenses')} canEdit={access.canEdit} onAdd={() => setDialog('expense')} onEdit={(row) => { setSelectedTransaction(row); setDialog('edit-transaction') }} onReverse={session.user.is_super_admin ? (row) => { setSelectedTransaction(row); setDialog('reverse-transaction') } : undefined} />}
+        {tab === 'bills' && <Bills data={bills} billType={billType} setBillType={setBillType} dateFrom={dateFrom} setDateFrom={setDateFrom} dateTo={dateTo} setDateTo={setDateTo} reload={() => void loadTab('bills')} canEdit={access.canEdit} onAdd={() => setDialog('bill')} onEdit={(bill) => { setSelectedBill(bill); setDialog('edit-bill') }} onPay={(bill) => { setSelectedBill(bill); setDialog('bill-payment') }} onDelete={session.user.is_super_admin ? setBillToDelete : undefined} onUpload={(bill, file) => void uploadBillAttachment(bill, file)} onDownload={(bill) => void downloadBillAttachment(bill)} onRemoveAttachment={setBillAttachmentToRemove} onRemovePayment={session.user.is_super_admin ? (bill, payment) => setBillPaymentToDelete({ bill, payment }) : undefined} onDownloadMerged={() => void downloadFilteredBills()} downloadingMerged={downloadingMergedBills} />}
         {tab === 'accounts' && <Accounts rows={accounts} canEdit={access.canEdit} onAdd={() => setDialog('account')} onTransfer={() => setDialog('transfer')} />}
-        {tab === 'loans' && <Loans rows={loans} canEdit={access.canEdit} onAdd={() => setDialog('loan')} onEdit={(loan) => { setSelectedLoan(loan); setDialog('edit-loan') }} onPay={(loan) => { setSelectedLoan(loan); setDialog('loan-payment') }} onDelete={setLoanToDelete} />}
+        {tab === 'loans' && <Loans rows={loans} canEdit={access.canEdit} onAdd={() => setDialog('loan')} onEdit={(loan) => { setSelectedLoan(loan); setDialog('edit-loan') }} onPay={(loan) => { setSelectedLoan(loan); setDialog('loan-payment') }} />}
         {tab === 'profitability' && <ProfitabilityPanel data={profitability} dateFrom={dateFrom} setDateFrom={setDateFrom} dateTo={dateTo} setDateTo={setDateTo} reload={() => void loadTab('profitability')} />}
       </>}
     </div>
@@ -457,34 +465,17 @@ export function FinancePage({ session }: { session: Session }) {
     {dialog === 'account' && <Modal className="finance-modal" title="Add financial account" subtitle="Bank, cash, UPI or petty-cash balance." onClose={() => setDialog(null)}><AccountForm working={working} onSubmit={submitAccount} /></Modal>}
     {dialog === 'transfer' && <Modal className="finance-modal" title="Transfer between accounts" subtitle="Creates two linked transaction sides in one operation." onClose={() => setDialog(null)}><TransferForm accounts={accounts} working={working} onSubmit={submitTransfer} /></Modal>}
     {dialog === 'bill' && <Modal className="finance-modal" title="Create bill" subtitle="A bill records money owed; it does not post a payment." onClose={() => setDialog(null)}><BillForm customers={billCustomers} projects={projects} initialType={billType === 'purchase' ? 'purchase' : 'sales'} working={working} onSubmit={submitBill} /></Modal>}
-    {dialog === 'edit-bill' && selectedBill && <Modal className="finance-modal" title={`Edit ${selectedBill.bill_number}`} subtitle="Payment totals remain linked and cannot be reduced below the amount already paid." onClose={() => { setDialog(null); setSelectedBill(null) }}><EditBillForm bill={selectedBill} customers={billCustomers} projects={projects} working={working} onSubmit={submitBillEdit} /></Modal>}
+    {dialog === 'edit-bill' && selectedBill && <Modal className="finance-modal" title={`Edit ${selectedBill.bill_number}`} subtitle="Finalized amount and party fields are locked; due date and notes remain editable." onClose={() => { setDialog(null); setSelectedBill(null) }}><EditBillForm bill={selectedBill} customers={billCustomers} projects={projects} working={working} onSubmit={submitBillEdit} /></Modal>}
     {dialog === 'bill-payment' && selectedBill && <Modal className="finance-modal" title={`Pay ${selectedBill.bill_number}`} subtitle={`${money.format(selectedBill.balance_amount)} outstanding`} onClose={() => setDialog(null)}><PaymentForm accounts={accounts} amount={selectedBill.balance_amount} working={working} onSubmit={submitBillPayment} /></Modal>}
     {dialog === 'loan' && <Modal className="finance-modal" title="Add company loan" subtitle="Separate from customer solar loans." onClose={() => setDialog(null)}><CompanyLoanForm accounts={accounts} working={working} onSubmit={submitLoan} /></Modal>}
-    {dialog === 'edit-loan' && selectedLoan && <Modal className="finance-modal" title={`Edit ${selectedLoan.lender_name}`} subtitle="Changing principal updates the linked disbursement while preserving repayments." onClose={() => { setDialog(null); setSelectedLoan(null) }}><EditCompanyLoanForm loan={selectedLoan} working={working} onSubmit={submitLoanEdit} /></Modal>}
-    {dialog === 'edit-transaction' && selectedTransaction && <Modal className="finance-modal" title={`Edit ${selectedTransaction.transaction_number}`} subtitle="Updates the shared ledger entry and records the changed fields in the audit log." onClose={() => { setDialog(null); setSelectedTransaction(null) }}><EditTransactionForm transaction={selectedTransaction} accounts={accounts} categories={categories} working={working} onSubmit={submitTransactionEdit} /></Modal>}
+    {dialog === 'edit-loan' && selectedLoan && <Modal className="finance-modal" title={`Edit ${selectedLoan.lender_name}`} subtitle="Principal and disbursement date are locked; loan terms and notes remain editable." onClose={() => { setDialog(null); setSelectedLoan(null) }}><EditCompanyLoanForm loan={selectedLoan} working={working} onSubmit={submitLoanEdit} /></Modal>}
+    {dialog === 'edit-transaction' && selectedTransaction && <Modal className="finance-modal" title={`Edit ${selectedTransaction.transaction_number}`} subtitle="Only harmless metadata can be edited after posting. Financial corrections use reversal." onClose={() => { setDialog(null); setSelectedTransaction(null) }}><EditTransactionForm transaction={selectedTransaction} accounts={accounts} categories={categories} working={working} onSubmit={submitTransactionEdit} /></Modal>}
     {dialog === 'reverse-transaction' && selectedTransaction && <Modal title="Reverse transaction" subtitle={`${selectedTransaction.transaction_number} · ${money.format(selectedTransaction.amount)}`} onClose={() => { setDialog(null); setSelectedTransaction(null) }}><form className="erp-form" onSubmit={submitReversal}><div className="inline-warning">This does not delete or overwrite the original entry. A linked opposite entry will be posted.</div><div className="erp-form-grid"><label><span>Reversal date</span><input type="date" name="transaction_date" defaultValue={today()} required /></label><label className="erp-form-wide"><span>Reason</span><textarea name="reason" minLength={3} required /></label></div><footer className="erp-form-actions"><button type="button" className="secondary-button" onClick={() => { setDialog(null); setSelectedTransaction(null) }}>Cancel</button><button className="primary-button" disabled={working}>Post reversal</button></footer></form></Modal>}
 
+    {dialog === 'delete-transaction' && selectedTransaction && <Modal className="finance-modal finance-delete-transaction-modal" title="Delete transaction" subtitle={`${selectedTransaction.transaction_number} · ${money.format(selectedTransaction.amount)}`} onClose={() => { if (!working) { setDialog(null); setSelectedTransaction(null) } }}><form className="erp-form" onSubmit={submitTransactionDelete}><div className="inline-warning">This is a Super Admin action. The transaction will disappear from normal finance lists, linked balance effects will be safely unwound, and the audit record will be preserved.</div><div className="erp-form-grid"><label><span>Delete date</span><input type="date" name="transaction_date" defaultValue={today()} required /></label><label className="erp-form-wide"><span>Reason</span><textarea name="reason" minLength={3} placeholder="Why is this transaction being removed?" required /></label></div><footer className="erp-form-actions"><button type="button" className="secondary-button" disabled={working} onClick={() => { setDialog(null); setSelectedTransaction(null) }}>Cancel</button><Button type="submit" variant="danger" disabled={working}>{working ? 'Deleting…' : 'Delete transaction'}</Button></footer></form></Modal>}
+
     {dialog === 'loan-payment' && selectedLoan && <Modal className="finance-modal" title={`Pay ${selectedLoan.lender_name}`} subtitle={`${money.format(selectedLoan.outstanding_amount)} outstanding`} onClose={() => setDialog(null)}><LoanPaymentForm accounts={accounts} amount={selectedLoan.emi_amount || selectedLoan.outstanding_amount} working={working} onSubmit={submitLoanPayment} /></Modal>}
-    <AlertDialog
-      open={Boolean(transactionToDelete)}
-      title="Delete finance transaction?"
-      description={transactionToDelete ? `${transactionToDelete.transaction_number} · ${money.format(transactionToDelete.amount)}. Linked bill or loan balances will be recalculated.` : ''}
-      confirmLabel="Delete transaction"
-      icon="delete"
-      loading={working}
-      onCancel={() => setTransactionToDelete(null)}
-      onConfirm={confirmTransactionDelete}
-    />
-    <AlertDialog
-      open={Boolean(billPaymentToDelete)}
-      title="Remove this bill payment?"
-      description={billPaymentToDelete ? `${billPaymentToDelete.bill.bill_number} · ${money.format(billPaymentToDelete.payment.amount)} from ${billPaymentToDelete.payment.account_name}. The bill outstanding and bank balance will be recalculated.` : ''}
-      confirmLabel="Remove payment"
-      icon="delete"
-      loading={working}
-      onCancel={() => setBillPaymentToDelete(null)}
-      onConfirm={confirmBillPaymentDelete}
-    />
+    {billPaymentToDelete && <Modal title="Reverse bill payment" subtitle={`${billPaymentToDelete.bill.bill_number} · ${money.format(billPaymentToDelete.payment.amount)}`} onClose={() => setBillPaymentToDelete(null)}><form className="erp-form" onSubmit={submitBillPaymentReversal}><div className="inline-warning">The original payment stays in history. A linked opposite entry will be posted and the bill outstanding will be recalculated.</div><div className="erp-form-grid"><label><span>Reversal date</span><input type="date" name="transaction_date" defaultValue={today()} required /></label><label className="erp-form-wide"><span>Reason</span><textarea name="reason" minLength={3} required /></label></div><footer className="erp-form-actions"><button type="button" className="secondary-button" onClick={() => setBillPaymentToDelete(null)}>Cancel</button><button className="primary-button" disabled={working}>Reverse payment</button></footer></form></Modal>}
     <AlertDialog
       open={Boolean(billAttachmentToRemove)}
       title="Remove bill document?"
@@ -495,25 +486,6 @@ export function FinancePage({ session }: { session: Session }) {
       onCancel={() => setBillAttachmentToRemove(null)}
       onConfirm={confirmBillAttachmentRemove}
     />
-    <AlertDialog
-      open={Boolean(billToDelete)}
-      title="Delete bill?"
-      description={billToDelete ? `${billToDelete.bill_number} · ${money.format(billToDelete.total_amount)}. Its attachment and linked payment ledger entries will also be deleted.` : ''}
-      confirmLabel="Delete bill"
-      icon="delete"
-      loading={working}
-      onCancel={() => setBillToDelete(null)}
-      onConfirm={confirmBillDelete}
-    />
-    <AlertDialog
-      open={Boolean(loanToDelete)}
-      title="Delete company loan?"
-      description={loanToDelete ? `${loanToDelete.lender_name} · ${money.format(loanToDelete.principal_amount)}. The disbursement and repayment ledger entries will also be deleted.` : ''}
-      confirmLabel="Delete loan"
-      icon="delete"
-      loading={working}
-      onCancel={() => setLoanToDelete(null)}
-      onConfirm={confirmLoanDelete}
-    />
+    {billToDelete && <Modal title="Void bill" subtitle={`${billToDelete.bill_number} · ${money.format(billToDelete.total_amount)}`} onClose={() => setBillToDelete(null)}><form className="erp-form" onSubmit={submitBillVoid}><div className="inline-warning">The bill will remain auditable as void. Any posted bill payments will be reversed rather than deleted.</div><div className="erp-form-grid"><label><span>Void date</span><input type="date" name="transaction_date" defaultValue={today()} required /></label><label className="erp-form-wide"><span>Reason</span><textarea name="reason" minLength={3} required /></label></div><footer className="erp-form-actions"><button type="button" className="secondary-button" onClick={() => setBillToDelete(null)}>Cancel</button><button className="primary-button" disabled={working}>Void bill</button></footer></form></Modal>}
   </WorkspacePage>
 }

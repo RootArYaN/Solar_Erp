@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import json
 import re
 import tempfile
@@ -10,11 +12,14 @@ from datetime import UTC, datetime
 from uuid import uuid4
 from decimal import Decimal
 
-from sqlalchemy import case, func, or_, select
+from sqlalchemy import case, exists, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.api.deps import CurrentSession
+
+if TYPE_CHECKING:
+    from app.api.deps import CurrentSession
+
 from app.core.concurrency import RecordConflictError, verify_version
 from app.models.agent import AgentCustomer
 from app.models.operations import (
@@ -40,6 +45,9 @@ from app.schemas.operations import (
     GeneratedDocumentPackSummary,
     InventoryItemSummary,
     InventoryLocationSummary,
+    InventoryMovementCorrectionRequest,
+    InventoryMovementList,
+    InventoryMovementReversalRequest,
     InventoryMovementSummary,
     InventorySummary,
     PosterSummary,
@@ -49,8 +57,9 @@ from app.schemas.operations import (
     SaveGeneratedDocumentPackRequest,
     SavePricingBookRequest,
 )
-from app.services.access_service import AccessError, get_customer, get_project
+from app.services.access_service import AccessError, get_customer, get_project, operational_reference_filter
 from app.services.audit_service import write_event
+from app.services.customer_lifecycle_service import CustomerLifecycleError, reactivate_for_activity
 from app.services.storage import storage
 from app.services import workflow_service
 
@@ -218,16 +227,56 @@ def _inventory_totals(db: Session, company_id: str) -> tuple[int, int, Decimal, 
     return int(row[0] or 0), int(row[1] or 0), Decimal(row[2] or 0), Decimal(row[3] or 0)
 
 
+def _inventory_item_filters(
+    company_id: str,
+    *,
+    query: str | None = None,
+    category: str | None = None,
+):
+    filters = [
+        InventoryItem.company_id == company_id,
+        InventoryItem.is_active.is_(True),
+    ]
+    normalized_category = (category or '').strip()
+    if normalized_category:
+        filters.append(InventoryItem.category == normalized_category)
+    term = (query or '').strip().lower()
+    if term:
+        like = f'%{term}%'
+        location_match = exists(
+            select(InventoryBalance.id)
+            .join(InventoryLocation, InventoryLocation.id == InventoryBalance.location_id)
+            .where(
+                InventoryBalance.company_id == company_id,
+                InventoryBalance.item_id == InventoryItem.id,
+                InventoryLocation.company_id == company_id,
+                InventoryLocation.is_active.is_(True),
+                func.lower(InventoryLocation.name).like(like),
+            )
+        )
+        filters.append(or_(
+            func.lower(InventoryItem.sku).like(like),
+            func.lower(InventoryItem.name).like(like),
+            func.lower(InventoryItem.category).like(like),
+            func.lower(InventoryItem.supplier_name).like(like),
+            location_match,
+        ))
+    return filters
+
+
 def _inventory_maps(
     db: Session,
     company_id: str,
     *,
     item_offset: int = 0,
     item_limit: int | None = None,
+    item_query: str | None = None,
+    item_category: str | None = None,
 ):
+    item_filters = _inventory_item_filters(company_id, query=item_query, category=item_category)
     item_statement = (
         select(InventoryItem)
-        .where(InventoryItem.company_id == company_id, InventoryItem.is_active.is_(True))
+        .where(*item_filters)
         .order_by(InventoryItem.category, InventoryItem.name, InventoryItem.id)
         .offset(item_offset)
     )
@@ -248,14 +297,6 @@ def _inventory_maps(
     ).all()) if item_ids else []
     return items, locations, balances
 
-
-def _available_by_item(balances: list[InventoryBalance]) -> dict[str, Decimal]:
-    available: dict[str, Decimal] = {}
-    for balance in balances:
-        available[balance.item_id] = available.get(balance.item_id, Decimal('0')) + (
-            Decimal(balance.quantity_on_hand or 0) - Decimal(balance.reserved_quantity or 0)
-        )
-    return available
 
 
 def low_stock_item_count(db: Session, company_id: str) -> int:
@@ -300,17 +341,39 @@ def inventory_summary(
     actor: CurrentSession,
     *,
     item_page: int = 1,
-    item_page_size: int = 100,
+    item_page_size: int = 50,
+    item_query: str | None = None,
+    item_category: str | None = None,
     movement_limit: int = 30,
 ) -> InventorySummary:
     company_id = actor.membership.company_id
     total_items, low_stock, stock_value, total_quantity = _inventory_totals(db, company_id)
+    item_filters = _inventory_item_filters(company_id, query=item_query, category=item_category)
+    item_total = int(db.scalar(
+        select(func.count(InventoryItem.id)).where(*item_filters)
+    ) or 0)
+    item_categories = [
+        str(value) for value in db.scalars(
+            select(InventoryItem.category)
+            .where(
+                InventoryItem.company_id == company_id,
+                InventoryItem.is_active.is_(True),
+                InventoryItem.category != '',
+            )
+            .distinct()
+            .order_by(InventoryItem.category)
+        ).all()
+    ]
+    max_page = max(1, (item_total + item_page_size - 1) // item_page_size)
+    item_page = min(item_page, max_page)
     item_offset = (item_page - 1) * item_page_size
     items, locations, balances = _inventory_maps(
         db,
         company_id,
         item_offset=item_offset,
         item_limit=item_page_size,
+        item_query=item_query,
+        item_category=item_category,
     )
     location_by_id = {row.id: row for row in locations}
     balance_by_item: dict[str, list[InventoryBalance]] = {}
@@ -322,7 +385,14 @@ def inventory_summary(
     ]
     movement_rows = list(db.scalars(
         select(InventoryMovement)
-        .where(InventoryMovement.company_id == company_id)
+        .where(
+            InventoryMovement.company_id == company_id,
+            operational_reference_filter(
+                company_id,
+                customer_column=InventoryMovement.customer_id,
+                project_column=InventoryMovement.project_id,
+            ),
+        )
         .order_by(InventoryMovement.created_at.desc(), InventoryMovement.id.desc())
         .limit(movement_limit)
     ).all()) if movement_limit else []
@@ -337,7 +407,52 @@ def inventory_summary(
         total_quantity=_f(total_quantity),
         item_page=item_page,
         item_page_size=item_page_size,
-        items_has_more=item_offset + len(item_summaries) < total_items,
+        item_total=item_total,
+        item_categories=item_categories,
+        items_has_more=item_offset + len(item_summaries) < item_total,
+    )
+
+
+def list_inventory_movements(
+    db: Session,
+    actor: CurrentSession,
+    *,
+    item_id: str | None = None,
+    customer_id: str | None = None,
+    movement_type: str | None = None,
+    status: str | None = None,
+    page: int = 1,
+    page_size: int = 50,
+) -> InventoryMovementList:
+    filters = [
+        InventoryMovement.company_id == actor.membership.company_id,
+        operational_reference_filter(
+            actor.membership.company_id,
+            customer_column=InventoryMovement.customer_id,
+            project_column=InventoryMovement.project_id,
+        ),
+    ]
+    if item_id:
+        filters.append(InventoryMovement.item_id == item_id)
+    if customer_id:
+        filters.append(InventoryMovement.customer_id == customer_id)
+    if movement_type:
+        filters.append(InventoryMovement.movement_type == movement_type)
+    if status:
+        filters.append(InventoryMovement.status == status)
+    total = int(db.scalar(select(func.count()).select_from(InventoryMovement).where(*filters)) or 0)
+    rows = list(db.scalars(
+        select(InventoryMovement)
+        .where(*filters)
+        .order_by(InventoryMovement.created_at.desc(), InventoryMovement.id.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    ).all())
+    return InventoryMovementList(
+        data=_movement_summaries(db, rows),
+        page=page,
+        page_size=page_size,
+        total=total,
     )
 
 
@@ -377,6 +492,16 @@ def _balance(db: Session, company_id: str, item_id: str, location_id: str, creat
 
 
 def _movement_summaries(db: Session, rows: list[InventoryMovement]) -> list[InventoryMovementSummary]:
+    row_ids = {row.id for row in rows}
+    reversal_rows = list(db.scalars(
+        select(InventoryMovement).where(InventoryMovement.reversed_movement_id.in_(row_ids))
+    ).all()) if row_ids else []
+    correction_rows = list(db.scalars(
+        select(InventoryMovement).where(InventoryMovement.correction_of_movement_id.in_(row_ids))
+    ).all()) if row_ids else []
+    reversed_ids = {row.reversed_movement_id for row in reversal_rows if row.reversed_movement_id}
+    reversal_by_original = {row.reversed_movement_id: row for row in reversal_rows if row.reversed_movement_id}
+    correction_by_original = {row.correction_of_movement_id: row for row in correction_rows if row.correction_of_movement_id}
     item_ids = {row.item_id for row in rows}
     location_ids = {location_id for row in rows for location_id in (row.source_location_id, row.destination_location_id) if location_id}
     project_ids = {row.project_id for row in rows if row.project_id}
@@ -391,6 +516,8 @@ def _movement_summaries(db: Session, rows: list[InventoryMovement]) -> list[Inve
             id=row.id,
             item_id=row.item_id,
             item_name=items[row.item_id].name if row.item_id in items else '',
+            item_sku=items[row.item_id].sku if row.item_id in items else '',
+            item_unit=items[row.item_id].unit if row.item_id in items else '',
             movement_type=row.movement_type,
             quantity=_f(row.quantity),
             source_location_id=row.source_location_id,
@@ -414,6 +541,16 @@ def _movement_summaries(db: Session, rows: list[InventoryMovement]) -> list[Inve
             eway_bill_number=row.eway_bill_number,
             note=row.note,
             status=row.status,
+            reversed_movement_id=row.reversed_movement_id,
+            correction_of_movement_id=row.correction_of_movement_id,
+            reason=row.reason,
+            is_reversed=row.id in reversed_ids,
+            corrected_quantity=_f(correction_by_original[row.id].quantity) if row.id in correction_by_original else None,
+            related_movement_id=(
+                correction_by_original[row.id].id if row.id in correction_by_original
+                else reversal_by_original[row.id].id if row.id in reversal_by_original
+                else row.correction_of_movement_id or row.reversed_movement_id
+            ),
             created_at=row.created_at,
         ))
     return result
@@ -434,12 +571,20 @@ def _post_movement_row(
     ))
     if not item:
         raise OperationsNotFoundError('Inventory item not found')
-    for location_id in [payload.source_location_id, payload.destination_location_id]:
-        if location_id and not db.scalar(select(InventoryLocation.id).where(
-            InventoryLocation.id == location_id,
-            InventoryLocation.company_id == company_id,
-            InventoryLocation.is_active.is_(True),
-        )):
+    location_ids = {
+        location_id
+        for location_id in (payload.source_location_id, payload.destination_location_id)
+        if location_id
+    }
+    if location_ids:
+        valid_location_ids = set(db.scalars(
+            select(InventoryLocation.id).where(
+                InventoryLocation.id.in_(location_ids),
+                InventoryLocation.company_id == company_id,
+                InventoryLocation.is_active.is_(True),
+            )
+        ).all())
+        if valid_location_ids != location_ids:
             raise OperationsNotFoundError('Inventory location not found')
     customer_id = payload.customer_id
     if payload.project_id:
@@ -449,6 +594,11 @@ def _post_movement_row(
         customer_id = project.customer_id
     elif customer_id:
         get_customer(db, actor, customer_id)
+    if customer_id:
+        try:
+            reactivate_for_activity(db, actor, customer_id, source='inventory_movement')
+        except CustomerLifecycleError as exc:
+            raise OperationsConflictError(str(exc)) from exc
     qty = _d(payload.quantity)
     source = _balance(db, company_id, item.id, payload.source_location_id, False) if payload.source_location_id else None
     destination = _balance(db, company_id, item.id, payload.destination_location_id, True) if payload.destination_location_id else None
@@ -554,6 +704,264 @@ def post_movement_batch(
             rows.append(_post_movement_row(db, actor, movement, movement_group_id=group_id))
         db.commit()
         return _movement_summaries(db, rows)
+    except Exception:
+        db.rollback()
+        raise
+
+
+REVERSIBLE_MOVEMENT_TYPES = {
+    'inward',
+    'outward',
+    'transfer',
+    'project_dispatch',
+    'project_return',
+    'supplier_return',
+}
+
+
+def _load_movement_for_update(
+    db: Session,
+    actor: CurrentSession,
+    movement_id: str,
+) -> InventoryMovement:
+    row = db.scalar(
+        select(InventoryMovement)
+        .where(
+            InventoryMovement.id == movement_id,
+            InventoryMovement.company_id == actor.membership.company_id,
+            operational_reference_filter(
+                actor.membership.company_id,
+                customer_column=InventoryMovement.customer_id,
+                project_column=InventoryMovement.project_id,
+            ),
+        )
+        .with_for_update()
+    )
+    if not row:
+        raise OperationsNotFoundError('Inventory movement not found')
+    return row
+
+
+def _assert_movement_reversible(db: Session, row: InventoryMovement) -> None:
+    if row.status != 'completed':
+        raise OperationsConflictError(f'Only completed movements can be changed; current status is {row.status}')
+    if row.movement_type not in REVERSIBLE_MOVEMENT_TYPES:
+        raise OperationsConflictError(
+            'This movement type cannot be safely reversed automatically. '
+            'Use a new inventory adjustment instead.'
+        )
+    existing = db.scalar(
+        select(InventoryMovement.id).where(
+            InventoryMovement.company_id == row.company_id,
+            InventoryMovement.reversed_movement_id == row.id,
+        ).limit(1)
+    )
+    if existing:
+        raise OperationsConflictError('This inventory movement has already been reversed or corrected')
+
+
+def _apply_inventory_effect(
+    db: Session,
+    row: InventoryMovement,
+    quantity: Decimal,
+    *,
+    reverse: bool,
+) -> None:
+    source = _balance(db, row.company_id, row.item_id, row.source_location_id, False) if row.source_location_id else None
+    destination = _balance(db, row.company_id, row.item_id, row.destination_location_id, False) if row.destination_location_id else None
+
+    if row.movement_type in {'inward', 'project_return'}:
+        if not destination:
+            raise OperationsConflictError('Destination inventory balance is missing')
+        if reverse:
+            if Decimal(destination.quantity_on_hand) - quantity < Decimal(destination.reserved_quantity):
+                raise OperationsConflictError('Reversal would reduce stock below the reserved quantity')
+            destination.quantity_on_hand = Decimal(destination.quantity_on_hand) - quantity
+        else:
+            destination.quantity_on_hand = Decimal(destination.quantity_on_hand) + quantity
+        return
+
+    if row.movement_type in {'outward', 'project_dispatch', 'supplier_return'}:
+        if not source:
+            raise OperationsConflictError('Source inventory balance is missing')
+        if reverse:
+            source.quantity_on_hand = Decimal(source.quantity_on_hand) + quantity
+        else:
+            if Decimal(source.quantity_on_hand) - quantity < Decimal(source.reserved_quantity):
+                raise OperationsConflictError('Insufficient available inventory for the corrected movement')
+            source.quantity_on_hand = Decimal(source.quantity_on_hand) - quantity
+        return
+
+
+    if row.movement_type == 'transfer':
+        if not source or not destination:
+            raise OperationsConflictError('Transfer inventory balances are missing')
+        if reverse:
+            if Decimal(destination.quantity_on_hand) - quantity < Decimal(destination.reserved_quantity):
+                raise OperationsConflictError('Transfer reversal would reduce destination stock below reserved quantity')
+            destination.quantity_on_hand = Decimal(destination.quantity_on_hand) - quantity
+            source.quantity_on_hand = Decimal(source.quantity_on_hand) + quantity
+        else:
+            if Decimal(source.quantity_on_hand) - quantity < Decimal(source.reserved_quantity):
+                raise OperationsConflictError('Insufficient source stock for the corrected transfer')
+            source.quantity_on_hand = Decimal(source.quantity_on_hand) - quantity
+            destination.quantity_on_hand = Decimal(destination.quantity_on_hand) + quantity
+        return
+
+    raise OperationsConflictError('This inventory movement type cannot be recalculated safely')
+
+
+def _copy_inventory_movement(
+    original: InventoryMovement,
+    actor: CurrentSession,
+    *,
+    movement_type: str,
+    quantity: Decimal,
+    status: str,
+    reason: str,
+    reversed_movement_id: str | None = None,
+    correction_of_movement_id: str | None = None,
+) -> InventoryMovement:
+    prefix = 'REV' if reversed_movement_id else 'COR'
+    reference = f'{prefix}-{original.reference_number}'[:80]
+    return InventoryMovement(
+        company_id=original.company_id,
+        item_id=original.item_id,
+        movement_type=movement_type,
+        quantity=quantity,
+        source_location_id=original.source_location_id,
+        destination_location_id=original.destination_location_id,
+        source_location_manual=original.source_location_manual,
+        destination_location_manual=original.destination_location_manual,
+        project_id=original.project_id,
+        customer_id=original.customer_id,
+        challan_id=original.challan_id,
+        movement_group_id=original.movement_group_id,
+        reference_number=reference,
+        challan_date=original.challan_date,
+        supplier_name=original.supplier_name,
+        transporter_name=original.transporter_name,
+        vehicle_number=original.vehicle_number,
+        driver_name=original.driver_name,
+        driver_phone=original.driver_phone,
+        eway_bill_number=original.eway_bill_number,
+        note=original.note,
+        status=status,
+        reversed_movement_id=reversed_movement_id,
+        correction_of_movement_id=correction_of_movement_id,
+        reason=reason,
+        created_by=actor.membership.id,
+    )
+
+
+def reverse_inventory_movement(
+    db: Session,
+    actor: CurrentSession,
+    movement_id: str,
+    payload: InventoryMovementReversalRequest,
+) -> InventoryMovementSummary:
+    try:
+        original = _load_movement_for_update(db, actor, movement_id)
+        _assert_movement_reversible(db, original)
+        quantity = Decimal(original.quantity)
+        _apply_inventory_effect(db, original, quantity, reverse=True)
+        reversal = _copy_inventory_movement(
+            original,
+            actor,
+            movement_type='reversal',
+            quantity=quantity,
+            status='completed',
+            reason=payload.reason,
+            reversed_movement_id=original.id,
+        )
+        original.status = 'reversed'
+        original.reason = payload.reason
+        db.add(reversal)
+        db.flush()
+        write_event(
+            db,
+            company_id=original.company_id,
+            event='inventory.movement_reversed',
+            entity='inventory_movement',
+            entity_id=original.id,
+            actor=actor,
+            project_id=original.project_id,
+            customer_id=original.customer_id,
+            changes={
+                'quantity': str(original.quantity),
+                'reversal_movement_id': reversal.id,
+                'reason': payload.reason,
+            },
+        )
+        db.commit()
+        return _movement_summaries(db, [reversal])[0]
+    except Exception:
+        db.rollback()
+        raise
+
+
+def correct_inventory_movement(
+    db: Session,
+    actor: CurrentSession,
+    movement_id: str,
+    payload: InventoryMovementCorrectionRequest,
+) -> InventoryMovementSummary:
+    try:
+        original = _load_movement_for_update(db, actor, movement_id)
+        _assert_movement_reversible(db, original)
+        original_quantity = Decimal(original.quantity)
+        corrected_quantity = _d(payload.quantity)
+        if corrected_quantity == original_quantity:
+            raise OperationsConflictError('Corrected quantity is unchanged')
+
+        # Append-only correction: first undo the finalized effect, then apply a
+        # replacement movement. The original row is never silently rewritten.
+        _apply_inventory_effect(db, original, original_quantity, reverse=True)
+        reversal = _copy_inventory_movement(
+            original,
+            actor,
+            movement_type='reversal',
+            quantity=original_quantity,
+            status='completed',
+            reason=payload.reason,
+            reversed_movement_id=original.id,
+        )
+        db.add(reversal)
+        db.flush()
+
+        _apply_inventory_effect(db, original, corrected_quantity, reverse=False)
+        corrected = _copy_inventory_movement(
+            original,
+            actor,
+            movement_type=original.movement_type,
+            quantity=corrected_quantity,
+            status='completed',
+            reason=payload.reason,
+            correction_of_movement_id=original.id,
+        )
+        original.status = 'corrected'
+        original.reason = payload.reason
+        db.add(corrected)
+        db.flush()
+        write_event(
+            db,
+            company_id=original.company_id,
+            event='inventory.movement_corrected',
+            entity='inventory_movement',
+            entity_id=original.id,
+            actor=actor,
+            project_id=original.project_id,
+            customer_id=original.customer_id,
+            changes={
+                'original_quantity': str(original_quantity),
+                'corrected_quantity': str(corrected_quantity),
+                'reversal_movement_id': reversal.id,
+                'corrected_movement_id': corrected.id,
+                'reason': payload.reason,
+            },
+        )
+        db.commit()
+        return _movement_summaries(db, [corrected])[0]
     except Exception:
         db.rollback()
         raise

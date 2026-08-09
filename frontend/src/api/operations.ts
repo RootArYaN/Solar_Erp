@@ -2,13 +2,31 @@ import type { DocumentTemplate, GeneratedDocumentPack, InventoryItem, InventoryL
 import { createClientId } from '../lib/client-id'
 import { apiRequest, apiSegment, downloadRequest } from './client'
 
-export const getInventorySummary = (): Promise<InventorySummary> => apiRequest('/inventory/summary')
+export const getInventorySummary = (options: { page?: number; pageSize?: number; query?: string; category?: string } = {}): Promise<InventorySummary> => {
+  const params = new URLSearchParams({
+    movement_limit: '0',
+    item_page: String(options.page ?? 1),
+    item_page_size: String(options.pageSize ?? 50),
+  })
+  if (options.query?.trim()) params.set('item_q', options.query.trim())
+  if (options.category?.trim()) params.set('item_category', options.category.trim())
+  return apiRequest(`/inventory/summary?${params.toString()}`)
+}
 export const createInventoryLocation = (body: Record<string, unknown>): Promise<InventoryLocation> => apiRequest('/inventory/locations', { method: 'POST', body, idempotencyKey: createClientId() })
 export const createInventoryItem = (body: Record<string, unknown>): Promise<InventoryItem> => apiRequest('/inventory/items', { method: 'POST', body, idempotencyKey: createClientId() })
 export const updateInventoryItem = (id: string, body: Record<string, unknown>): Promise<InventoryItem> => apiRequest(`/inventory/items/${apiSegment(id)}`, { method: 'PATCH', body })
 export const updateInventoryLocation = (id: string, body: Record<string, unknown>): Promise<InventoryLocation> => apiRequest(`/inventory/locations/${apiSegment(id)}`, { method: 'PATCH', body })
-export const createInventoryMovement = (body: Record<string, unknown>): Promise<InventoryMovement> => apiRequest('/inventory/movements', { method: 'POST', body, idempotencyKey: createClientId() })
 export const createInventoryMovementBatch = (body: Record<string, unknown>): Promise<InventoryMovement[]> => apiRequest('/inventory/movement-batches', { method: 'POST', body, idempotencyKey: createClientId() })
+
+export type InventoryMovementList = { data: InventoryMovement[]; page: number; page_size: number; total: number }
+export const getInventoryMovements = (options: { movementType?: string; status?: string; page?: number; pageSize?: number } = {}): Promise<InventoryMovementList> => {
+  const params = new URLSearchParams({ page: String(options.page ?? 1), page_size: String(options.pageSize ?? 50) })
+  if (options.movementType) params.set('movement_type', options.movementType)
+  if (options.status) params.set('status', options.status)
+  return apiRequest(`/inventory/movements?${params.toString()}`)
+}
+export const reverseInventoryMovement = (id: string, reason: string): Promise<InventoryMovement> => apiRequest(`/inventory/movements/${apiSegment(id)}/reverse`, { method: 'POST', body: { reason } })
+export const correctInventoryMovement = (id: string, quantity: number, reason: string): Promise<InventoryMovement> => apiRequest(`/inventory/movements/${apiSegment(id)}/correct`, { method: 'POST', body: { quantity, reason } })
 export const getPricingBook = (): Promise<PricingBook> => apiRequest('/pricing')
 export const savePricingBook = (body: Record<string, unknown>): Promise<PricingBook> => apiRequest('/pricing', { method: 'PUT', body })
 export const getPosters = (status?: string): Promise<Poster[]> => apiRequest(`/posters${status ? `?status=${encodeURIComponent(status)}` : ''}`)

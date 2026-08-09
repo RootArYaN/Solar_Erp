@@ -54,7 +54,10 @@ class InventoryBalance(TimestampMixin, Base):
 
 class InventoryMovement(TimestampMixin, Base):
     __tablename__ = "inventory_movements"
-    __table_args__ = (Index("ix_inventory_movement_company_created", "company_id", "created_at"),)
+    __table_args__ = (
+        Index("ix_inventory_movement_company_created", "company_id", "created_at"),
+        Index("ix_inventory_movement_company_status_created", "company_id", "status", "created_at"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     company_id: Mapped[str] = mapped_column(ForeignKey("companies.id", ondelete="CASCADE"), index=True, nullable=False)
@@ -79,6 +82,13 @@ class InventoryMovement(TimestampMixin, Base):
     eway_bill_number: Mapped[str] = mapped_column(String(80), default="", nullable=False)
     note: Mapped[str] = mapped_column(String(400), default="", nullable=False)
     status: Mapped[str] = mapped_column(String(24), default="completed", index=True, nullable=False)
+    reversed_movement_id: Mapped[str | None] = mapped_column(
+        ForeignKey("inventory_movements.id", ondelete="RESTRICT"), index=True, nullable=True
+    )
+    correction_of_movement_id: Mapped[str | None] = mapped_column(
+        ForeignKey("inventory_movements.id", ondelete="RESTRICT"), index=True, nullable=True
+    )
+    reason: Mapped[str] = mapped_column(String(400), default="", nullable=False)
     created_by: Mapped[str] = mapped_column(ForeignKey("memberships.id", ondelete="RESTRICT"), nullable=False)
 
 

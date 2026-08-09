@@ -43,10 +43,6 @@ export function wrap(value: unknown, width = 76) {
   return lines.length ? lines : ['-']
 }
 
-export function wrapMultiline(value: unknown, width = 76) {
-  return String(value ?? '').split(/\r?\n/).flatMap((line) => wrap(line, width))
-}
-
 export function safeName(value: string) {
   return value.replace(/[^a-z0-9_-]+/gi, '-').replace(/^-+|-+$/g, '') || 'customer'
 }

@@ -37,8 +37,8 @@
 .role-badge--accounts_admin { color: #765c24; background: #fbf1d8; }
 .role-badge--company_admin { color: #6b4a80; background: #f4eafa; }
 .role-badge--super_admin { color: #8b3e35; background: #fae9e6; }
-.status-badge { color: #8a5350; background: #f7e9e8; }
-.status-badge--active { color: #3b7146; background: #e9f6ec; }
+.admin-page .status-badge { color: #8a5350; background: #f7e9e8; }
+.admin-page .status-badge--active { color: #3b7146; background: #e9f6ec; }
 .row-actions { display: flex; justify-content: flex-end; gap: 7px; }
 .row-actions .icon-button { width: 34px; height: 34px; border-radius: 9px; }
 .empty-state { padding: 54px 20px; color: var(--muted); text-align: center; font-size: 13px; }

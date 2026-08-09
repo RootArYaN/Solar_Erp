@@ -1,12 +1,17 @@
+from __future__ import annotations
+
 from datetime import date
+from typing import TYPE_CHECKING
 
 from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.orm import Session
 
-from app.api.deps import CurrentSession
+if TYPE_CHECKING:
+    from app.api.deps import CurrentSession
 from app.models.agent import AgentCustomer
 from app.models.workflow import CustomerProject, CustomerQuotation, ProjectTimeline, QuotationRequest
 from app.schemas.dashboard import DashboardSummary
+from app.services.access_service import operational_customer_filter
 from app.services.finance_service import finance_kpis
 from app.services.operations_service import low_stock_item_count
 
@@ -34,7 +39,7 @@ def get_summary(db: Session, actor: CurrentSession) -> DashboardSummary:
                 func.sum(case((AgentCustomer.created_at >= month_start, 1), else_=0)),
                 0,
             ),
-        ).where(AgentCustomer.company_id == company_id)
+        ).where(operational_customer_filter(company_id))
     ).one()
 
     open_project = CustomerProject.status.in_(OPEN_PROJECT_STATUSES)
@@ -93,16 +98,22 @@ def get_summary(db: Session, actor: CurrentSession) -> DashboardSummary:
             func.coalesce(func.sum(case((CustomerProject.status == 'completed', 1), else_=0)), 0),
         )
         .select_from(CustomerProject)
+        .join(AgentCustomer, AgentCustomer.id == CustomerProject.customer_id)
         .outerjoin(ProjectTimeline, ProjectTimeline.project_id == CustomerProject.id)
-        .where(CustomerProject.company_id == company_id)
+        .where(
+            CustomerProject.company_id == company_id,
+            operational_customer_filter(company_id),
+        )
     ).one()
 
     pending_quotations = int(db.scalar(
         select(func.count())
         .select_from(QuotationRequest)
+        .join(AgentCustomer, AgentCustomer.id == QuotationRequest.customer_id)
         .outerjoin(CustomerQuotation, CustomerQuotation.request_id == QuotationRequest.id)
         .where(
             QuotationRequest.company_id == company_id,
+            operational_customer_filter(company_id),
             or_(
                 CustomerQuotation.id.is_(None),
                 CustomerQuotation.status.in_(PENDING_QUOTATION_STATUSES),

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import CurrentSession, require_any_permissions, require_permissions
+from app.api.deps import CurrentSession, require_any_permissions, require_permissions, require_super_admin
 from app.db.session import get_db
 from app.schemas.admin import (
     CreateRoleRequest,
@@ -12,8 +12,9 @@ from app.schemas.admin import (
     UpdateRoleRequest,
     UpdateUserRequest,
     UserAdminSummary,
+    DataHealthSummary,
 )
-from app.services import admin_service
+from app.services import admin_service, data_health_service
 from app.services.admin_service import AdminServiceError
 
 router = APIRouter(prefix="/admin", tags=["administration"])
@@ -123,3 +124,11 @@ def remove_role(
     except AdminServiceError as exc:
         _raise_service_error(exc)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/data-health", response_model=DataHealthSummary)
+def get_data_health(
+    db: Session = Depends(get_db),
+    session: CurrentSession = Depends(require_super_admin),
+) -> DataHealthSummary:
+    return data_health_service.inspect_data_health(db, session)

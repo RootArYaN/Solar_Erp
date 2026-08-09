@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import tempfile
 from contextlib import ExitStack
 from dataclasses import dataclass
@@ -13,7 +15,10 @@ from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.api.deps import CurrentSession
+
+if TYPE_CHECKING:
+    from app.api.deps import CurrentSession
+
 from app.models.agent import AgentCustomer
 from app.models.auth import Membership, User
 from app.models.finance import (
@@ -52,9 +57,11 @@ from app.schemas.finance import (
     UpdateCompanyLoanRequest,
     UpdateFinanceTransactionRequest,
     UpsertCustomerLoanRequest,
+    VoidBillRequest,
 )
-from app.services.access_service import get_customer, get_project
+from app.services.access_service import get_customer, get_project, operational_customer_filter, operational_reference_filter
 from app.services.audit_service import write_event
+from app.services.customer_lifecycle_service import CustomerLifecycleError, reactivate_for_activity
 from app.services.storage import storage
 
 
@@ -71,6 +78,63 @@ class FinanceConflictError(FinanceServiceError):
 
 
 BILL_PAYMENT_SOURCE_TYPES = ('sales_bill_payment', 'purchase_bill_payment')
+ACCOUNTING_STATUSES = ('posted', 'reversed')
+
+
+def _visible_transaction_filter(company_id: str):
+    return operational_reference_filter(
+        company_id,
+        customer_column=FinanceTransaction.customer_id,
+        project_column=FinanceTransaction.project_id,
+    )
+
+
+def _visible_bill_filter(company_id: str):
+    return operational_reference_filter(
+        company_id,
+        customer_column=Bill.customer_id,
+        project_column=Bill.project_id,
+    )
+
+
+def _load_visible_transaction(
+    db: Session,
+    actor: CurrentSession,
+    transaction_id: str,
+    *,
+    for_update: bool = False,
+) -> FinanceTransaction:
+    statement = select(FinanceTransaction).where(
+        FinanceTransaction.id == transaction_id,
+        FinanceTransaction.company_id == actor.membership.company_id,
+        _visible_transaction_filter(actor.membership.company_id),
+    )
+    if for_update:
+        statement = statement.with_for_update()
+    transaction = db.scalar(statement)
+    if not transaction:
+        raise FinanceNotFoundError('Finance transaction not found')
+    return transaction
+
+
+def _load_visible_bill(db: Session, actor: CurrentSession, bill_id: str, *, for_update: bool = False) -> Bill:
+    """Load a bill only when its customer/project is still operationally visible.
+
+    This closes the direct-ID path where a soft-deleted customer's bill could be
+    mutated even though list/report endpoints already hid it. Recovery/audit paths
+    remain separate from normal finance operations.
+    """
+    statement = select(Bill).where(
+        Bill.id == bill_id,
+        Bill.company_id == actor.membership.company_id,
+        _visible_bill_filter(actor.membership.company_id),
+    )
+    if for_update:
+        statement = statement.with_for_update()
+    bill = db.scalar(statement)
+    if not bill:
+        raise FinanceNotFoundError('Bill not found')
+    return bill
 
 
 @dataclass(frozen=True)
@@ -118,8 +182,9 @@ def finance_kpis(db: Session, company_id: str, *, on_date: date | None = None, d
     explicit_range = date_from is not None or date_to is not None
     transaction_filters = [
         FinanceTransaction.company_id == company_id,
-        FinanceTransaction.status == 'posted',
+        FinanceTransaction.status.in_(ACCOUNTING_STATUSES),
         FinanceTransaction.source_type.not_in(BILL_PAYMENT_SOURCE_TYPES),
+        _visible_transaction_filter(company_id),
     ]
     bill_date_filters = []
     if explicit_range:
@@ -145,6 +210,7 @@ def finance_kpis(db: Session, company_id: str, *, on_date: date | None = None, d
             Bill.bill_type == 'sales',
             Bill.status != 'cancelled',
             Bill.balance_amount > 0,
+            _visible_bill_filter(company_id),
             *bill_date_filters,
         )
         .scalar_subquery()
@@ -156,6 +222,7 @@ def finance_kpis(db: Session, company_id: str, *, on_date: date | None = None, d
             Bill.bill_type == 'purchase',
             Bill.status != 'cancelled',
             Bill.balance_amount > 0,
+            _visible_bill_filter(company_id),
             *bill_date_filters,
         )
         .scalar_subquery()
@@ -163,10 +230,17 @@ def finance_kpis(db: Session, company_id: str, *, on_date: date | None = None, d
     row = db.execute(select(
         func.coalesce(func.sum(case((FinanceTransaction.direction == 'credit', FinanceTransaction.amount), else_=0)), 0),
         func.coalesce(func.sum(case((FinanceTransaction.direction == 'debit', FinanceTransaction.amount), else_=0)), 0),
-        func.coalesce(func.sum(case((
-            (FinanceTransaction.direction == 'debit') & (FinanceTransaction.source_type == 'expense'),
-            FinanceTransaction.amount,
-        ), else_=0)), 0),
+        func.coalesce(func.sum(case(
+            (
+                (FinanceTransaction.source_type == 'expense') & (FinanceTransaction.direction == 'debit'),
+                FinanceTransaction.amount,
+            ),
+            (
+                (FinanceTransaction.source_type == 'expense') & (FinanceTransaction.direction == 'credit'),
+                -FinanceTransaction.amount,
+            ),
+            else_=0,
+        )), 0),
         receivables,
         payables,
     ).select_from(FinanceTransaction).where(*transaction_filters)).one()
@@ -191,7 +265,7 @@ def _account_balance(db: Session, account: FinancialAccount) -> Decimal:
         ).where(
             FinanceTransaction.company_id == account.company_id,
             FinanceTransaction.account_id == account.id,
-            FinanceTransaction.status == 'posted',
+            FinanceTransaction.status.in_(ACCOUNTING_STATUSES),
         )
     ).one()
     return Decimal(account.opening_balance or 0) + Decimal(movement[0] or 0) - Decimal(movement[1] or 0)
@@ -215,7 +289,7 @@ def list_accounts(db: Session, actor: CurrentSession, *, as_of: date | None = No
     company_id = actor.membership.company_id
     movement_filters = [
         FinanceTransaction.company_id == company_id,
-        FinanceTransaction.status == 'posted',
+        FinanceTransaction.status.in_(ACCOUNTING_STATUSES),
     ]
     if as_of:
         movement_filters.append(FinanceTransaction.transaction_date <= as_of)
@@ -362,7 +436,10 @@ def list_transactions(
     page: int = 1,
     page_size: int = 50,
 ) -> FinanceTransactionList:
-    filters = [FinanceTransaction.company_id == actor.membership.company_id]
+    filters = [
+        FinanceTransaction.company_id == actor.membership.company_id,
+        _visible_transaction_filter(actor.membership.company_id),
+    ]
     if direction: filters.append(FinanceTransaction.direction == direction)
     if account_id: filters.append(FinanceTransaction.account_id == account_id)
     if category_id: filters.append(FinanceTransaction.category_id == category_id)
@@ -372,14 +449,19 @@ def list_transactions(
         filters.append(FinanceTransaction.source_type == source_type)
     else:
         filters.append(FinanceTransaction.source_type.not_in(BILL_PAYMENT_SOURCE_TYPES))
-    if status: filters.append(FinanceTransaction.status == status)
+    if status:
+        if status == 'deleted' and not actor.user.is_super_admin:
+            raise FinanceConflictError('Deleted finance transactions are only available to Super Admin')
+        filters.append(FinanceTransaction.status == status)
+    else:
+        filters.append(FinanceTransaction.status != 'deleted')
     if date_from: filters.append(FinanceTransaction.transaction_date >= date_from)
     if date_to: filters.append(FinanceTransaction.transaction_date <= date_to)
     total = db.scalar(select(func.count()).select_from(FinanceTransaction).where(*filters)) or 0
     totals = db.execute(select(
         func.coalesce(func.sum(case((FinanceTransaction.direction == 'credit', FinanceTransaction.amount), else_=0)), 0),
         func.coalesce(func.sum(case((FinanceTransaction.direction == 'debit', FinanceTransaction.amount), else_=0)), 0),
-    ).where(*filters, FinanceTransaction.status == 'posted')).one()
+    ).where(*filters, FinanceTransaction.status.in_(ACCOUNTING_STATUSES))).one()
     rows = list(db.scalars(select(FinanceTransaction).where(*filters).order_by(FinanceTransaction.transaction_date.desc(), FinanceTransaction.created_at.desc()).offset((page - 1) * page_size).limit(page_size)).all())
     return FinanceTransactionList(data=_transaction_summaries(db, rows), page=page, page_size=page_size, total=int(total), money_in=_float(totals[0]), money_out=_float(totals[1]))
 
@@ -400,6 +482,11 @@ def create_transaction(db: Session, actor: CurrentSession, payload: CreateFinanc
         if customer_id and project.customer_id != customer_id:
             raise FinanceConflictError('The project does not belong to the selected customer')
         customer_id = project.customer_id
+    if customer_id:
+        try:
+            reactivate_for_activity(db, actor, customer_id, source='finance_transaction')
+        except CustomerLifecycleError as exc:
+            raise FinanceConflictError(str(exc)) from exc
     if payload.category_id:
         category = db.scalar(select(FinanceCategory).where(FinanceCategory.id == payload.category_id, FinanceCategory.company_id == actor.membership.company_id, FinanceCategory.is_active.is_(True)))
         if not category: raise FinanceNotFoundError('Finance category not found')
@@ -439,242 +526,311 @@ def update_transaction(
     transaction_id: str,
     payload: UpdateFinanceTransactionRequest,
 ) -> FinanceTransactionSummary:
-    row = db.scalar(select(FinanceTransaction).where(
-        FinanceTransaction.id == transaction_id,
-        FinanceTransaction.company_id == actor.membership.company_id,
-    ))
-    if not row:
-        raise FinanceNotFoundError('Finance transaction not found')
-    _load_account(db, actor, payload.account_id)
-    if payload.category_id:
-        category = db.scalar(select(FinanceCategory).where(
-            FinanceCategory.id == payload.category_id,
-            FinanceCategory.company_id == actor.membership.company_id,
-            FinanceCategory.is_active.is_(True),
-        ))
-        if not category:
-            raise FinanceNotFoundError('Finance category not found')
+    row = _load_visible_transaction(db, actor, transaction_id, for_update=True)
+    if row.status != 'posted':
+        raise FinanceConflictError('Only posted transactions can be edited')
 
-    linked_source_types = {
-        'sales_bill_payment',
-        'purchase_bill_payment',
-        'company_loan_disbursement',
-        'company_loan_repayment',
-        'transaction_reversal',
-        'account_transfer',
+    # Finalized financial facts are immutable. Corrections to amount/date/account/
+    # direction/category/source must use reversal + a new corrected transaction.
+    financial_changes = []
+    expected = {
+        'transaction_date': row.transaction_date,
+        'direction': row.direction,
+        'category_id': row.category_id,
+        'amount': Decimal(row.amount),
+        'account_id': row.account_id,
+        'source_type': row.source_type,
     }
-    reversal_exists = db.scalar(select(FinanceTransaction.id).where(
-        FinanceTransaction.reversed_transaction_id == row.id,
-        FinanceTransaction.company_id == row.company_id,
-    ).limit(1))
-    is_linked = row.source_type in linked_source_types or bool(row.transfer_group_id or row.reversed_transaction_id or reversal_exists)
-    if is_linked and (payload.direction != row.direction or payload.source_type != row.source_type):
-        raise FinanceConflictError('Direction and source cannot be changed for a linked transaction')
+    supplied = {
+        'transaction_date': payload.transaction_date,
+        'direction': payload.direction,
+        'category_id': payload.category_id,
+        'amount': _decimal(payload.amount),
+        'account_id': payload.account_id,
+        'source_type': payload.source_type,
+    }
+    for field, value in supplied.items():
+        if value != expected[field]:
+            financial_changes.append(field)
+    if financial_changes:
+        raise FinanceConflictError(
+            'Finalized transaction financial fields cannot be overwritten. Reverse the transaction and post a corrected entry instead.'
+        )
 
-    next_amount = _decimal(payload.amount)
-    bill_payment = db.scalar(select(BillPayment).where(
-        BillPayment.transaction_id == row.id,
-        BillPayment.company_id == row.company_id,
-    ))
-    if bill_payment:
-        bill = db.scalar(select(Bill).where(
-            Bill.id == bill_payment.bill_id,
-            Bill.company_id == row.company_id,
-        ))
-        if bill:
-            next_paid = Decimal(bill.paid_amount) - Decimal(bill_payment.amount) + next_amount
-            if next_paid > Decimal(bill.total_amount):
-                raise FinanceConflictError('Payment exceeds the bill total')
-            bill_payment.amount = next_amount
-            bill.paid_amount = next_paid
-            bill.balance_amount = Decimal(bill.total_amount) - next_paid
-            bill.payment_status = 'unpaid' if next_paid <= 0 else ('paid' if bill.balance_amount <= 0 else 'partially_paid')
-
-    if row.source_id and row.source_type in {'company_loan_disbursement', 'company_loan_repayment'}:
-        loan = db.scalar(select(CompanyLoan).where(
-            CompanyLoan.id == row.source_id,
-            CompanyLoan.company_id == row.company_id,
-        ))
-        if loan and row.source_type == 'company_loan_repayment':
-            next_outstanding = Decimal(loan.outstanding_amount) + Decimal(row.amount) - next_amount
-            if next_outstanding < 0:
-                raise FinanceConflictError('Repayment exceeds the outstanding loan amount')
-            loan.outstanding_amount = min(Decimal(loan.principal_amount), next_outstanding)
-            loan.status = 'closed' if loan.outstanding_amount <= 0 else 'active'
-        elif loan:
-            repaid = max(Decimal('0.00'), Decimal(loan.principal_amount) - Decimal(loan.outstanding_amount))
-            if next_amount < repaid:
-                raise FinanceConflictError('Loan principal cannot be lower than the amount already repaid')
-            loan.principal_amount = next_amount
-            loan.outstanding_amount = next_amount - repaid
-            loan.start_date = payload.transaction_date
-            loan.status = 'closed' if loan.outstanding_amount <= 0 else 'active'
-
-    if (row.reversed_transaction_id or reversal_exists) and next_amount != Decimal(row.amount):
-        raise FinanceConflictError('A reversed transaction amount cannot be edited')
-
-    if row.transfer_group_id:
-        transfer_siblings = list(db.scalars(select(FinanceTransaction).where(
-            FinanceTransaction.transfer_group_id == row.transfer_group_id,
-            FinanceTransaction.company_id == row.company_id,
-            FinanceTransaction.id != row.id,
-        )).all())
-        for sibling in transfer_siblings:
-            sibling.amount = next_amount
-            sibling.transaction_date = payload.transaction_date
-
-    editable_fields = (
-        'transaction_date', 'direction', 'category_id', 'amount', 'account_id',
-        'payment_method', 'source_type', 'reference_number', 'description',
-    )
-    before = {field: getattr(row, field) for field in editable_fields}
-    row.transaction_date = payload.transaction_date
-    row.direction = payload.direction
-    row.category_id = payload.category_id
-    row.amount = next_amount
-    row.account_id = payload.account_id
+    before = {
+        'payment_method': row.payment_method,
+        'reference_number': row.reference_number,
+        'description': row.description,
+    }
     row.payment_method = payload.payment_method
-    row.source_type = payload.source_type
     row.reference_number = payload.reference_number
     row.description = payload.description
     changes = {
         field: {'old': str(before[field]), 'new': str(getattr(row, field))}
-        for field in editable_fields
+        for field in before
         if before[field] != getattr(row, field)
     }
-    write_event(
-        db,
-        company_id=row.company_id,
-        event='finance.transaction_updated',
-        entity='finance_transaction',
-        entity_id=row.id,
-        actor=actor,
-        project_id=row.project_id,
-        customer_id=row.customer_id,
-        changes={'transaction_number': row.transaction_number, 'fields': changes},
-    )
+    if changes:
+        write_event(
+            db,
+            company_id=row.company_id,
+            event='finance.transaction_metadata_updated',
+            entity='finance_transaction',
+            entity_id=row.id,
+            actor=actor,
+            project_id=row.project_id,
+            customer_id=row.customer_id,
+            changes={'transaction_number': row.transaction_number, 'fields': changes},
+        )
     db.commit()
     db.refresh(row)
     return _transaction_summaries(db, [row])[0]
 
 
 
-def reverse_transaction(db: Session, actor: CurrentSession, transaction_id: str, payload: ReverseFinanceTransactionRequest) -> FinanceTransactionSummary:
-    original = db.scalar(select(FinanceTransaction).where(FinanceTransaction.id == transaction_id, FinanceTransaction.company_id == actor.membership.company_id))
-    if not original:
-        raise FinanceNotFoundError('Finance transaction not found')
-    if original.status != 'posted':
-        raise FinanceConflictError('Only posted transactions can be reversed')
-    existing = db.scalar(select(FinanceTransaction).where(FinanceTransaction.reversed_transaction_id == original.id, FinanceTransaction.company_id == original.company_id))
-    if existing:
-        raise FinanceConflictError('This transaction has already been reversed')
-    reversal = FinanceTransaction(
-        company_id=original.company_id, transaction_number=_transaction_number('REV'), transaction_date=payload.transaction_date,
-        direction='debit' if original.direction == 'credit' else 'credit', category_id=original.category_id, amount=original.amount,
-        account_id=original.account_id, payment_method=original.payment_method, party_type=original.party_type, party_name=original.party_name,
-        customer_id=original.customer_id, project_id=original.project_id, agent_id=original.agent_id, supplier_id=original.supplier_id,
-        source_type='transaction_reversal', source_id=original.id, reference_number=original.transaction_number,
-        description=f'Reversal: {payload.reason}', status='posted', reversed_transaction_id=original.id, created_by=actor.membership.id,
-    )
-    db.add(reversal)
-    original.status = 'reversed'
-    db.flush()
-    write_event(db, company_id=original.company_id, event='finance.transaction_reversed', entity='finance_transaction', entity_id=original.id, actor=actor, project_id=original.project_id, customer_id=original.customer_id, changes={'reversal_id': reversal.id, 'reason': payload.reason, 'amount': str(original.amount)})
-    db.commit(); db.refresh(reversal)
-    return _transaction_summaries(db, [reversal])[0]
-
-
-def delete_transaction(db: Session, actor: CurrentSession, transaction_id: str, *, commit: bool = True) -> None:
-    row = db.scalar(select(FinanceTransaction).where(
-        FinanceTransaction.id == transaction_id,
-        FinanceTransaction.company_id == actor.membership.company_id,
-    ))
-    if not row:
-        raise FinanceNotFoundError('Finance transaction not found')
-
-    bill_payments = list(db.scalars(select(BillPayment).where(
-        BillPayment.transaction_id == row.id,
-        BillPayment.company_id == row.company_id,
-    )).all())
-    for payment in bill_payments:
+def _apply_finance_reversal_dependencies(db: Session, original: FinanceTransaction) -> None:
+    payment = db.scalar(select(BillPayment).where(
+        BillPayment.transaction_id == original.id,
+        BillPayment.company_id == original.company_id,
+    ).with_for_update())
+    if payment:
         bill = db.scalar(select(Bill).where(
             Bill.id == payment.bill_id,
-            Bill.company_id == row.company_id,
-        ))
+            Bill.company_id == original.company_id,
+        ).with_for_update())
         if bill:
             bill.paid_amount = max(Decimal('0.00'), Decimal(bill.paid_amount) - Decimal(payment.amount))
             bill.balance_amount = max(Decimal('0.00'), Decimal(bill.total_amount) - Decimal(bill.paid_amount))
             bill.payment_status = 'unpaid' if bill.paid_amount <= 0 else ('paid' if bill.balance_amount <= 0 else 'partially_paid')
-        db.delete(payment)
 
-    if row.source_type == 'company_loan_repayment' and row.source_id:
+    if original.source_type == 'company_loan_repayment' and original.source_id:
         loan = db.scalar(select(CompanyLoan).where(
-            CompanyLoan.id == row.source_id,
-            CompanyLoan.company_id == row.company_id,
-        ))
+            CompanyLoan.id == original.source_id,
+            CompanyLoan.company_id == original.company_id,
+        ).with_for_update())
         if loan:
             loan.outstanding_amount = min(
                 Decimal(loan.principal_amount),
-                Decimal(loan.outstanding_amount) + Decimal(row.amount),
+                Decimal(loan.outstanding_amount) + Decimal(original.amount),
             )
-            loan.status = 'active' if loan.outstanding_amount > 0 else loan.status
+            loan.status = 'active' if loan.outstanding_amount > 0 else 'closed'
 
-    if row.reversed_transaction_id:
-        original = db.scalar(select(FinanceTransaction).where(
-            FinanceTransaction.id == row.reversed_transaction_id,
-            FinanceTransaction.company_id == row.company_id,
-        ))
-        if original:
-            original.status = 'posted'
-    else:
-        reversals = list(db.scalars(select(FinanceTransaction).where(
-            FinanceTransaction.reversed_transaction_id == row.id,
-            FinanceTransaction.company_id == row.company_id,
-        )).all())
-        for reversal in reversals:
-            reversal.reversed_transaction_id = None
-            if reversal.source_id == row.id:
-                reversal.source_id = None
+    if original.source_type == 'company_loan_disbursement' and original.source_id:
+        repayment_exists = db.scalar(select(FinanceTransaction.id).where(
+            FinanceTransaction.company_id == original.company_id,
+            FinanceTransaction.source_id == original.source_id,
+            FinanceTransaction.source_type == 'company_loan_repayment',
+            FinanceTransaction.reversed_transaction_id.is_(None),
+            FinanceTransaction.status == 'posted',
+        ).limit(1))
+        if repayment_exists:
+            raise FinanceConflictError('Reverse loan repayments before reversing the original loan disbursement')
+        loan = db.scalar(select(CompanyLoan).where(
+            CompanyLoan.id == original.source_id,
+            CompanyLoan.company_id == original.company_id,
+        ).with_for_update())
+        if loan:
+            loan.outstanding_amount = Decimal('0.00')
+            loan.status = 'cancelled'
 
-    write_event(
-        db,
-        company_id=row.company_id,
-        event='finance.transaction_deleted',
-        entity='finance_transaction',
-        entity_id=row.id,
-        actor=actor,
-        project_id=row.project_id,
-        customer_id=row.customer_id,
-        changes={
-            'transaction_number': row.transaction_number,
-            'direction': row.direction,
-            'amount': str(row.amount),
-            'source_type': row.source_type,
-        },
+
+def _build_finance_reversal(
+    original: FinanceTransaction,
+    actor: CurrentSession,
+    payload: ReverseFinanceTransactionRequest,
+    *,
+    transfer_group_id: str | None = None,
+) -> FinanceTransaction:
+    return FinanceTransaction(
+        company_id=original.company_id,
+        transaction_number=_transaction_number('REV'),
+        transaction_date=payload.transaction_date,
+        direction='debit' if original.direction == 'credit' else 'credit',
+        category_id=original.category_id,
+        amount=original.amount,
+        account_id=original.account_id,
+        payment_method=original.payment_method,
+        party_type=original.party_type,
+        party_name=original.party_name,
+        customer_id=original.customer_id,
+        project_id=original.project_id,
+        agent_id=original.agent_id,
+        supplier_id=original.supplier_id,
+        source_type=original.source_type,
+        source_id=original.source_id,
+        transfer_group_id=transfer_group_id,
+        reference_number=original.transaction_number,
+        description=f'Reversal: {payload.reason}',
+        status='posted',
+        reversed_transaction_id=original.id,
+        created_by=actor.membership.id,
     )
-    db.delete(row)
-    if commit:
-        db.commit()
-    else:
-        db.flush()
 
 
-def _delete_transaction_tree(db: Session, actor: CurrentSession, transaction_id: str, deleted: set[str]) -> None:
-    if transaction_id in deleted:
-        return
-    reversal_ids = list(db.scalars(select(FinanceTransaction.id).where(
-        FinanceTransaction.reversed_transaction_id == transaction_id,
-        FinanceTransaction.company_id == actor.membership.company_id,
-    )).all())
-    for reversal_id in reversal_ids:
-        _delete_transaction_tree(db, actor, reversal_id, deleted)
-    row_id = db.scalar(select(FinanceTransaction.id).where(
-        FinanceTransaction.id == transaction_id,
-        FinanceTransaction.company_id == actor.membership.company_id,
-    ))
-    if row_id:
-        delete_transaction(db, actor, row_id, commit=False)
-    deleted.add(transaction_id)
+def reverse_transaction(
+    db: Session,
+    actor: CurrentSession,
+    transaction_id: str,
+    payload: ReverseFinanceTransactionRequest,
+    *,
+    commit: bool = True,
+) -> FinanceTransactionSummary:
+    try:
+        original = _load_visible_transaction(db, actor, transaction_id, for_update=True)
+        if original.status != 'posted':
+            raise FinanceConflictError('Only posted transactions can be reversed')
+        existing = db.scalar(select(FinanceTransaction.id).where(
+            FinanceTransaction.reversed_transaction_id == original.id,
+            FinanceTransaction.company_id == original.company_id,
+        ).limit(1))
+        if existing:
+            raise FinanceConflictError('This transaction has already been reversed')
+
+        originals = [original]
+        reversal_group_id = None
+        if original.transfer_group_id:
+            originals = list(db.scalars(select(FinanceTransaction).where(
+                FinanceTransaction.company_id == original.company_id,
+                FinanceTransaction.transfer_group_id == original.transfer_group_id,
+            ).with_for_update()).all())
+            if any(row.status != 'posted' for row in originals):
+                raise FinanceConflictError('This account transfer has already been reversed or is not fully posted')
+            sibling_ids = [row.id for row in originals]
+            existing_group_reversal = db.scalar(select(FinanceTransaction.id).where(
+                FinanceTransaction.company_id == original.company_id,
+                FinanceTransaction.reversed_transaction_id.in_(sibling_ids),
+            ).limit(1))
+            if existing_group_reversal:
+                raise FinanceConflictError('This account transfer has already been reversed')
+            reversal_group_id = str(uuid4())
+
+        selected_reversal = None
+        reversal_ids: list[str] = []
+        for row in originals:
+            _apply_finance_reversal_dependencies(db, row)
+            reversal = _build_finance_reversal(row, actor, payload, transfer_group_id=reversal_group_id)
+            row.status = 'reversed'
+            db.add(reversal)
+            db.flush()
+            reversal_ids.append(reversal.id)
+            if row.id == original.id:
+                selected_reversal = reversal
+
+        write_event(
+            db,
+            company_id=original.company_id,
+            event='finance.transaction_reversed',
+            entity='finance_transaction',
+            entity_id=original.id,
+            actor=actor,
+            project_id=original.project_id,
+            customer_id=original.customer_id,
+            changes={
+                'reversal_ids': reversal_ids,
+                'reason': payload.reason,
+                'amount': str(original.amount),
+                'transfer_group_id': original.transfer_group_id,
+            },
+        )
+        if commit:
+            db.commit()
+        else:
+            db.flush()
+        assert selected_reversal is not None
+        if commit:
+            db.refresh(selected_reversal)
+        return _transaction_summaries(db, [selected_reversal])[0]
+    except Exception:
+        if commit:
+            db.rollback()
+        raise
+
+
+def delete_transaction(
+    db: Session,
+    actor: CurrentSession,
+    transaction_id: str,
+    payload: ReverseFinanceTransactionRequest,
+    *,
+    commit: bool = True,
+) -> None:
+    """Soft-delete a finance transaction without destroying ledger history.
+
+    Posted transactions are first reversed transactionally so linked bill/loan/account
+    effects are unwound. The original and its reversal chain are then marked deleted,
+    which removes both sides from normal accounting queries while the immutable audit
+    trail keeps the destructive action traceable.
+    """
+    try:
+        selected = _load_visible_transaction(db, actor, transaction_id, for_update=True)
+        if selected.status == 'deleted':
+            raise FinanceConflictError('This finance transaction has already been deleted')
+
+        root = selected
+        if selected.reversed_transaction_id:
+            root = db.scalar(select(FinanceTransaction).where(
+                FinanceTransaction.id == selected.reversed_transaction_id,
+                FinanceTransaction.company_id == selected.company_id,
+            ).with_for_update())
+            if not root:
+                raise FinanceConflictError('The reversal chain is incomplete and cannot be deleted safely')
+
+        if root.status == 'posted':
+            reverse_transaction(db, actor, root.id, payload, commit=False)
+        elif root.status != 'reversed':
+            raise FinanceConflictError('Only posted or reversed finance transactions can be deleted')
+
+        if root.transfer_group_id:
+            root_ids = list(db.scalars(select(FinanceTransaction.id).where(
+                FinanceTransaction.company_id == root.company_id,
+                FinanceTransaction.transfer_group_id == root.transfer_group_id,
+                FinanceTransaction.reversed_transaction_id.is_(None),
+            ).with_for_update()).all())
+        else:
+            root_ids = [root.id]
+
+        chain_rows = list(db.scalars(select(FinanceTransaction).where(
+            FinanceTransaction.company_id == root.company_id,
+            or_(
+                FinanceTransaction.id.in_(root_ids),
+                FinanceTransaction.reversed_transaction_id.in_(root_ids),
+            ),
+        ).with_for_update()).all())
+        reversal_rows = [row for row in chain_rows if row.reversed_transaction_id in root_ids]
+        if not reversal_rows:
+            raise FinanceConflictError('The reversal chain is incomplete and cannot be deleted safely')
+
+        deleted_ids = []
+        for row in chain_rows:
+            if row.status == 'deleted':
+                continue
+            row.status = 'deleted'
+            deleted_ids.append(row.id)
+
+        write_event(
+            db,
+            company_id=root.company_id,
+            event='finance.transaction_deleted',
+            entity='finance_transaction',
+            entity_id=root.id,
+            actor=actor,
+            project_id=root.project_id,
+            customer_id=root.customer_id,
+            changes={
+                'transaction_number': root.transaction_number,
+                'deleted_transaction_ids': deleted_ids,
+                'reason': payload.reason,
+                'delete_date': payload.transaction_date.isoformat(),
+            },
+        )
+        if commit:
+            db.commit()
+        else:
+            db.flush()
+    except Exception:
+        if commit:
+            db.rollback()
+        raise
 
 
 def transfer_accounts(db: Session, actor: CurrentSession, payload: AccountTransferRequest) -> list[FinanceTransactionSummary]:
@@ -738,6 +894,8 @@ def _bill_payment_summaries(db: Session, bill_ids: set[str], company_ids: set[st
                 FinanceTransaction.source_id.in_(bill_ids),
                 BillPayment.bill_id.in_(bill_ids),
             ),
+            or_(BillPayment.id.is_not(None), FinanceTransaction.reversed_transaction_id.is_(None)),
+            FinanceTransaction.status != 'deleted',
         )
         .order_by(FinanceTransaction.transaction_date.desc(), FinanceTransaction.created_at.desc())
     ).all()
@@ -798,7 +956,10 @@ def _bill_filters(
 ):
     if date_from and date_to and date_from > date_to:
         raise FinanceConflictError('The From date must be on or before the To date')
-    filters = [Bill.company_id == actor.membership.company_id]
+    filters = [
+        Bill.company_id == actor.membership.company_id,
+        _visible_bill_filter(actor.membership.company_id),
+    ]
     if bill_type:
         filters.append(Bill.bill_type == bill_type)
     if payment_status:
@@ -924,7 +1085,8 @@ def list_bill_customers(db: Session, actor: CurrentSession) -> list[BillCustomer
     rows = db.scalars(
         select(AgentCustomer)
         .where(
-            AgentCustomer.company_id == actor.membership.company_id,
+            operational_customer_filter(actor.membership.company_id),
+            AgentCustomer.status != 'archived',
         )
         .order_by(AgentCustomer.customer_name)
     ).all()
@@ -936,6 +1098,11 @@ def create_bill(db: Session, actor: CurrentSession, payload: CreateBillRequest) 
     if payload.project_id:
         project = get_project(db, actor, payload.project_id)
         if payload.customer_id and project.customer_id != payload.customer_id: raise FinanceConflictError('The project does not belong to the selected customer')
+    if payload.customer_id:
+        try:
+            reactivate_for_activity(db, actor, payload.customer_id, source='bill_created')
+        except CustomerLifecycleError as exc:
+            raise FinanceConflictError(str(exc)) from exc
     total = _decimal(payload.subtotal) + _decimal(payload.tax_amount)
     row = Bill(company_id=actor.membership.company_id, bill_type=payload.bill_type, bill_number=payload.bill_number, bill_date=payload.bill_date, customer_id=payload.customer_id, project_id=payload.project_id, supplier_name=payload.supplier_name, subtotal=_decimal(payload.subtotal), tax_amount=_decimal(payload.tax_amount), total_amount=total, due_date=payload.due_date, paid_amount=Decimal('0.00'), balance_amount=total, payment_status='unpaid', status='issued', file_id=payload.file_id, note=payload.note, created_by=actor.membership.id)
     db.add(row)
@@ -947,57 +1114,35 @@ def create_bill(db: Session, actor: CurrentSession, payload: CreateBillRequest) 
 
 
 def update_bill(db: Session, actor: CurrentSession, bill_id: str, payload: UpdateBillRequest) -> BillSummary:
-    row = db.scalar(select(Bill).where(
-        Bill.id == bill_id,
-        Bill.company_id == actor.membership.company_id,
-    ))
-    if not row:
-        raise FinanceNotFoundError('Bill not found')
-    if row.bill_type == 'sales' and not payload.customer_id:
-        raise FinanceConflictError('A customer is required for a sales bill')
-    if row.bill_type == 'purchase' and not payload.supplier_name.strip():
-        raise FinanceConflictError('A supplier is required for a purchase bill')
-    if payload.customer_id:
-        get_customer(db, actor, payload.customer_id)
-    if payload.project_id:
-        project = get_project(db, actor, payload.project_id)
-        if payload.customer_id and project.customer_id != payload.customer_id:
-            raise FinanceConflictError('The project does not belong to the selected customer')
+    row = _load_visible_bill(db, actor, bill_id, for_update=True)
+    if row.status != 'issued':
+        raise FinanceConflictError('Only issued bills can be updated')
 
-    total = _decimal(payload.subtotal) + _decimal(payload.tax_amount)
-    if total < Decimal(row.paid_amount):
-        raise FinanceConflictError('Bill total cannot be lower than the amount already paid')
+    supplied_total = _decimal(payload.subtotal) + _decimal(payload.tax_amount)
+    immutable_changes = (
+        payload.bill_number != row.bill_number
+        or payload.bill_date != row.bill_date
+        or (payload.customer_id if row.bill_type == 'sales' else None) != row.customer_id
+        or payload.project_id != row.project_id
+        or (payload.supplier_name if row.bill_type == 'purchase' else '') != row.supplier_name
+        or _decimal(payload.subtotal) != Decimal(row.subtotal)
+        or _decimal(payload.tax_amount) != Decimal(row.tax_amount)
+        or supplied_total != Decimal(row.total_amount)
+    )
+    if immutable_changes:
+        raise FinanceConflictError('Finalized bill identity, party and amount cannot be overwritten. Void the bill and create a corrected bill instead.')
+
     before = {
-        'bill_number': row.bill_number,
-        'bill_date': str(row.bill_date),
-        'customer_id': row.customer_id,
-        'project_id': row.project_id,
-        'supplier_name': row.supplier_name,
-        'total_amount': str(row.total_amount),
         'due_date': str(row.due_date) if row.due_date else None,
+        'note': row.note,
     }
-    row.bill_number = payload.bill_number
-    row.bill_date = payload.bill_date
-    row.customer_id = payload.customer_id if row.bill_type == 'sales' else None
-    row.project_id = payload.project_id
-    row.supplier_name = payload.supplier_name if row.bill_type == 'purchase' else ''
-    row.subtotal = _decimal(payload.subtotal)
-    row.tax_amount = _decimal(payload.tax_amount)
-    row.total_amount = total
     row.due_date = payload.due_date
-    row.balance_amount = total - Decimal(row.paid_amount)
-    row.payment_status = 'unpaid' if row.paid_amount <= 0 else ('paid' if row.balance_amount <= 0 else 'partially_paid')
     row.note = payload.note
     row.version += 1
-    try:
-        db.flush()
-    except IntegrityError as exc:
-        db.rollback()
-        raise FinanceConflictError('A bill with this number already exists') from exc
     write_event(
         db,
         company_id=row.company_id,
-        event='bill.updated',
+        event='bill.metadata_updated',
         entity='bill',
         entity_id=row.id,
         actor=actor,
@@ -1006,13 +1151,8 @@ def update_bill(db: Session, actor: CurrentSession, bill_id: str, payload: Updat
         changes={
             'before': before,
             'after': {
-                'bill_number': row.bill_number,
-                'bill_date': str(row.bill_date),
-                'customer_id': row.customer_id,
-                'project_id': row.project_id,
-                'supplier_name': row.supplier_name,
-                'total_amount': str(row.total_amount),
                 'due_date': str(row.due_date) if row.due_date else None,
+                'note': row.note,
             },
         },
     )
@@ -1021,8 +1161,7 @@ def update_bill(db: Session, actor: CurrentSession, bill_id: str, payload: Updat
 
 
 def record_bill_payment(db: Session, actor: CurrentSession, bill_id: str, payload: RecordBillPaymentRequest) -> BillSummary:
-    bill = db.scalar(select(Bill).where(Bill.id == bill_id, Bill.company_id == actor.membership.company_id))
-    if not bill: raise FinanceNotFoundError('Bill not found')
+    bill = _load_visible_bill(db, actor, bill_id)
     amount = _decimal(payload.amount)
     if bill.status == 'cancelled': raise FinanceConflictError('Cancelled bills cannot be paid')
     if amount > Decimal(bill.balance_amount): raise FinanceConflictError('Payment exceeds the bill balance')
@@ -1031,7 +1170,7 @@ def record_bill_payment(db: Session, actor: CurrentSession, bill_id: str, payloa
         if _account_balance(db, account) < amount:
             raise FinanceConflictError('The selected account does not have enough balance for this bill payment')
     direction = 'credit' if bill.bill_type == 'sales' else 'debit'
-    customer = db.get(AgentCustomer, bill.customer_id) if bill.customer_id else None
+    customer = get_customer(db, actor, bill.customer_id) if bill.customer_id else None
     tx_summary = create_transaction(db, actor, CreateFinanceTransactionRequest(transaction_date=payload.transaction_date, direction=direction, amount=float(amount), account_id=payload.account_id, payment_method=payload.payment_method, party_type='customer' if bill.bill_type == 'sales' else 'supplier', party_name=customer.customer_name if customer else bill.supplier_name, customer_id=bill.customer_id, project_id=bill.project_id, source_type=f'{bill.bill_type}_bill_payment', source_id=bill.id, reference_number=payload.reference_number, description=payload.description or f'Payment against {bill.bill_number}'), commit=False)
     bill.paid_amount = Decimal(bill.paid_amount) + amount
     bill.balance_amount = Decimal(bill.total_amount) - Decimal(bill.paid_amount)
@@ -1042,118 +1181,92 @@ def record_bill_payment(db: Session, actor: CurrentSession, bill_id: str, payloa
 
 
 def delete_bill_payment(db: Session, actor: CurrentSession, bill_id: str, payment_id: str) -> BillSummary:
-    bill = db.scalar(select(Bill).where(
-        Bill.id == bill_id,
-        Bill.company_id == actor.membership.company_id,
-    ))
-    if not bill:
-        raise FinanceNotFoundError('Bill not found')
+    _load_visible_bill(db, actor, bill_id)
+    raise FinanceConflictError('Finalized bill payments cannot be deleted. Reverse the payment with a reason instead.')
+
+
+def reverse_bill_payment(
+    db: Session,
+    actor: CurrentSession,
+    bill_id: str,
+    payment_id: str,
+    payload: ReverseFinanceTransactionRequest,
+) -> BillSummary:
+    bill = _load_visible_bill(db, actor, bill_id, for_update=True)
     payment = db.scalar(select(BillPayment).where(
         BillPayment.id == payment_id,
         BillPayment.bill_id == bill.id,
         BillPayment.company_id == bill.company_id,
     ))
-    transaction_id = payment.transaction_id if payment else None
-    legacy_transaction = None
-    if not transaction_id:
-        legacy_transaction = db.scalar(select(FinanceTransaction).where(
-            FinanceTransaction.id == payment_id,
-            FinanceTransaction.company_id == bill.company_id,
-            FinanceTransaction.source_id == bill.id,
-            FinanceTransaction.source_type.in_(BILL_PAYMENT_SOURCE_TYPES),
-        ))
-        transaction_id = legacy_transaction.id if legacy_transaction else None
-    if not transaction_id:
-        raise FinanceNotFoundError('Bill payment not found')
-    if legacy_transaction:
-        bill.paid_amount = max(
-            Decimal('0.00'),
-            Decimal(bill.paid_amount) - Decimal(legacy_transaction.amount),
-        )
-        bill.balance_amount = max(
-            Decimal('0.00'),
-            Decimal(bill.total_amount) - Decimal(bill.paid_amount),
-        )
-        bill.payment_status = (
-            'unpaid' if bill.paid_amount <= 0
-            else ('paid' if bill.balance_amount <= 0 else 'partially_paid')
-        )
-    deleted: set[str] = set()
-    _delete_transaction_tree(db, actor, transaction_id, deleted)
-    db.commit()
-    db.refresh(bill)
-    return _bill_summary(db, bill)
+    transaction_id = payment.transaction_id if payment else payment_id
+    try:
+        reverse_transaction(db, actor, transaction_id, payload, commit=False)
+        db.commit()
+        db.refresh(bill)
+        return _bill_summary(db, bill)
+    except Exception:
+        db.rollback()
+        raise
 
 
 def delete_bill(db: Session, actor: CurrentSession, bill_id: str) -> None:
-    bill = db.scalar(select(Bill).where(
-        Bill.id == bill_id,
-        Bill.company_id == actor.membership.company_id,
-    ))
-    if not bill:
-        raise FinanceNotFoundError('Bill not found')
+    _load_visible_bill(db, actor, bill_id)
+    raise FinanceConflictError('Issued bills cannot be deleted. Void the bill instead so its history remains auditable.')
 
-    payment_transaction_ids = list(db.scalars(select(BillPayment.transaction_id).where(
-        BillPayment.bill_id == bill.id,
-        BillPayment.company_id == bill.company_id,
-    )).all())
-    linked_transaction_ids = list(db.scalars(select(FinanceTransaction.id).where(
-        FinanceTransaction.company_id == bill.company_id,
-        FinanceTransaction.source_id == bill.id,
-        FinanceTransaction.source_type.in_({'sales_bill_payment', 'purchase_bill_payment'}),
-    )).all())
-    deleted: set[str] = set()
-    for transaction_id in dict.fromkeys([*payment_transaction_ids, *linked_transaction_ids]):
-        _delete_transaction_tree(db, actor, transaction_id, deleted)
 
-    remaining_payments = list(db.scalars(select(BillPayment).where(
-        BillPayment.bill_id == bill.id,
-        BillPayment.company_id == bill.company_id,
-    )).all())
-    for payment in remaining_payments:
-        db.delete(payment)
-
-    attachment = None
-    staged_attachment = None
-    if bill.file_id:
-        attachment = db.scalar(select(StoredFile).where(
-            StoredFile.id == bill.file_id,
-            StoredFile.company_id == bill.company_id,
-            StoredFile.owner_type == 'finance_bill',
-            StoredFile.owner_id == bill.id,
-        ))
-        if attachment:
-            staged_attachment = storage.stage_delete(attachment.storage_path)
-            bill.file_id = None
-            db.delete(attachment)
-
-    write_event(
-        db,
-        company_id=bill.company_id,
-        event='bill.deleted',
-        entity='bill',
-        entity_id=bill.id,
-        actor=actor,
-        project_id=bill.project_id,
-        customer_id=bill.customer_id,
-        changes={
-            'bill_number': bill.bill_number,
-            'bill_type': bill.bill_type,
-            'total_amount': str(bill.total_amount),
-            'deleted_transactions': len(deleted),
-            'attachment_id': attachment.id if attachment else None,
-        },
-    )
-    db.delete(bill)
+def void_bill(db: Session, actor: CurrentSession, bill_id: str, payload: VoidBillRequest) -> BillSummary:
     try:
+        bill = _load_visible_bill(db, actor, bill_id, for_update=True)
+        if bill.status == 'cancelled':
+            raise FinanceConflictError('This bill is already voided')
+
+        payment_ids = list(db.scalars(select(BillPayment.transaction_id).where(
+            BillPayment.bill_id == bill.id,
+            BillPayment.company_id == bill.company_id,
+        )).all())
+        payment_statuses = {
+            str(transaction_id): status
+            for transaction_id, status in db.execute(
+                select(FinanceTransaction.id, FinanceTransaction.status).where(
+                    FinanceTransaction.company_id == bill.company_id,
+                    FinanceTransaction.id.in_(payment_ids),
+                )
+            ).all()
+        } if payment_ids else {}
+        reversed_payment_ids: list[str] = []
+        reversal_payload = ReverseFinanceTransactionRequest(transaction_date=payload.transaction_date, reason=payload.reason)
+        for transaction_id in payment_ids:
+            if payment_statuses.get(transaction_id) == 'posted':
+                reverse_transaction(db, actor, transaction_id, reversal_payload, commit=False)
+                reversed_payment_ids.append(transaction_id)
+
+        bill.status = 'cancelled'
+        bill.payment_status = 'void'
+        bill.paid_amount = Decimal('0.00')
+        bill.balance_amount = Decimal('0.00')
+        write_event(
+            db,
+            company_id=bill.company_id,
+            event='bill.voided',
+            entity='bill',
+            entity_id=bill.id,
+            actor=actor,
+            project_id=bill.project_id,
+            customer_id=bill.customer_id,
+            changes={
+                'bill_number': bill.bill_number,
+                'bill_type': bill.bill_type,
+                'total_amount': str(bill.total_amount),
+                'reversed_payment_transaction_ids': reversed_payment_ids,
+                'reason': payload.reason,
+            },
+        )
         db.commit()
+        db.refresh(bill)
+        return _bill_summary(db, bill)
     except Exception:
         db.rollback()
-        if staged_attachment and attachment:
-            storage.restore_staged_delete(staged_attachment, attachment.storage_path)
         raise
-    if staged_attachment:
-        storage.finalize_staged_delete(staged_attachment)
 
 
 def _loan_summary(row: CustomerLoan) -> CustomerLoanSummary:
@@ -1205,53 +1318,43 @@ def update_company_loan(db: Session, actor: CurrentSession, loan_id: str, payloa
     row = db.scalar(select(CompanyLoan).where(
         CompanyLoan.id == loan_id,
         CompanyLoan.company_id == actor.membership.company_id,
-    ))
+    ).with_for_update())
     if not row:
         raise FinanceNotFoundError('Company loan not found')
 
-    paid_amount = max(Decimal('0.00'), Decimal(row.principal_amount) - Decimal(row.outstanding_amount))
-    next_principal = _decimal(payload.principal_amount)
-    if next_principal < paid_amount:
-        raise FinanceConflictError('Loan principal cannot be lower than the amount already repaid')
+    if _decimal(payload.principal_amount) != Decimal(row.principal_amount) or payload.start_date != row.start_date:
+        raise FinanceConflictError('Finalized loan principal and disbursement date cannot be overwritten. Reverse the loan ledger entry instead.')
+
     before = {
         'lender_name': row.lender_name,
         'loan_account_number': row.loan_account_number,
-        'principal_amount': str(row.principal_amount),
         'interest_rate': str(row.interest_rate),
         'emi_amount': str(row.emi_amount),
-        'start_date': str(row.start_date),
         'end_date': str(row.end_date) if row.end_date else None,
         'next_due_date': str(row.next_due_date) if row.next_due_date else None,
+        'note': row.note,
     }
     row.lender_name = payload.lender_name
     row.loan_account_number = payload.loan_account_number
-    row.principal_amount = next_principal
     row.interest_rate = Decimal(str(payload.interest_rate))
     row.emi_amount = _decimal(payload.emi_amount)
-    row.start_date = payload.start_date
     row.end_date = payload.end_date
-    row.outstanding_amount = next_principal - paid_amount
     row.next_due_date = payload.next_due_date
-    row.status = 'closed' if row.outstanding_amount <= 0 else 'active'
     row.note = payload.note
     row.version += 1
 
-    linked_transactions = list(db.scalars(select(FinanceTransaction).where(
+    linked_disbursements = list(db.scalars(select(FinanceTransaction).where(
         FinanceTransaction.company_id == row.company_id,
         FinanceTransaction.source_id == row.id,
-        FinanceTransaction.source_type.in_({'company_loan_disbursement', 'company_loan_repayment'}),
+        FinanceTransaction.source_type == 'company_loan_disbursement',
     )).all())
-    for transaction in linked_transactions:
+    for transaction in linked_disbursements:
         transaction.party_name = row.lender_name
-        if transaction.source_type == 'company_loan_disbursement':
-            transaction.transaction_date = row.start_date
-            transaction.amount = row.principal_amount
-            transaction.description = f'Company loan disbursement from {row.lender_name}'
 
     write_event(
         db,
         company_id=row.company_id,
-        event='company_loan.updated',
+        event='company_loan.metadata_updated',
         entity='company_loan',
         entity_id=row.id,
         actor=actor,
@@ -1260,12 +1363,11 @@ def update_company_loan(db: Session, actor: CurrentSession, loan_id: str, payloa
             'after': {
                 'lender_name': row.lender_name,
                 'loan_account_number': row.loan_account_number,
-                'principal_amount': str(row.principal_amount),
                 'interest_rate': str(row.interest_rate),
                 'emi_amount': str(row.emi_amount),
-                'start_date': str(row.start_date),
                 'end_date': str(row.end_date) if row.end_date else None,
                 'next_due_date': str(row.next_due_date) if row.next_due_date else None,
+                'note': row.note,
             },
         },
     )
@@ -1276,6 +1378,7 @@ def update_company_loan(db: Session, actor: CurrentSession, loan_id: str, payloa
 def pay_company_loan(db: Session, actor: CurrentSession, loan_id: str, payload: CompanyLoanPaymentRequest) -> CompanyLoanSummary:
     row = db.scalar(select(CompanyLoan).where(CompanyLoan.id == loan_id, CompanyLoan.company_id == actor.membership.company_id))
     if not row: raise FinanceNotFoundError('Company loan not found')
+    if row.status != 'active': raise FinanceConflictError('Only active company loans can receive repayments')
     amount = _decimal(payload.amount)
     if amount > Decimal(row.outstanding_amount): raise FinanceConflictError('Payment exceeds the outstanding loan amount')
     create_transaction(db, actor, CreateFinanceTransactionRequest(transaction_date=payload.transaction_date, direction='debit', amount=payload.amount, account_id=payload.account_id, payment_method='bank', party_type='lender', party_name=row.lender_name, source_type='company_loan_repayment', source_id=row.id, reference_number=payload.reference_number, description=payload.note or f'Company loan repayment to {row.lender_name}'), commit=False)
@@ -1292,32 +1395,7 @@ def delete_company_loan(db: Session, actor: CurrentSession, loan_id: str) -> Non
     ))
     if not row:
         raise FinanceNotFoundError('Company loan not found')
-
-    linked_transaction_ids = list(db.scalars(select(FinanceTransaction.id).where(
-        FinanceTransaction.company_id == row.company_id,
-        FinanceTransaction.source_id == row.id,
-        FinanceTransaction.source_type.in_({'company_loan_disbursement', 'company_loan_repayment'}),
-    )).all())
-    deleted: set[str] = set()
-    for transaction_id in linked_transaction_ids:
-        _delete_transaction_tree(db, actor, transaction_id, deleted)
-
-    write_event(
-        db,
-        company_id=row.company_id,
-        event='company_loan.deleted',
-        entity='company_loan',
-        entity_id=row.id,
-        actor=actor,
-        changes={
-            'lender_name': row.lender_name,
-            'principal_amount': str(row.principal_amount),
-            'outstanding_amount': str(row.outstanding_amount),
-            'deleted_transactions': len(deleted),
-        },
-    )
-    db.delete(row)
-    db.commit()
+    raise FinanceConflictError('Company loans with finalized ledger entries cannot be deleted. Reverse the linked financial entries instead.')
 
 
 def overview(db: Session, actor: CurrentSession, *, date_from: date | None = None, date_to: date | None = None) -> FinanceOverview:
@@ -1327,11 +1405,12 @@ def overview(db: Session, actor: CurrentSession, *, date_from: date | None = Non
     accounts = list_accounts(db, actor, as_of=range_end)
     bank_balance = sum(row.current_balance for row in accounts if row.account_type in {'bank', 'upi'})
     cash_balance = sum(row.current_balance for row in accounts if row.account_type in {'cash', 'petty_cash'})
-    recent_rows = list(db.scalars(select(FinanceTransaction).where(FinanceTransaction.company_id == company_id, FinanceTransaction.source_type.not_in(BILL_PAYMENT_SOURCE_TYPES), FinanceTransaction.transaction_date >= range_start, FinanceTransaction.transaction_date <= range_end).order_by(FinanceTransaction.transaction_date.desc(), FinanceTransaction.created_at.desc()).limit(8)).all())
-    pending_rows = list(db.scalars(select(Bill).where(Bill.company_id == company_id, Bill.balance_amount > 0, Bill.status != 'cancelled', Bill.bill_date >= range_start, Bill.bill_date <= range_end).order_by(Bill.due_date.asc().nullslast()).limit(8)).all())
-    expense_rows = db.execute(select(FinanceCategory.name, func.sum(FinanceTransaction.amount)).join(FinanceTransaction, FinanceTransaction.category_id == FinanceCategory.id).where(FinanceTransaction.company_id == company_id, FinanceTransaction.direction == 'debit', FinanceTransaction.source_type == 'expense', FinanceTransaction.status == 'posted', FinanceTransaction.transaction_date >= range_start, FinanceTransaction.transaction_date <= range_end).group_by(FinanceCategory.name).order_by(func.sum(FinanceTransaction.amount).desc()).limit(8)).all()
+    recent_rows = list(db.scalars(select(FinanceTransaction).where(FinanceTransaction.company_id == company_id, FinanceTransaction.status.in_(ACCOUNTING_STATUSES), FinanceTransaction.source_type.not_in(BILL_PAYMENT_SOURCE_TYPES), _visible_transaction_filter(company_id), FinanceTransaction.transaction_date >= range_start, FinanceTransaction.transaction_date <= range_end).order_by(FinanceTransaction.transaction_date.desc(), FinanceTransaction.created_at.desc()).limit(8)).all())
+    pending_rows = list(db.scalars(select(Bill).where(Bill.company_id == company_id, Bill.balance_amount > 0, Bill.status != 'cancelled', _visible_bill_filter(company_id), Bill.bill_date >= range_start, Bill.bill_date <= range_end).order_by(Bill.due_date.asc().nullslast()).limit(8)).all())
+    expense_net = func.sum(case((FinanceTransaction.direction == 'debit', FinanceTransaction.amount), else_=-FinanceTransaction.amount))
+    expense_rows = db.execute(select(FinanceCategory.name, expense_net).join(FinanceTransaction, FinanceTransaction.category_id == FinanceCategory.id).where(FinanceTransaction.company_id == company_id, FinanceTransaction.source_type == 'expense', FinanceTransaction.status.in_(ACCOUNTING_STATUSES), _visible_transaction_filter(company_id), FinanceTransaction.transaction_date >= range_start, FinanceTransaction.transaction_date <= range_end).group_by(FinanceCategory.name).order_by(expense_net.desc()).limit(8)).all()
     month_bucket = func.to_char(func.date_trunc('month', FinanceTransaction.transaction_date), 'YYYY-MM')
-    flow_rows = db.execute(select(month_bucket, FinanceTransaction.direction, func.sum(FinanceTransaction.amount)).where(FinanceTransaction.company_id == company_id, FinanceTransaction.status == 'posted', FinanceTransaction.source_type.not_in(BILL_PAYMENT_SOURCE_TYPES), FinanceTransaction.transaction_date >= range_start, FinanceTransaction.transaction_date <= range_end).group_by(month_bucket, FinanceTransaction.direction).order_by(month_bucket.desc()).limit(24)).all()
+    flow_rows = db.execute(select(month_bucket, FinanceTransaction.direction, func.sum(FinanceTransaction.amount)).where(FinanceTransaction.company_id == company_id, FinanceTransaction.status.in_(ACCOUNTING_STATUSES), FinanceTransaction.source_type.not_in(BILL_PAYMENT_SOURCE_TYPES), _visible_transaction_filter(company_id), FinanceTransaction.transaction_date >= range_start, FinanceTransaction.transaction_date <= range_end).group_by(month_bucket, FinanceTransaction.direction).order_by(month_bucket.desc()).limit(24)).all()
     flow_map: dict[str, dict[str, float | str]] = {}
     for month, direction, amount in flow_rows:
         bucket = flow_map.setdefault(str(month), {'month': str(month), 'money_in': 0.0, 'money_out': 0.0})
@@ -1341,8 +1420,8 @@ def overview(db: Session, actor: CurrentSession, *, date_from: date | None = Non
 
 def profitability(db: Session, actor: CurrentSession, *, date_from: date | None = None, date_to: date | None = None) -> ProfitabilitySummary:
     company_id = actor.membership.company_id
-    bill_filters = [Bill.company_id == company_id, Bill.status != 'cancelled']
-    transaction_filters = [FinanceTransaction.company_id == company_id, FinanceTransaction.status == 'posted']
+    bill_filters = [Bill.company_id == company_id, Bill.status != 'cancelled', _visible_bill_filter(company_id)]
+    transaction_filters = [FinanceTransaction.company_id == company_id, FinanceTransaction.status.in_(ACCOUNTING_STATUSES), _visible_transaction_filter(company_id)]
     if date_from:
         bill_filters.append(Bill.bill_date >= date_from)
         transaction_filters.append(FinanceTransaction.transaction_date >= date_from)

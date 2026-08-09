@@ -43,6 +43,7 @@ import type {
 } from '../../types'
 import { useToast } from '../ui/ToastProvider'
 import { AlertDialog } from '../ui/AlertDialog'
+import { Pagination } from '../ui/Pagination'
 import { AgentCustomerDialog } from './AgentCustomerDialog'
 import { AgentProfileDialog } from './AgentProfileDialog'
 import { AgentTransactionDialog } from './AgentTransactionDialog'
@@ -70,6 +71,10 @@ export function AgentOverviewPage({ session }: { session: Session }) {
   const [overview, setOverview] = useState<AgentOverview | null>(null)
   const [customerSearch, setCustomerSearch] = useState('')
   const [transactionSearch, setTransactionSearch] = useState('')
+  const [debouncedCustomerSearch, setDebouncedCustomerSearch] = useState('')
+  const [debouncedTransactionSearch, setDebouncedTransactionSearch] = useState('')
+  const [customerPage, setCustomerPage] = useState(1)
+  const [transactionPage, setTransactionPage] = useState(1)
   const [workspaceSearch, setWorkspaceSearch] = useState('')
   const [searchScope, setSearchScope] = useState<'all' | 'agents' | 'customers'>('all')
   const [loading, setLoading] = useState(true)
@@ -117,7 +122,14 @@ export function AgentOverviewPage({ session }: { session: Session }) {
     if (!membershipId) return
     setLoading(true)
     try {
-      setOverview(await getAgentOverview(membershipId))
+      setOverview(await getAgentOverview(membershipId, {
+        customerPage,
+        customerPageSize: 25,
+        customerQuery: debouncedCustomerSearch,
+        transactionPage,
+        transactionPageSize: 25,
+        transactionQuery: debouncedTransactionSearch,
+      }))
     } catch (reason) {
       toast({ message: reason instanceof Error ? reason.message : 'Could not load agent overview', variant: 'error' })
     } finally {
@@ -133,7 +145,14 @@ export function AgentOverviewPage({ session }: { session: Session }) {
         ? selectedMembershipId
         : nextAgents[0]?.membership_id ?? ''
       const nextOverview = nextMembershipId
-        ? await getAgentOverview(nextMembershipId)
+        ? await getAgentOverview(nextMembershipId, {
+          customerPage,
+          customerPageSize: 25,
+          customerQuery: debouncedCustomerSearch,
+          transactionPage,
+          transactionPageSize: 25,
+          transactionQuery: debouncedTransactionSearch,
+        })
         : null
       setAgents(nextAgents)
       setSelectedMembershipId(nextMembershipId)
@@ -147,27 +166,18 @@ export function AgentOverviewPage({ session }: { session: Session }) {
   }
 
   useEffect(() => { void loadAgentList() }, [])
-  useEffect(() => { void loadOverview(selectedMembershipId) }, [selectedMembershipId])
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedCustomerSearch(customerSearch.trim()), 250)
+    return () => window.clearTimeout(timer)
+  }, [customerSearch])
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedTransactionSearch(transactionSearch.trim()), 250)
+    return () => window.clearTimeout(timer)
+  }, [transactionSearch])
+  useEffect(() => { void loadOverview(selectedMembershipId) }, [selectedMembershipId, customerPage, transactionPage, debouncedCustomerSearch, debouncedTransactionSearch])
 
-  const filteredCustomers = useMemo(() => {
-    const term = customerSearch.trim().toLowerCase()
-    if (!overview || !term) return overview?.customers ?? []
-    return overview.customers.filter((customer) => (
-      `${customer.customer_name} ${customer.consumer_number} ${customer.phone} ${customer.project_name} ${customer.status}`
-        .toLowerCase()
-        .includes(term)
-    ))
-  }, [customerSearch, overview])
-
-  const filteredTransactions = useMemo(() => {
-    const term = transactionSearch.trim().toLowerCase()
-    if (!overview || !term) return overview?.transactions ?? []
-    return overview.transactions.filter((transaction) => (
-      `${transaction.reference} ${transaction.transaction_type} ${transaction.description} ${transaction.transaction_date} ${transaction.debit} ${transaction.credit} ${transaction.running_balance} ${transaction.approval_status}`
-        .toLowerCase()
-        .includes(term)
-    ))
-  }, [overview, transactionSearch])
+  const filteredCustomers = overview?.customers ?? []
+  const filteredTransactions = overview?.transactions ?? []
 
   const workspaceResults = useMemo(() => {
     const term = workspaceSearch.trim().toLowerCase()
@@ -191,13 +201,12 @@ export function AgentOverviewPage({ session }: { session: Session }) {
     if (!overview) return
     setBusy(true)
     try {
-      const nextOverview = await updateAgentProfile(
+      await updateAgentProfile(
         overview.profile.membership_id,
         value,
       )
-      setOverview(nextOverview)
       setEditingProfile(false)
-      await loadAgentList()
+      await Promise.all([loadOverview(overview.profile.membership_id), loadAgentList()])
       toast({ message: 'Agent profile updated', variant: 'success' })
     } catch (reason) {
       toast({ message: reason instanceof Error ? reason.message : 'Could not update agent profile', variant: 'error' })
@@ -262,10 +271,9 @@ export function AgentOverviewPage({ session }: { session: Session }) {
     if (!overview) return
     setBusy(true)
     try {
-      const next = await createAgentCustomer(overview.profile.membership_id, value)
-      setOverview(next)
+      await createAgentCustomer(overview.profile.membership_id, value)
       setRegisteringCustomer(false)
-      await loadAgentList()
+      await Promise.all([loadOverview(overview.profile.membership_id), loadAgentList()])
       toast({ message: 'Customer registered and assigned to this agent', variant: 'success' })
     } catch (reason) {
       toast({ message: reason instanceof Error ? reason.message : 'Could not register customer', variant: 'error' })
@@ -278,13 +286,13 @@ export function AgentOverviewPage({ session }: { session: Session }) {
     if (!overview || !editingCustomer) return
     setBusy(true)
     try {
-      const next = await updateAgentCustomer(
+      await updateAgentCustomer(
         overview.profile.membership_id,
         editingCustomer.id,
         value,
       )
-      setOverview(next)
       setEditingCustomer(null)
+      await Promise.all([loadOverview(overview.profile.membership_id), loadAgentList()])
       toast({ message: session.role === 'agent' ? 'Customer updated. Your one-time edit has been used.' : 'Customer updated', variant: 'success' })
     } catch (reason) {
       toast({ message: reason instanceof Error ? reason.message : 'Could not update customer', variant: 'error' })
@@ -341,11 +349,14 @@ export function AgentOverviewPage({ session }: { session: Session }) {
         onSearchScopeChange={setSearchScope}
         onSelectAgent={(membershipId) => {
           setSelectedMembershipId(membershipId)
+          setCustomerPage(1)
+          setTransactionPage(1)
           setCustomerSearch('')
           setTransactionSearch('')
           setWorkspaceSearch('')
         }}
         onSelectCustomer={(customer) => {
+          setCustomerPage(1)
           setCustomerSearch(customer.customer_name)
           setWorkspaceSearch('')
         }}
@@ -412,10 +423,10 @@ export function AgentOverviewPage({ session }: { session: Session }) {
             <section className="data-panel agent-data-panel">
               <div className="agent-section-heading">
                 <div><UsersRound size={19} /><span><strong>Customers</strong></span></div>
-                <div className="search-control agent-search"><Search size={16} /><input value={customerSearch} onChange={(event) => setCustomerSearch(event.target.value)} placeholder="Search customers or projects" /></div>
+                <div className="search-control agent-search"><Search size={16} /><input value={customerSearch} onChange={(event) => { setCustomerPage(1); setCustomerSearch(event.target.value) }} placeholder="Search customers or projects" /></div>
               </div>
               {filteredCustomers.length === 0 ? <div className="empty-state">No customers match this search.</div> : (
-                <div className="agent-table-wrap">
+                <><div className="agent-table-wrap">
                   <table className="agent-table customer-table">
                     <thead><tr><th>Customer</th><th>Contact</th><th>Project</th><th>Workflow</th><th>Status</th><th className="numeric-cell">Outstanding</th><th>Action</th></tr></thead>
                     <tbody>
@@ -439,7 +450,7 @@ export function AgentOverviewPage({ session }: { session: Session }) {
                       ))}
                     </tbody>
                   </table>
-                </div>
+                </div><Pagination compact className="agent-data-pagination" page={overview.customer_page} pageSize={overview.customer_page_size} total={overview.customer_total} loading={loading} onPageChange={setCustomerPage} /></>
               )}
             </section>
 
@@ -449,15 +460,15 @@ export function AgentOverviewPage({ session }: { session: Session }) {
                 <div className="agent-section-actions">
                   <div className="search-control agent-search transaction-search">
                     <Search size={16} />
-                    <input value={transactionSearch} onChange={(event) => setTransactionSearch(event.target.value)} placeholder="Search transactions" />
+                    <input value={transactionSearch} onChange={(event) => { setTransactionPage(1); setTransactionSearch(event.target.value) }} placeholder="Search transactions" />
                   </div>
                   <span className="record-count">
-                    {transactionSearch.trim() ? `${filteredTransactions.length} of ` : ''}
+                    {overview.transaction_total.toLocaleString('en-IN')} records
                   </span>
                 </div>
               </div>
               {filteredTransactions.length === 0 ? <div className="empty-state">{overview.transactions.length === 0 ? 'No agent transactions have been posted.' : 'No transactions match this search.'}</div> : (
-                <div className="agent-table-wrap">
+                <><div className="agent-table-wrap">
                   <table className="agent-table transaction-table">
                     <thead><tr><th>Date</th><th>Reference</th><th>Transaction</th><th>Approval</th><th className="numeric-cell">Debit</th><th className="numeric-cell">Credit</th><th className="numeric-cell">Posted balance</th>{canPostTransactions && <th>Action</th>}</tr></thead>
                     <tbody>
@@ -470,12 +481,12 @@ export function AgentOverviewPage({ session }: { session: Session }) {
                           <td data-label="Debit" className="numeric-cell amount-debit">{transaction.debit > 0 ? currency.format(transaction.debit) : '—'}</td>
                           <td data-label="Credit" className="numeric-cell amount-credit">{transaction.credit > 0 ? currency.format(transaction.credit) : '—'}</td>
                           <td data-label="Balance" className="numeric-cell"><strong>{currency.format(transaction.running_balance)}</strong></td>
-                          {canPostTransactions && <td data-label="Action"><div className="agent-transaction-actions">{(canManageAgentTransactions || transaction.approval_status === 'pending') && <button className="table-action-button table-action-button--neutral" type="button" onClick={() => setEditingTransaction(transaction)}><Edit3 size={12} /></button>}<button className="danger-icon-button" type="button" onClick={() => setTransactionToDelete(transaction)} aria-label={`Delete transaction ${transaction.reference || transaction.id}`} title="Delete transaction"><Trash2 size={14} /></button></div></td>}
+                          {canPostTransactions && <td data-label="Action"><div className="agent-transaction-actions">{(canManageAgentTransactions || transaction.approval_status === 'pending') && <button className="table-action-button table-action-button--neutral" type="button" onClick={() => setEditingTransaction(transaction)}><Edit3 size={12} /></button>}{transaction.approval_status === 'pending' && <button className="danger-icon-button" type="button" onClick={() => setTransactionToDelete(transaction)} aria-label={`Delete pending transaction ${transaction.reference || transaction.id}`} title="Delete pending transaction"><Trash2 size={14} /></button>}</div></td>}
                         </tr>
                       ))}
                     </tbody>
                   </table>
-                </div>
+                </div><Pagination compact className="agent-data-pagination" page={overview.transaction_page} pageSize={overview.transaction_page_size} total={overview.transaction_total} loading={loading} onPageChange={setTransactionPage} /></>
               )}
             </section>
           </div>

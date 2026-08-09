@@ -66,6 +66,7 @@
 .transaction-search { width: min(230px, 100%); height: 36px; }
 .record-count { color: var(--muted); font-size: 11px; }
 .agent-table-wrap { flex: 1 1 auto; min-height: 0; overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+.agent-data-pagination { flex: 0 0 auto; border-top: 1px solid var(--line); }
 .agent-table { width: 100%; min-width: 900px; border-collapse: collapse; }
 .transaction-table { min-width: 1040px; }
 .agent-table th { position: sticky; top: 0; z-index: 1; padding: 8px 10px; color: #868c94; background: #faf9f7; text-align: left; font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 1.05px; }
@@ -73,7 +74,7 @@
 .agent-table tbody tr:hover { background: #fffdf8; }
 .numeric-cell { text-align: right !important; white-space: nowrap; }
 .customer-identity, .transaction-detail { display: flex; align-items: center; gap: 10px; }
-.customer-avatar { width: 34px; height: 34px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 10px; color: #8a5b12; background: #fbf0d9; font-weight: 800; }
+.customer-identity .customer-avatar { width: 34px; height: 34px; flex: 0 0 auto; border-radius: 10px; color: #8a5b12; background: #fbf0d9; font-weight: 800; }
 .customer-identity span, .table-contact, .transaction-detail > span:last-child { min-width: 0; display: grid; gap: 4px; }
 .customer-identity strong, .table-contact strong, .transaction-detail strong, .project-name { color: #26313d; font-size: 11px; }
 .customer-identity small, .table-contact small, .transaction-detail small { max-width: 280px; overflow: hidden; color: #838a93; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }

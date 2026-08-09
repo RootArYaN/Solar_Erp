@@ -170,6 +170,8 @@ export type InventoryMovement = {
   id: string
   item_id: string
   item_name: string
+  item_sku: string
+  item_unit: string
   movement_type: string
   quantity: number
   source_location_id: string | null
@@ -193,9 +195,15 @@ export type InventoryMovement = {
   eway_bill_number: string
   note: string
   status: string
+  reversed_movement_id?: string | null
+  correction_of_movement_id?: string | null
+  reason?: string
+  is_reversed?: boolean
+  corrected_quantity?: number | null
+  related_movement_id?: string | null
   created_at: string
 }
-export type InventorySummary = { items: InventoryItem[]; locations: InventoryLocation[]; movements: InventoryMovement[]; total_items: number; low_stock_items: number; stock_value: number; total_quantity: number }
+export type InventorySummary = { items: InventoryItem[]; locations: InventoryLocation[]; movements: InventoryMovement[]; total_items: number; low_stock_items: number; stock_value: number; total_quantity: number; item_page: number; item_page_size: number; item_total: number; item_categories: string[]; items_has_more: boolean }
 
 export type PricingItem = {
   id?: string | null

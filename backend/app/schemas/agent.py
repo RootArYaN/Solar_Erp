@@ -84,6 +84,12 @@ class AgentOverviewResponse(BaseModel):
     customer_outstanding: float
     customers: list[AgentCustomerSummary]
     transactions: list[AgentTransactionSummary]
+    customer_page: int = 1
+    customer_page_size: int = 25
+    customer_total: int = 0
+    transaction_page: int = 1
+    transaction_page_size: int = 25
+    transaction_total: int = 0
 
 
 class UpdateAgentProfileRequest(BaseModel):

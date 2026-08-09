@@ -139,7 +139,6 @@
   white-space: nowrap;
 }
 .ui-kpi-card__note {
-  overflow: hidden;
   color: var(--ui-color-subtle);
   font-size: 10px;
   line-height: 1.35;
@@ -364,14 +363,28 @@
   }
   .approval-toolbar > .approval-refresh.ui-button { width: 100%; }
   .customer-workspace__header {
-    align-items: stretch;
+    align-items: center;
   }
   .customer-header-actions.ui-action-bar {
-    width: 100%;
+    width: auto;
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-auto-flow: column;
+    grid-auto-columns: 40px;
+    grid-template-columns: none;
+    align-items: center;
+    justify-content: end;
+    gap: 6px;
   }
-  .customer-header-actions.ui-action-bar > .ui-button { width: 100%; }
+  .customer-header-actions.ui-action-bar > .ui-button,
+  .customer-header-actions.ui-action-bar > .customer-action-menu,
+  .customer-header-actions.ui-action-bar .customer-action-menu__trigger.ui-button {
+    width: 40px;
+    min-width: 40px;
+    max-width: 40px;
+    height: 40px;
+    min-height: 40px;
+    padding: 0;
+  }
 
   .workspace-page .payments-summary-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -405,4 +418,95 @@
 .agent-kpi-grid > article > small {
   font-size: 10px;
   line-height: 1.35;
+}
+
+/* Shared server-pagination ------------------------------------------------
+   One compact pager for customer lists, inventory history and data-control
+   tables. It never expands into a full-width form footer. */
+.ui-pagination {
+  width: 100%;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(84px, auto) auto minmax(84px, auto);
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--ui-color-line);
+  background: rgba(255, 255, 255, .96);
+}
+.ui-pagination__button {
+  min-width: 84px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 0 10px;
+  border: 1px solid var(--ui-color-line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ui-color-ink);
+  font: inherit;
+  font-size: 10px;
+  font-weight: 750;
+  cursor: pointer;
+}
+.ui-pagination__button:hover:not(:disabled) {
+  border-color: var(--ui-color-line-strong);
+  background: var(--ui-color-surface-soft);
+}
+.ui-pagination__button:disabled {
+  opacity: .42;
+  cursor: default;
+}
+.ui-pagination__status {
+  min-width: 92px;
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 4px;
+  color: var(--ui-color-subtle);
+  font-size: 10px;
+  white-space: nowrap;
+}
+.ui-pagination__status strong {
+  color: var(--ui-color-ink);
+  font-size: 11px;
+}
+.ui-pagination__status small {
+  margin-left: 4px;
+  color: var(--ui-color-subtle);
+  font-size: 9px;
+}
+.ui-pagination--compact {
+  grid-template-columns: 32px auto 32px;
+  gap: 5px;
+  padding: 7px 0 0;
+  border-top: 1px solid var(--ui-color-line);
+  background: transparent;
+}
+.ui-pagination--compact .ui-pagination__button {
+  width: 32px;
+  min-width: 32px;
+  height: 30px;
+  padding: 0;
+}
+.ui-pagination--compact .ui-pagination__button span { display: none; }
+.ui-pagination--compact .ui-pagination__status { min-width: 58px; font-size: 9px; }
+
+@media (max-width: 520px) {
+  .ui-pagination {
+    grid-template-columns: 38px minmax(72px, auto) 38px;
+    gap: 7px;
+    padding: 9px 8px;
+  }
+  .ui-pagination__button {
+    width: 38px;
+    min-width: 38px;
+    height: 36px;
+    padding: 0;
+  }
+  .ui-pagination__button span { display: none; }
+  .ui-pagination__status small { display: none; }
 }

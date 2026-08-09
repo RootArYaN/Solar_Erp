@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import DateTime, ForeignKey, Numeric, String, UniqueConstraint
+from sqlalchemy import DateTime, ForeignKey, Index, Numeric, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -32,6 +32,12 @@ class AgentProfile(TimestampMixin, Base):
 
 class AgentCustomer(TimestampMixin, Base):
     __tablename__ = "agent_customers"
+    __table_args__ = (
+        Index("ix_agent_customers_company_status_updated", "company_id", "status", "updated_at"),
+        Index("ix_agent_customers_company_deleted", "company_id", "deleted_at"),
+        Index("ix_agent_customers_company_completed", "company_id", "completed_at"),
+        Index("ix_agent_customers_company_archived", "company_id", "archived_at"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     company_id: Mapped[str] = mapped_column(ForeignKey("companies.id", ondelete="CASCADE"), index=True, nullable=False)
@@ -57,6 +63,13 @@ class AgentCustomer(TimestampMixin, Base):
     project_name: Mapped[str] = mapped_column(String(180), default="", nullable=False)
     status: Mapped[str] = mapped_column(String(32), default="active", index=True, nullable=False)
     outstanding_balance: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=Decimal("0.00"), nullable=False)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    deleted_by: Mapped[str | None] = mapped_column(ForeignKey("memberships.id", ondelete="SET NULL"), nullable=True)
+    delete_reason: Mapped[str] = mapped_column(String(400), default="", nullable=False)
+    restored_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    restored_by: Mapped[str | None] = mapped_column(ForeignKey("memberships.id", ondelete="SET NULL"), nullable=True)
 
     agent: Mapped[AgentProfile] = relationship(back_populates="customers")
 

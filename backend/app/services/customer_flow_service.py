@@ -4,17 +4,20 @@ import json
 from datetime import UTC, datetime
 from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import exists, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import CurrentSession
 from app.models.agent import AgentCustomer, AgentProfile
-from app.models.finance import CustomerLoan, FinanceTransaction, FinancialAccount
+from app.models.finance import Bill, CustomerLoan, FinanceTransaction, FinancialAccount
+from app.models.operations import GeneratedDocumentPack, InventoryMovement
 from app.models.system import AuditEvent, StoredFile
 from app.models.workflow import CustomerProject, CustomerQuotation, MaterialRequest, ProjectTimeline, QuotationRequest
 from app.schemas.customer_flow import (
     CustomerFlowList,
     CustomerFlowSnapshot,
+    CustomerDependencyPreview,
+    CustomerLifecycleRequest,
     FlowActivity,
     FlowAddress,
     FlowContact,
@@ -34,6 +37,7 @@ from app.schemas.customer_flow import (
     SaveMaterialDraftRequest,
     UpdateCustomerRequest,
 )
+from app.services.access_service import operational_customer_filter
 from app.services.audit_service import write_event
 
 
@@ -53,6 +57,19 @@ class CustomerFlowConflictError(CustomerFlowError):
     status_code = 409
 
 
+OPERATIONAL_CUSTOMER_STATUSES = (
+    'lead',
+    'registered',
+    'quotation_requested',
+    'qualified',
+    'active',
+    'on_hold',
+)
+HISTORICAL_CUSTOMER_STATUSES = ('completed', 'archived')
+CUSTOMER_STATUSES = OPERATIONAL_CUSTOMER_STATUSES + HISTORICAL_CUSTOMER_STATUSES + ('deleted',)
+OPEN_PROJECT_STATUSES = ('planning', 'procurement', 'installation', 'commissioning', 'active', 'on_hold')
+
+
 def _is_admin(actor: CurrentSession) -> bool:
     return actor.user.is_super_admin
 
@@ -65,8 +82,11 @@ def _money(value: Decimal | float | int | None) -> str:
     return f'{Decimal(value or 0):.2f}'
 
 
-def _customer_query(actor: CurrentSession):
-    statement = select(AgentCustomer).where(AgentCustomer.company_id == actor.membership.company_id)
+def _customer_query(actor: CurrentSession, *, include_deleted: bool = False):
+    if include_deleted and _is_admin(actor):
+        statement = select(AgentCustomer).where(AgentCustomer.company_id == actor.membership.company_id)
+    else:
+        statement = select(AgentCustomer).where(operational_customer_filter(actor.membership.company_id))
     if not _is_admin(actor) and 'agents.view_all' not in actor.permissions and 'agents.manage' not in actor.permissions:
         if actor.role == 'customer':
             statement = statement.where(AgentCustomer.customer_membership_id == actor.membership.id)
@@ -77,8 +97,16 @@ def _customer_query(actor: CurrentSession):
     return statement
 
 
-def _load_customer(db: Session, actor: CurrentSession, customer_id: str) -> AgentCustomer:
-    customer = db.scalar(_customer_query(actor).where(AgentCustomer.id == customer_id))
+def _load_customer(
+    db: Session,
+    actor: CurrentSession,
+    customer_id: str,
+    *,
+    include_deleted: bool = False,
+) -> AgentCustomer:
+    customer = db.scalar(
+        _customer_query(actor, include_deleted=include_deleted).where(AgentCustomer.id == customer_id)
+    )
     if not customer:
         raise CustomerFlowNotFoundError('Customer not found')
     return customer
@@ -116,11 +144,21 @@ def _customer_summary(
         consumer_number=customer.consumer_number, electricity_provider=customer.electricity_provider,
         lead_source=customer.lead_source, payment_mode=payment_mode,
         outstanding_balance=_money(customer.outstanding_balance),
+        completed_at=customer.completed_at,
+        archived_at=customer.archived_at,
+        deleted_at=customer.deleted_at,
     )
 
 
-def _requests(db: Session, customer_id: str) -> list[QuotationRequest]:
-    return list(db.scalars(select(QuotationRequest).where(QuotationRequest.customer_id == customer_id).order_by(QuotationRequest.created_at.desc())).all())
+def _requests(db: Session, customer_id: str, *, limit: int | None = None) -> list[QuotationRequest]:
+    statement = (
+        select(QuotationRequest)
+        .where(QuotationRequest.customer_id == customer_id)
+        .order_by(QuotationRequest.created_at.desc())
+    )
+    if limit is not None:
+        statement = statement.limit(limit)
+    return list(db.scalars(statement).all())
 
 
 def _quotation_map(db: Session, requests: list[QuotationRequest]) -> dict[str, CustomerQuotation]:
@@ -250,6 +288,24 @@ def _payments(db: Session, customer_id: str) -> list[FlowPayment]:
     return [FlowPayment(id=row.id, transaction_number=row.transaction_number, transaction_date=row.transaction_date, direction=row.direction, amount=_money(row.amount), account_id=row.account_id, category_id=row.category_id, source_type=row.source_type, description=row.description, payment_method=row.payment_method, account_name=accounts[row.account_id].name if row.account_id in accounts else '', reference_number=row.reference_number, status=row.status) for row in rows]
 
 
+def _payment_totals(db: Session, customer_id: str) -> tuple[str, str]:
+    received = db.scalar(
+        select(func.coalesce(func.sum(FinanceTransaction.amount), 0)).where(
+            FinanceTransaction.customer_id == customer_id,
+            FinanceTransaction.status.in_(("posted", "reversed")),
+            FinanceTransaction.direction == "credit",
+        )
+    )
+    refunded = db.scalar(
+        select(func.coalesce(func.sum(FinanceTransaction.amount), 0)).where(
+            FinanceTransaction.customer_id == customer_id,
+            FinanceTransaction.status.in_(("posted", "reversed")),
+            FinanceTransaction.direction == "debit",
+        )
+    )
+    return _money(received), _money(refunded)
+
+
 def _loan(db: Session, project: CustomerProject | None) -> FlowLoan | None:
     if not project:
         return None
@@ -275,27 +331,87 @@ def list_customers(
     *,
     page: int = 1,
     page_size: int = 50,
+    status: str | None = None,
+    query: str | None = None,
+    payment_mode: str | None = None,
 ) -> CustomerFlowList:
+    normalized_status = (status or '').strip().lower()
+    if normalized_status and normalized_status not in CUSTOMER_STATUSES and normalized_status != 'all':
+        raise CustomerFlowConflictError('Unsupported customer status filter')
+    if normalized_status == 'deleted' and not _is_admin(actor):
+        raise CustomerFlowForbiddenError('Deleted customers are visible only to Super Admin')
+
+    term = (query or '').strip()
+    include_deleted = normalized_status == 'deleted' and _is_admin(actor)
+    statement = _customer_query(actor, include_deleted=include_deleted)
+    if normalized_status and normalized_status != 'all':
+        statement = statement.where(AgentCustomer.status == normalized_status)
+    elif not term:
+        # Hot/operational data only by default. Historical records are pulled by
+        # explicit status filters or search rather than loaded into the browser.
+        statement = statement.where(AgentCustomer.status.in_(OPERATIONAL_CUSTOMER_STATUSES))
+
+    normalized_payment = (payment_mode or '').strip().lower()
+    if normalized_payment == 'remaining':
+        statement = statement.where(AgentCustomer.outstanding_balance > 0)
+    elif normalized_payment in {'cash', 'loan'}:
+        statement = statement.where(exists(
+            select(CustomerProject.id).where(
+                CustomerProject.company_id == actor.membership.company_id,
+                CustomerProject.customer_id == AgentCustomer.id,
+                CustomerProject.payment_mode == normalized_payment,
+            )
+        ))
+    elif normalized_payment and normalized_payment != 'all':
+        raise CustomerFlowConflictError('Unsupported payment filter')
+
+    if term:
+        like = f'%{term.lower()}%'
+        statement = statement.where(or_(
+            func.lower(AgentCustomer.customer_name).like(like),
+            func.lower(AgentCustomer.email).like(like),
+            func.lower(AgentCustomer.phone).like(like),
+            func.lower(AgentCustomer.alternate_phone).like(like),
+            func.lower(AgentCustomer.consumer_number).like(like),
+            func.lower(AgentCustomer.project_name).like(like),
+            func.lower(AgentCustomer.id).like(like),
+        ))
+        if not _is_admin(actor):
+            statement = statement.where(AgentCustomer.status != 'deleted')
+
+    total = int(db.scalar(select(func.count()).select_from(statement.subquery())) or 0)
     offset = (page - 1) * page_size
-    customer_rows = list(db.scalars(
-        _customer_query(actor)
+    customers = list(db.scalars(
+        statement
         .order_by(AgentCustomer.updated_at.desc(), AgentCustomer.id.desc())
         .offset(offset)
-        .limit(page_size + 1)
+        .limit(page_size)
     ).all())
-    has_more = len(customer_rows) > page_size
-    customers = customer_rows[:page_size]
+    has_more = offset + len(customers) < total
     customer_ids = [customer.id for customer in customers]
-    project_rows = db.execute(
-        select(CustomerProject.customer_id, CustomerProject.payment_mode)
-        .where(
-            CustomerProject.customer_id.in_(customer_ids),
+    if customer_ids:
+        ranked_projects = (
+            select(
+                CustomerProject.customer_id.label('customer_id'),
+                CustomerProject.payment_mode.label('payment_mode'),
+                func.row_number().over(
+                    partition_by=CustomerProject.customer_id,
+                    order_by=(CustomerProject.created_at.desc(), CustomerProject.id.desc()),
+                ).label('row_number'),
+            )
+            .where(
+                CustomerProject.company_id == actor.membership.company_id,
+                CustomerProject.customer_id.in_(customer_ids),
+            )
+            .subquery()
         )
-        .order_by(CustomerProject.created_at.desc())
-    ).all() if customer_ids else []
-    payment_modes: dict[str, str] = {}
-    for customer_id, payment_mode in project_rows:
-        payment_modes.setdefault(customer_id, payment_mode or "")
+        project_rows = db.execute(
+            select(ranked_projects.c.customer_id, ranked_projects.c.payment_mode)
+            .where(ranked_projects.c.row_number == 1)
+        ).all()
+    else:
+        project_rows = []
+    payment_modes = {str(customer_id): payment_mode or '' for customer_id, payment_mode in project_rows}
     profile_ids = {customer.agent_profile_id for customer in customers}
     profiles = {
         profile.id: profile
@@ -306,19 +422,33 @@ def list_customers(
         items=[
             _customer_summary(
                 customer,
-                payment_modes.get(customer.id, ""),
+                payment_modes.get(customer.id, ''),
                 profiles.get(customer.agent_profile_id),
             )
             for customer in customers
         ],
         next_cursor=str(page + 1) if has_more else None,
         sync_cursor=sync_cursor,
+        page=page,
+        page_size=page_size,
+        total=total,
     )
 
 
-def get_snapshot(db: Session, actor: CurrentSession, customer_id: str) -> CustomerFlowSnapshot:
+def get_snapshot(
+    db: Session,
+    actor: CurrentSession,
+    customer_id: str,
+    *,
+    sections: set[str] | None = None,
+) -> CustomerFlowSnapshot:
     customer = _load_customer(db, actor, customer_id)
-    requests = _requests(db, customer.id)
+    requested_sections = sections or {"overview"}
+    # Keep the initial customer view compact. Full workflow history is requested
+    # only by the projects/quotations tabs, while documents/payments/loan/audit
+    # are lazy-loaded by their own tabs.
+    full_workflow = bool(requested_sections & {"projects", "quotations"})
+    requests = _requests(db, customer.id, limit=None if full_workflow else 1)
     quotation_by_request = _quotation_map(db, requests)
     quotations = [quotation_by_request[row.id] for row in requests if row.id in quotation_by_request]
     project_by_quotation = _project_map(db, quotations)
@@ -336,16 +466,27 @@ def get_snapshot(db: Session, actor: CurrentSession, customer_id: str) -> Custom
             projects.append(_project_summary(request, project))
             if latest_project_row is None:
                 latest_project_row = project
+
     material = db.scalar(select(MaterialRequest).where(MaterialRequest.project_id == latest_project_row.id)) if latest_project_row else None
+    total_received, total_refunded = _payment_totals(db, customer.id)
     return CustomerFlowSnapshot(
         customer=_customer_summary(
             customer,
             latest_project_row.payment_mode if latest_project_row else "",
             _profile(db, customer),
-        ), sites=sites, quotations=quotation_summaries, projects=projects,
-        project=projects[0] if projects else None, material_request=_material_summary(material) if material else None,
-        timeline=_timeline(db, latest_project_row), documents=_documents(db, customer.id), payments=_payments(db, customer.id),
-        loan=_loan(db, latest_project_row), activity=_activity(db, customer.id),
+        ),
+        sites=sites,
+        quotations=quotation_summaries,
+        projects=projects,
+        project=projects[0] if projects else None,
+        material_request=_material_summary(material) if material else None,
+        timeline=_timeline(db, latest_project_row) if requested_sections & {"overview", "timeline"} else [],
+        documents=_documents(db, customer.id) if "documents" in requested_sections else [],
+        payments=_payments(db, customer.id) if "payments" in requested_sections else [],
+        loan=_loan(db, latest_project_row) if "loan" in requested_sections else None,
+        activity=_activity(db, customer.id) if "activity" in requested_sections else [],
+        total_received=total_received,
+        total_refunded=total_refunded,
     )
 
 

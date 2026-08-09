@@ -126,3 +126,18 @@ class UpdateRoleRequest(BaseModel):
         if values is None:
             return None
         return sorted({value.strip().lower() for value in values if value.strip()})
+
+
+class DataHealthCheck(BaseModel):
+    key: str
+    label: str
+    severity: str
+    count: int
+    description: str
+    sample_ids: list[str] = Field(default_factory=list)
+
+
+class DataHealthSummary(BaseModel):
+    generated_at: datetime
+    issue_count: int
+    checks: list[DataHealthCheck] = Field(default_factory=list)

@@ -20,7 +20,8 @@ MIGRATION_008 = "008_measured_read_path_indexes"
 MIGRATION_009 = "009_transactional_migration_framework"
 MIGRATION_010 = "010_finance_aggregate_indexes"
 MIGRATION_011 = "011_tasks_and_live_notifications"
-CURRENT_MIGRATION_ID = MIGRATION_011
+MIGRATION_012 = "012_super_admin_lifecycle_and_inventory_reversals"
+CURRENT_MIGRATION_ID = MIGRATION_012
 MIGRATION_LOCK_KEY = 7_336_526_977_082_001
 
 # These IDs were written by earlier released versions whose migration logic was
@@ -40,6 +41,7 @@ ACTIVE_MIGRATION_IDS = (
     MIGRATION_009,
     MIGRATION_010,
     MIGRATION_011,
+    MIGRATION_012,
 )
 MIGRATION_IDS = HISTORICAL_MIGRATION_IDS + ACTIVE_MIGRATION_IDS
 MIGRATION_CHECKSUMS = {
@@ -53,6 +55,7 @@ BACKUP_REQUIRED_MIGRATIONS = {
     MIGRATION_008,
     MIGRATION_010,
     MIGRATION_011,
+    MIGRATION_012,
 }
 
 MIGRATED_PERMISSIONS = {
@@ -185,6 +188,35 @@ INDEXES = [
     ),
 ]
 
+LIFECYCLE_COLUMN_DEFINITIONS = {
+    "agent_customers": {
+        "completed_at": "TIMESTAMPTZ",
+        "archived_at": "TIMESTAMPTZ",
+        "deleted_at": "TIMESTAMPTZ",
+        "deleted_by": "VARCHAR(36) REFERENCES memberships(id) ON DELETE SET NULL",
+        "delete_reason": "VARCHAR(400) NOT NULL DEFAULT ''",
+        "restored_at": "TIMESTAMPTZ",
+        "restored_by": "VARCHAR(36) REFERENCES memberships(id) ON DELETE SET NULL",
+    },
+    "inventory_movements": {
+        "reversed_movement_id": "VARCHAR(36) REFERENCES inventory_movements(id) ON DELETE RESTRICT",
+        "correction_of_movement_id": "VARCHAR(36) REFERENCES inventory_movements(id) ON DELETE RESTRICT",
+        "reason": "VARCHAR(400) NOT NULL DEFAULT ''",
+    },
+}
+
+LIFECYCLE_INDEXES = (
+    ("ix_agent_customers_company_status_updated", "agent_customers", "company_id,status,updated_at"),
+    ("ix_agent_customers_company_deleted", "agent_customers", "company_id,deleted_at"),
+    ("ix_agent_customers_company_completed", "agent_customers", "company_id,completed_at"),
+    ("ix_agent_customers_company_archived", "agent_customers", "company_id,archived_at"),
+    ("ix_inventory_movements_reversed_movement_id", "inventory_movements", "reversed_movement_id"),
+    ("ix_inventory_movements_correction_of_movement_id", "inventory_movements", "correction_of_movement_id"),
+    ("ix_inventory_movement_company_status_created", "inventory_movements", "company_id,status,created_at"),
+    ("ix_audit_events_company_event_created", "audit_events", "company_id,event,created_at"),
+    ("ix_audit_events_company_user_created", "audit_events", "company_id,user_id,created_at"),
+)
+
 
 
 def _column_names(inspector, table: str) -> set[str]:
@@ -267,6 +299,33 @@ def _apply_columns_and_indexes(connection) -> None:
             connection.execute(text(
                 f'CREATE INDEX IF NOT EXISTS "{index_name}" ON "{table}" ({column_sql})'
             ))
+
+
+def _apply_lifecycle_and_reversal_schema(connection) -> None:
+    inspector = inspect(connection)
+    for table, columns in LIFECYCLE_COLUMN_DEFINITIONS.items():
+        if not inspector.has_table(table):
+            continue
+        existing = _column_names(inspector, table)
+        for name, definition in columns.items():
+            if name not in existing:
+                connection.execute(text(
+                    f'ALTER TABLE "{table}" ADD COLUMN "{name}" {definition}'
+                ))
+
+    inspector = inspect(connection)
+    if inspector.has_table('agent_customers'):
+        connection.execute(text(
+            "UPDATE agent_customers SET completed_at = COALESCE(completed_at, updated_at, created_at) "
+            "WHERE status = 'completed' AND completed_at IS NULL"
+        ))
+    for index_name, table, columns in LIFECYCLE_INDEXES:
+        if not inspector.has_table(table):
+            continue
+        column_sql = ", ".join(f'"{item.strip()}"' for item in columns.split(","))
+        connection.execute(text(
+            f'CREATE INDEX IF NOT EXISTS "{index_name}" ON "{table}" ({column_sql})'
+        ))
 
 def _migrate_permissions(connection, inspector) -> None:
     required_tables = {"permissions", "roles", "role_permissions"}
@@ -580,6 +639,10 @@ def run_migrations(*, backup_reference: str | None = None) -> None:
                 _create_tasks_schema(connection)
                 _migrate_permissions(connection, inspect(connection))
                 _record_migration(connection, MIGRATION_011)
+
+            if MIGRATION_012 not in applied:
+                _apply_lifecycle_and_reversal_schema(connection)
+                _record_migration(connection, MIGRATION_012)
     except Exception:
         for staged_path, original_path in reversed(staged_deletes):
             storage.restore_staged_delete(staged_path, original_path)

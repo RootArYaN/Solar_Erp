@@ -8,6 +8,9 @@ export type PaginatedList<T> = {
   items: T[]
   next_cursor: Cursor | null
   sync_cursor: Cursor | null
+  page?: number
+  page_size?: number
+  total?: number
 }
 
 export type FieldErrors = Record<string, string[]>

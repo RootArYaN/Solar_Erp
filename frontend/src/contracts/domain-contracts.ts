@@ -34,7 +34,7 @@ export type CustomerContact = {
   is_primary: boolean
 }
 
-export type CustomerStatus = 'lead' | 'registered' | 'quotation_requested' | 'qualified' | 'active' | 'on_hold' | 'completed'
+export type CustomerStatus = 'lead' | 'registered' | 'quotation_requested' | 'qualified' | 'active' | 'on_hold' | 'completed' | 'archived' | 'deleted'
 
 export type Customer = EntityBase & {
   display_name: string
@@ -56,6 +56,9 @@ export type Customer = EntityBase & {
   lead_source: string
   payment_mode: '' | 'cash' | 'loan'
   outstanding_balance: string
+  completed_at?: UTCTimestamp | null
+  archived_at?: UTCTimestamp | null
+  deleted_at?: UTCTimestamp | null
 }
 
 export type SiteStatus = 'survey_pending' | 'surveyed' | 'quotation_ready' | 'approved' | 'converted'
@@ -234,4 +237,6 @@ export type CustomerFlowSnapshot = {
   payments: CustomerPayment[]
   loan: CustomerLoan | null
   activity: CustomerActivity[]
+  total_received: string
+  total_refunded: string
 }

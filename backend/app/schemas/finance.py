@@ -142,6 +142,18 @@ class AccountTransferRequest(BaseModel):
         return self
 
 
+
+
+class VoidBillRequest(BaseModel):
+    transaction_date: date
+    reason: str = Field(min_length=3, max_length=320)
+
+    @field_validator('reason')
+    @classmethod
+    def clean_reason(cls, value: str) -> str:
+        return ' '.join(value.split())
+
+
 class BillPaymentSummary(BaseModel):
     id: str
     transaction_id: str

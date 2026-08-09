@@ -16,6 +16,7 @@ export function AgentTransactionDialog({
   onClose: () => void
   onSubmit: (value: CreateAgentTransactionInput) => Promise<void>
 }) {
+  const finalized = Boolean(transaction && transaction.approval_status !== 'pending')
   const [entrySide, setEntrySide] = useState<EntrySide>(transaction?.debit ? 'debit' : 'credit')
   const [transactionType, setTransactionType] = useState(transaction?.transaction_type || 'commission')
   const [reference, setReference] = useState(transaction?.reference || '')
@@ -38,12 +39,16 @@ export function AgentTransactionDialog({
   }
 
   return (
-    <Modal title={transaction ? `Edit ${transaction.reference || 'agent transaction'}` : 'Submit transaction'} onClose={onClose}>
+    <Modal
+      title={transaction ? `Edit ${transaction.reference || 'agent transaction'}` : 'Submit transaction'}
+      subtitle={finalized ? 'Finalized ledger values are locked. Only reference and description metadata can be corrected.' : undefined}
+      onClose={onClose}
+    >
       <form className="admin-form" onSubmit={submit}>
         <div className="admin-form__grid">
           <label className="field">
             <span>Transaction date</span>
-            <div className="field__control"><CalendarDays size={17} /><input required type="date" value={transactionDate} onChange={(event) => setTransactionDate(event.target.value)} /></div>
+            <div className="field__control"><CalendarDays size={17} /><input required disabled={finalized} type="date" value={transactionDate} onChange={(event) => setTransactionDate(event.target.value)} /></div>
           </label>
           <label className="field">
             <span>Reference</span>
@@ -55,7 +60,7 @@ export function AgentTransactionDialog({
           <label className="field">
             <span>Movement type</span>
             <div className="field__control field__control--select">
-              <select value={transactionType} onChange={(event) => setTransactionType(event.target.value)}>
+              <select disabled={finalized} value={transactionType} onChange={(event) => setTransactionType(event.target.value)}>
                 <option value="commission">Commission</option>
                 <option value="collection">Collection adjustment</option>
                 <option value="expense">Expense</option>
@@ -67,7 +72,7 @@ export function AgentTransactionDialog({
           <label className="field">
             <span>Debit or credit</span>
             <div className="field__control field__control--select">
-              <select value={entrySide} onChange={(event) => setEntrySide(event.target.value as EntrySide)}>
+              <select disabled={finalized} value={entrySide} onChange={(event) => setEntrySide(event.target.value as EntrySide)}>
                 <option value="credit">Credit — increase balance</option>
                 <option value="debit">Debit — reduce balance</option>
               </select>
@@ -77,7 +82,7 @@ export function AgentTransactionDialog({
 
         <label className="field">
           <span>Amount</span>
-          <div className="field__control"><IndianRupee size={17} /><input required min="0.01" step="0.01" type="number" value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="0.00" /></div>
+          <div className="field__control"><IndianRupee size={17} /><input required disabled={finalized} min="0.01" step="0.01" type="number" value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="0.00" /></div>
         </label>
 
         <label className="field">

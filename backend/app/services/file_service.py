@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from pathlib import Path
 from uuid import uuid4
 
 from fastapi import UploadFile
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
-from app.api.deps import CurrentSession
+if TYPE_CHECKING:
+    from app.api.deps import CurrentSession
 from app.core.config import settings
 from app.models.agent import AgentCustomer, AgentProfile
 from app.models.finance import Bill
@@ -15,7 +18,14 @@ from app.models.operations import GeneratedDocumentPack, Poster
 from app.models.system import StoredFile
 from app.models.workflow import CustomerProject
 from app.schemas.files import DocumentCustomerOption, StoredFileList, StoredFileSummary
-from app.services.access_service import AccessError, get_customer, get_project, is_admin
+from app.services.access_service import (
+    AccessError,
+    get_customer,
+    get_project,
+    is_admin,
+    operational_customer_filter,
+    operational_reference_filter,
+)
 from app.services.audit_service import write_event
 from app.services.file_validation import (
     ALLOWED_EXTENSIONS,
@@ -104,36 +114,44 @@ def _customer_filter(actor: CurrentSession):
 
 
 def list_document_customers(db: Session, actor: CurrentSession) -> list[DocumentCustomerOption]:
-    customers = list(db.scalars(
-        select(AgentCustomer)
+    company_id = actor.membership.company_id
+    ranked_projects = (
+        select(
+            CustomerProject.id.label("project_id"),
+            CustomerProject.customer_id.label("customer_id"),
+            func.row_number().over(
+                partition_by=CustomerProject.customer_id,
+                order_by=(CustomerProject.created_at.desc(), CustomerProject.id.desc()),
+            ).label("row_number"),
+        )
+        .where(CustomerProject.company_id == company_id)
+        .subquery()
+    )
+    rows = db.execute(
+        select(AgentCustomer, CustomerProject)
+        .outerjoin(
+            ranked_projects,
+            and_(
+                ranked_projects.c.customer_id == AgentCustomer.id,
+                ranked_projects.c.row_number == 1,
+            ),
+        )
+        .outerjoin(CustomerProject, CustomerProject.id == ranked_projects.c.project_id)
         .where(
-            AgentCustomer.company_id == actor.membership.company_id,
+            operational_customer_filter(company_id),
             _customer_filter(actor),
         )
-        .order_by(AgentCustomer.customer_name.asc())
-    ).all())
-    if not customers:
-        return []
-    projects = list(db.scalars(
-        select(CustomerProject)
-        .where(
-            CustomerProject.company_id == actor.membership.company_id,
-            CustomerProject.customer_id.in_([row.id for row in customers]),
-        )
-        .order_by(CustomerProject.created_at.desc())
-    ).all())
-    latest_project: dict[str, CustomerProject] = {}
-    for project in projects:
-        latest_project.setdefault(project.customer_id, project)
+        .order_by(AgentCustomer.customer_name.asc(), AgentCustomer.id.asc())
+    ).all()
     return [
         DocumentCustomerOption(
-            id=row.id,
-            customer_name=row.customer_name,
-            project_id=latest_project[row.id].id if row.id in latest_project else None,
-            project_number=latest_project[row.id].project_number if row.id in latest_project else None,
-            project_status=latest_project[row.id].status if row.id in latest_project else None,
+            id=customer.id,
+            customer_name=customer.customer_name,
+            project_id=project.id if project else None,
+            project_number=project.project_number if project else None,
+            project_status=project.status if project else None,
         )
-        for row in customers
+        for customer, project in rows
     ]
 
 
@@ -325,7 +343,14 @@ def list_files(
     if customer_id:
         get_customer(db, actor, customer_id)
 
-    filters = [StoredFile.company_id == actor.membership.company_id]
+    filters = [
+        StoredFile.company_id == actor.membership.company_id,
+        operational_reference_filter(
+            actor.membership.company_id,
+            customer_column=StoredFile.customer_id,
+            project_column=StoredFile.project_id,
+        ),
+    ]
     if owner_type:
         if owner_type == "customer_document":
             filters.append(or_(
@@ -343,7 +368,7 @@ def list_files(
 
     if owner_type != "finance_bill" and not is_admin(actor) and "agents.view_all" not in actor.permissions and "agents.manage" not in actor.permissions:
         customer_ids = select(AgentCustomer.id).where(
-            AgentCustomer.company_id == actor.membership.company_id,
+            operational_customer_filter(actor.membership.company_id),
             _customer_filter(actor),
         )
         filters.append(or_(
@@ -375,6 +400,11 @@ def get_file(db: Session, actor: CurrentSession, file_id: str) -> StoredFile:
                 Bill.id == row.owner_id,
                 Bill.company_id == actor.membership.company_id,
                 Bill.file_id == row.id,
+                operational_reference_filter(
+                    actor.membership.company_id,
+                    customer_column=Bill.customer_id,
+                    project_column=Bill.project_id,
+                ),
             ))
             if not bill:
                 raise FileNotFoundError("Bill attachment not found")

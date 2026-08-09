@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.orm import Session, joinedload, selectinload
 
-from app.api.deps import CurrentSession
+if TYPE_CHECKING:
+    from app.api.deps import CurrentSession
 from app.models.auth import Membership, Role, User
 from app.models.tasks import Task, TaskAssignment
 from app.schemas.tasks import (
@@ -20,6 +23,7 @@ from app.schemas.tasks import (
     UpdateTaskAssignmentRequest,
     UpdateTaskRequest,
 )
+from app.services.access_service import visible_customer_ids, visible_project_ids
 from app.services.audit_service import write_event
 
 
@@ -27,6 +31,21 @@ class TaskServiceError(Exception):
     def __init__(self, message: str, status_code: int = 400):
         super().__init__(message)
         self.status_code = status_code
+
+
+def _operational_task_filter(company_id: str):
+    return and_(
+        or_(
+            Task.context_type != "customers",
+            Task.context_id.is_(None),
+            Task.context_id.in_(visible_customer_ids(company_id)),
+        ),
+        or_(
+            Task.context_type != "projects",
+            Task.context_id.is_(None),
+            Task.context_id.in_(visible_project_ids(company_id)),
+        ),
+    )
 
 
 TASK_LOAD_OPTIONS = (
@@ -64,7 +83,11 @@ def _load_task(
 ) -> Task:
     query = (
         select(Task)
-        .where(Task.id == task_id, Task.company_id == actor.membership.company_id)
+        .where(
+            Task.id == task_id,
+            Task.company_id == actor.membership.company_id,
+            _operational_task_filter(actor.membership.company_id),
+        )
         .options(*TASK_LOAD_OPTIONS)
     )
     if for_update:
@@ -229,7 +252,7 @@ def list_tasks(
         raise TaskServiceError("Team task access requires assignment permission", 403)
 
     actor_id = actor.membership.id
-    filters = [Task.company_id == actor.membership.company_id]
+    filters = [Task.company_id == actor.membership.company_id, _operational_task_filter(actor.membership.company_id)]
     if scope == "mine":
         filters.append(Task.assignments.any(TaskAssignment.membership_id == actor_id))
     if q:
@@ -306,6 +329,7 @@ def task_metrics(db: Session, actor: CurrentSession) -> TaskMetrics:
         .join(Task, Task.id == TaskAssignment.task_id)
         .where(
             Task.company_id == actor.membership.company_id,
+            _operational_task_filter(actor.membership.company_id),
             TaskAssignment.membership_id == actor.membership.id,
         )
     ).one()
@@ -324,7 +348,10 @@ def task_metrics(db: Session, actor: CurrentSession) -> TaskMetrics:
             )
             .select_from(Task)
             .join(TaskAssignment, TaskAssignment.task_id == Task.id)
-            .where(Task.company_id == actor.membership.company_id)
+            .where(
+                Task.company_id == actor.membership.company_id,
+                _operational_task_filter(actor.membership.company_id),
+            )
         ).one()
         team_open = int(team[0] or 0)
         team_overdue = int(team[1] or 0)

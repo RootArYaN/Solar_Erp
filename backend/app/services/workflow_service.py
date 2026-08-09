@@ -1,17 +1,30 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import json
 from datetime import UTC, datetime
 from decimal import Decimal, ROUND_HALF_UP
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, joinedload
 
-from app.api.deps import CurrentSession
+
+if TYPE_CHECKING:
+    from app.api.deps import CurrentSession
+
 from app.models.agent import AgentCustomer, AgentProfile, AgentTransaction
 from app.models.auth import Membership
 from app.models.workflow import CustomerProject, CustomerQuotation, QuotationRequest, TransactionApproval
+from app.services.access_service import (
+    operational_customer_filter,
+    visible_customer_ids,
+    visible_project_ids,
+    visible_quotation_ids,
+    visible_quotation_request_ids,
+)
 from app.services.audit_service import write_event
+from app.services.customer_lifecycle_service import CustomerLifecycleError, reactivate_for_activity
 from app.schemas.workflow import (
     ApprovalCenterResponse,
     ApprovalDecisionRequest,
@@ -74,7 +87,7 @@ def _is_admin(actor: CurrentSession) -> bool:
 def _load_customer(db: Session, actor: CurrentSession, customer_id: str) -> AgentCustomer:
     customer = db.scalar(select(AgentCustomer).where(
         AgentCustomer.id == customer_id,
-        AgentCustomer.company_id == actor.membership.company_id,
+        operational_customer_filter(actor.membership.company_id),
     ))
     if not customer:
         raise WorkflowNotFoundError("Customer not found")
@@ -100,6 +113,10 @@ def create_quotation_request(
 ) -> QuotationRequestSummary:
     customer = _load_customer(db, actor, customer_id)
     _assert_customer_access(db, actor, customer)
+    try:
+        reactivate_for_activity(db, actor, customer.id, source='quotation_request')
+    except CustomerLifecycleError as exc:
+        raise WorkflowConflictError(str(exc)) from exc
 
     open_request = db.scalar(select(QuotationRequest).where(
         QuotationRequest.customer_id == customer.id,
@@ -142,6 +159,7 @@ def generate_quotation(
     request = db.scalar(select(QuotationRequest).where(
         QuotationRequest.id == request_id,
         QuotationRequest.company_id == actor.membership.company_id,
+        QuotationRequest.id.in_(visible_quotation_request_ids(actor.membership.company_id)),
     ))
     if not request:
         raise WorkflowNotFoundError("Quotation request not found")
@@ -218,14 +236,22 @@ def decide_quotation(
     quotation = db.scalar(select(CustomerQuotation).where(
         CustomerQuotation.id == quotation_id,
         CustomerQuotation.company_id == actor.membership.company_id,
+        CustomerQuotation.id.in_(visible_quotation_ids(actor.membership.company_id)),
     ))
     if not quotation:
         raise WorkflowNotFoundError("Quotation not found")
     if quotation.status != "pending_approval":
         raise WorkflowConflictError("Only pending quotations can be approved or rejected")
 
-    request = db.get(QuotationRequest, quotation.request_id)
-    customer = db.get(AgentCustomer, quotation.customer_id)
+    request = db.scalar(select(QuotationRequest).where(
+        QuotationRequest.id == quotation.request_id,
+        QuotationRequest.company_id == actor.membership.company_id,
+        QuotationRequest.id.in_(visible_quotation_request_ids(actor.membership.company_id)),
+    ))
+    customer = db.scalar(select(AgentCustomer).where(
+        AgentCustomer.id == quotation.customer_id,
+        operational_customer_filter(actor.membership.company_id),
+    ))
     if not request or not customer:
         raise WorkflowNotFoundError("Quotation workflow is incomplete")
 
@@ -304,12 +330,22 @@ def decide_transaction(
     if not _is_admin(actor) and not {"agents.transactions.approve", "finance.manage"}.intersection(actor.permissions):
         raise WorkflowForbiddenError("You cannot approve agent transactions")
 
-    approval = db.scalar(select(TransactionApproval).where(
-        TransactionApproval.id == approval_id,
-        TransactionApproval.company_id == actor.membership.company_id,
-    ))
-    if not approval:
+    row = db.execute(
+        select(TransactionApproval, AgentTransaction)
+        .join(AgentTransaction, AgentTransaction.id == TransactionApproval.transaction_id)
+        .where(
+            TransactionApproval.id == approval_id,
+            TransactionApproval.company_id == actor.membership.company_id,
+            AgentTransaction.company_id == actor.membership.company_id,
+            or_(
+                AgentTransaction.project_id.is_(None),
+                AgentTransaction.project_id.in_(visible_project_ids(actor.membership.company_id)),
+            ),
+        )
+    ).one_or_none()
+    if not row:
         raise WorkflowNotFoundError("Transaction approval not found")
+    approval, transaction = row
     if approval.status != "pending":
         raise WorkflowConflictError("Only pending transactions can be approved or rejected")
 
@@ -317,7 +353,6 @@ def decide_transaction(
     approval.decided_by_membership_id = actor.membership.id
     approval.decided_at = datetime.now(UTC)
     approval.decision_comment = payload.comment
-    transaction = db.get(AgentTransaction, approval.transaction_id)
     write_event(
         db, company_id=approval.company_id, event=f"transaction.{payload.decision}",
         entity="agent_transaction", entity_id=approval.transaction_id, actor=actor,
@@ -345,7 +380,10 @@ def get_approval_center(
     company_id = actor.membership.company_id
     quotation_requests = list(db.scalars(
         select(QuotationRequest)
-        .where(QuotationRequest.company_id == company_id)
+        .where(
+            QuotationRequest.company_id == company_id,
+            QuotationRequest.customer_id.in_(visible_customer_ids(company_id)),
+        )
         .order_by(QuotationRequest.created_at.desc(), QuotationRequest.id.desc())
         .limit(quotation_limit + 1)
     ).all())
@@ -354,9 +392,11 @@ def get_approval_center(
 
     transaction_approvals = list(db.scalars(
         select(TransactionApproval)
+        .join(AgentTransaction, AgentTransaction.id == TransactionApproval.transaction_id)
         .where(
             TransactionApproval.company_id == company_id,
             TransactionApproval.status == "pending",
+            or_(AgentTransaction.project_id.is_(None), AgentTransaction.project_id.in_(visible_project_ids(company_id))),
         )
         .order_by(TransactionApproval.created_at.asc(), TransactionApproval.id.asc())
         .limit(transaction_limit + 1)
@@ -367,7 +407,10 @@ def get_approval_center(
     customer_ids = {row.customer_id for row in quotation_requests}
     customers = {
         row.id: row
-        for row in db.scalars(select(AgentCustomer).where(AgentCustomer.id.in_(customer_ids))).all()
+        for row in db.scalars(select(AgentCustomer).where(
+            AgentCustomer.id.in_(customer_ids),
+            operational_customer_filter(company_id),
+        )).all()
     } if customer_ids else {}
 
     transaction_ids = {row.transaction_id for row in transaction_approvals}
@@ -482,8 +525,13 @@ def _make_quotation_request_summary(
 
 
 def _quotation_request_summary(db: Session, request: QuotationRequest) -> QuotationRequestSummary:
-    customer = db.get(AgentCustomer, request.customer_id)
-    profile = db.get(AgentProfile, customer.agent_profile_id) if customer else None
+    customer = db.scalar(select(AgentCustomer).where(
+        AgentCustomer.id == request.customer_id,
+        operational_customer_filter(request.company_id),
+    ))
+    if not customer:
+        raise WorkflowNotFoundError("Customer not found")
+    profile = db.get(AgentProfile, customer.agent_profile_id)
     membership = db.scalar(
         select(Membership)
         .where(Membership.id == profile.membership_id)
@@ -654,11 +702,19 @@ def _get_project_context(db: Session, actor: CurrentSession, project_id: str):
     project = db.scalar(select(CustomerProject).where(
         CustomerProject.id == project_id,
         CustomerProject.company_id == actor.membership.company_id,
+        CustomerProject.id.in_(visible_project_ids(actor.membership.company_id)),
     ))
     if not project:
         raise WorkflowNotFoundError("Project not found")
-    customer = db.get(AgentCustomer, project.customer_id)
-    quotation = db.get(CustomerQuotation, project.quotation_id)
+    customer = db.scalar(select(AgentCustomer).where(
+        AgentCustomer.id == project.customer_id,
+        operational_customer_filter(actor.membership.company_id),
+    ))
+    quotation = db.scalar(select(CustomerQuotation).where(
+        CustomerQuotation.id == project.quotation_id,
+        CustomerQuotation.company_id == actor.membership.company_id,
+        CustomerQuotation.id.in_(visible_quotation_ids(actor.membership.company_id)),
+    ))
     if not customer or not quotation:
         raise WorkflowNotFoundError("Project workflow is incomplete")
 
@@ -723,7 +779,10 @@ def list_project_timelines(
         select(CustomerProject, AgentCustomer, CustomerQuotation)
         .join(AgentCustomer, AgentCustomer.id == CustomerProject.customer_id)
         .join(CustomerQuotation, CustomerQuotation.id == CustomerProject.quotation_id)
-        .where(CustomerProject.company_id == actor.membership.company_id)
+        .where(
+            CustomerProject.company_id == actor.membership.company_id,
+            operational_customer_filter(actor.membership.company_id),
+        )
         .order_by(CustomerProject.updated_at.desc(), CustomerProject.id.desc())
         .offset((page - 1) * page_size)
         .limit(page_size)

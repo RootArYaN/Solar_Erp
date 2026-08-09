@@ -14,10 +14,8 @@
   --ui-control-focus: #d19a32;
   --ui-control-focus-ring: rgba(209, 154, 50, .14);
 }
-
 /* Dialogs and confirmation alerts use the same spacing and viewport rules. */
-.modal-layer,
-.alert-dialog-layer {
+.modal-layer {
   position: fixed;
   inset: 0;
   display: grid;
@@ -29,7 +27,6 @@
 }
 
 .modal-layer { z-index: 80; }
-.alert-dialog-layer { z-index: 200; }
 
 .modal-layer .modal-card {
   width: min(var(--ui-dialog-width), 100%);
@@ -96,39 +93,6 @@
   color: var(--muted);
   font-size: 11px;
   line-height: 1.4;
-}
-
-.alert-dialog {
-  width: min(440px, 100%);
-  padding: 18px;
-  border-radius: 16px;
-}
-
-.alert-dialog__content {
-  grid-template-columns: 40px minmax(0, 1fr) 32px;
-  gap: 12px;
-}
-
-.alert-dialog__icon {
-  width: 40px;
-  height: 40px;
-  border-radius: 11px;
-}
-
-.alert-dialog__close {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-}
-
-.alert-dialog__body h2 {
-  font-size: 18px;
-  line-height: 1.3;
-}
-
-.alert-dialog__body p {
-  font-size: 12px;
-  line-height: 1.5;
 }
 
 .alert-dialog footer :is(.primary-button, .secondary-button, .danger-button),
@@ -527,11 +491,5 @@ body.app-preview-mobile .alert-dialog footer button {
 
   .toast__icon {
     display: none;
-  }
-}
-
-@media (max-width: 780px) {
-  .layout-view-switch {
-    display: none !important;
   }
 }

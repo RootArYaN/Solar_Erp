@@ -254,7 +254,7 @@ export function AppShell({ session, onLogout }: { session: Session; onLogout: ()
               {openPopover === 'notifications' && (
                 <section className="shell-popover-panel notification-panel" role="dialog" aria-label="Notifications">
                   <header className="shell-popover-panel__header">
-                    <div><span>Workspace alerts</span><strong>Notifications</strong></div>
+                    <div><strong>Notifications</strong></div>
                     <span className="notification-summary">{notificationTotal} active</span>
                   </header>
                   <div className="notification-panel__list">
@@ -268,7 +268,7 @@ export function AppShell({ session, onLogout }: { session: Session; onLogout: ()
                       ? <div className="notification-panel__empty notification-panel__empty--warning"><Bell size={18} /><strong>Sync unavailable</strong><span>Open the relevant workspace to check current items.</span></div>
                       : <div className="notification-panel__empty"><CheckCircle2 size={18} /><strong>All clear</strong><span>No current action needs attention.</span></div>}
                   </div>
-                  <footer className="notification-panel__footer">Synced from current company tasks, approvals, due bills and document actions.</footer>
+
                 </section>
               )}
             </div>

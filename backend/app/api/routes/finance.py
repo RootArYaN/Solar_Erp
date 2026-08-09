@@ -4,7 +4,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
-from app.api.deps import CurrentSession, require_any_permissions
+from app.api.deps import CurrentSession, require_any_permissions, require_super_admin
 from app.core.config import settings
 from app.db.session import get_db
 from app.schemas.finance import (
@@ -31,6 +31,7 @@ from app.schemas.finance import (
     UpdateCompanyLoanRequest,
     UpdateFinanceTransactionRequest,
     UpsertCustomerLoanRequest,
+    VoidBillRequest,
 )
 from app.services import finance_service
 from app.services.audit_service import write_event
@@ -104,14 +105,14 @@ def patch_transaction(transaction_id: str, payload: UpdateFinanceTransactionRequ
 
 
 @router.post('/transactions/{transaction_id}/reverse', response_model=FinanceTransactionSummary, status_code=201)
-def reverse_transaction(transaction_id: str, payload: ReverseFinanceTransactionRequest, db: Session = Depends(get_db), session: CurrentSession = Depends(require_any_permissions('finance.manage'))):
+def reverse_transaction(transaction_id: str, payload: ReverseFinanceTransactionRequest, db: Session = Depends(get_db), session: CurrentSession = Depends(require_super_admin)):
     try: return finance_service.reverse_transaction(db, session, transaction_id, payload)
     except FinanceServiceError as exc: _raise(exc)
 
 
 @router.delete('/transactions/{transaction_id}', status_code=204)
-def delete_transaction(transaction_id: str, db: Session = Depends(get_db), session: CurrentSession = Depends(require_any_permissions('finance.manage'))):
-    try: return finance_service.delete_transaction(db, session, transaction_id)
+def delete_transaction(transaction_id: str, payload: ReverseFinanceTransactionRequest, db: Session = Depends(get_db), session: CurrentSession = Depends(require_super_admin)):
+    try: return finance_service.delete_transaction(db, session, transaction_id, payload)
     except FinanceServiceError as exc: _raise(exc)
 
 
@@ -131,7 +132,7 @@ def get_expenses(
     db: Session = Depends(get_db),
     session: CurrentSession = Depends(require_any_permissions('finance.view', 'finance.manage')),
 ):
-    return finance_service.list_transactions(db, session, direction='debit', source_type='expense', project_id=project_id, date_from=date_from, date_to=date_to, page=page, page_size=page_size)
+    return finance_service.list_transactions(db, session, source_type='expense', project_id=project_id, date_from=date_from, date_to=date_to, page=page, page_size=page_size)
 
 
 @router.get('/bills', response_model=BillList)
@@ -227,9 +228,21 @@ def delete_bill_payment(bill_id: str, payment_id: str, db: Session = Depends(get
     except FinanceServiceError as exc: _raise(exc)
 
 
+@router.post('/bills/{bill_id}/payments/{payment_id}/reverse', response_model=BillSummary)
+def reverse_bill_payment(bill_id: str, payment_id: str, payload: ReverseFinanceTransactionRequest, db: Session = Depends(get_db), session: CurrentSession = Depends(require_super_admin)):
+    try: return finance_service.reverse_bill_payment(db, session, bill_id, payment_id, payload)
+    except FinanceServiceError as exc: _raise(exc)
+
+
 @router.delete('/bills/{bill_id}', status_code=204)
 def delete_bill(bill_id: str, db: Session = Depends(get_db), session: CurrentSession = Depends(require_any_permissions('finance.manage'))):
     try: return finance_service.delete_bill(db, session, bill_id)
+    except FinanceServiceError as exc: _raise(exc)
+
+
+@router.post('/bills/{bill_id}/void', response_model=BillSummary)
+def void_bill(bill_id: str, payload: VoidBillRequest, db: Session = Depends(get_db), session: CurrentSession = Depends(require_super_admin)):
+    try: return finance_service.void_bill(db, session, bill_id, payload)
     except FinanceServiceError as exc: _raise(exc)
 
 

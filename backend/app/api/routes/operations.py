@@ -2,7 +2,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
-from app.api.deps import CurrentSession, require_any_permissions
+from app.api.deps import CurrentSession, require_any_permissions, require_super_admin
 from app.db.session import get_db
 from app.schemas.operations import (
     CreateInventoryMovementBatchRequest,
@@ -14,6 +14,9 @@ from app.schemas.operations import (
     GeneratedDocumentPackSummary,
     InventoryItemSummary,
     InventoryLocationSummary,
+    InventoryMovementCorrectionRequest,
+    InventoryMovementList,
+    InventoryMovementReversalRequest,
     InventoryMovementSummary,
     UpdateInventoryItemRequest,
     UpdateInventoryLocationRequest,
@@ -40,7 +43,9 @@ def _raise(exc: OperationsServiceError) -> None:
 @router.get('/inventory/summary', response_model=InventorySummary)
 def get_inventory(
     item_page: int = Query(default=1, ge=1),
-    item_page_size: int = Query(default=100, ge=1, le=200),
+    item_page_size: int = Query(default=50, ge=1, le=100),
+    item_q: str | None = Query(default=None, max_length=120),
+    item_category: str | None = Query(default=None, max_length=80),
     movement_limit: int = Query(default=30, ge=0, le=100),
     db: Session = Depends(get_db),
     session: CurrentSession = Depends(require_any_permissions('inventory.view', 'inventory.manage')),
@@ -50,6 +55,8 @@ def get_inventory(
         session,
         item_page=item_page,
         item_page_size=item_page_size,
+        item_query=item_q,
+        item_category=item_category,
         movement_limit=movement_limit,
     )
 
@@ -90,6 +97,55 @@ def post_movement(payload: CreateInventoryMovementRequest, db: Session = Depends
 def post_movement_batch(payload: CreateInventoryMovementBatchRequest, db: Session = Depends(get_db), session: CurrentSession = Depends(require_any_permissions('inventory.edit', 'inventory.manage'))):
     try: return operations_service.post_movement_batch(db, session, payload)
     except OperationsServiceError as exc: _raise(exc)
+
+
+@router.get('/inventory/movements', response_model=InventoryMovementList)
+def get_inventory_movements(
+    item_id: str | None = Query(default=None, max_length=36),
+    customer_id: str | None = Query(default=None, max_length=36),
+    movement_type: str | None = Query(default=None, max_length=32),
+    status: str | None = Query(default=None, max_length=24),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, ge=1, le=100),
+    db: Session = Depends(get_db),
+    session: CurrentSession = Depends(require_any_permissions('inventory.view', 'inventory.manage')),
+):
+    return operations_service.list_inventory_movements(
+        db,
+        session,
+        item_id=item_id,
+        customer_id=customer_id,
+        movement_type=movement_type,
+        status=status,
+        page=page,
+        page_size=page_size,
+    )
+
+
+@router.post('/inventory/movements/{movement_id}/reverse', response_model=InventoryMovementSummary, status_code=201)
+def reverse_inventory_movement(
+    movement_id: str,
+    payload: InventoryMovementReversalRequest,
+    db: Session = Depends(get_db),
+    session: CurrentSession = Depends(require_super_admin),
+):
+    try:
+        return operations_service.reverse_inventory_movement(db, session, movement_id, payload)
+    except OperationsServiceError as exc:
+        _raise(exc)
+
+
+@router.post('/inventory/movements/{movement_id}/correct', response_model=InventoryMovementSummary, status_code=201)
+def correct_inventory_movement(
+    movement_id: str,
+    payload: InventoryMovementCorrectionRequest,
+    db: Session = Depends(get_db),
+    session: CurrentSession = Depends(require_super_admin),
+):
+    try:
+        return operations_service.correct_inventory_movement(db, session, movement_id, payload)
+    except OperationsServiceError as exc:
+        _raise(exc)
 
 
 @router.get('/pricing', response_model=PricingBookSummary)

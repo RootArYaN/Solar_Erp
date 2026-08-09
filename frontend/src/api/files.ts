@@ -1,4 +1,4 @@
-import type { DocumentCustomerOption, StoredFile, StoredFileList } from '../types'
+import type { StoredFile, StoredFileList } from '../types'
 import { createClientId } from '../lib/client-id'
 import { apiRequest, apiSegment, blobRequest, downloadRequest } from './client'
 
@@ -20,4 +20,3 @@ export const getStoredFiles = (ownerType: string, ownerId: string): Promise<Stor
 export const removeStoredFile = (id: string): Promise<void> => apiRequest(`/files/${apiSegment(id)}`, { method: 'DELETE', idempotencyKey: createClientId() })
 export const downloadStoredFile = (id: string, name: string) => downloadRequest(`/files/${apiSegment(id)}/download`, name)
 export const getStoredFileBlob = (id: string): Promise<Blob> => blobRequest(`/files/${apiSegment(id)}/download`)
-export const getDocumentCustomerOptions = (): Promise<DocumentCustomerOption[]> => apiRequest('/files/customer-options')

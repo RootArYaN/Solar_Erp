@@ -293,7 +293,7 @@ export function ProjectTimelinePage() {
                             </>
                           )}
                           <button className="timeline-primary-action" onClick={() => void completeCurrentStep()} disabled={saving}><CheckCircle2 size={16} />{saving ? 'Saving…' : currentStep.key === 'payment_mode' ? 'Confirm payment mode' : 'Complete step'}</button>
-                          {previousStep && <button className="timeline-secondary-action" onClick={() => void reopenPreviousStep()} disabled={saving}><RotateCcw size={14} />Reopen previous step</button>}
+                          {previousStep && <button className="timeline-secondary-action" onClick={() => void reopenPreviousStep()} disabled={saving}><RotateCcw size={14} />Reverse</button>}
                         </>
                       ) : <div className="timeline-admin-current"><strong>Timeline complete</strong><p>All milestones have been completed.</p></div>}
                     </aside>

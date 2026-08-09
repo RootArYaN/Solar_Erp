@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import json
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -8,7 +10,8 @@ from sqlalchemy import case, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
-from app.api.deps import CurrentSession
+if TYPE_CHECKING:
+    from app.api.deps import CurrentSession
 from app.models.agent import AgentCustomer, AgentCustomerEdit, AgentProfile, AgentTransaction
 from app.models.auth import Membership, Role, User
 from app.models.workflow import CustomerProject, CustomerQuotation, QuotationRequest, TransactionApproval
@@ -25,7 +28,11 @@ from app.schemas.agent import (
     UpdateAgentProfileRequest,
 )
 from app.schemas.workflow import QuotationLineSummary, QuotationSummary
-from app.services.access_service import get_project
+from app.services.access_service import (
+    get_project,
+    operational_customer_filter,
+    visible_project_ids,
+)
 from app.services.audit_service import write_event
 
 
@@ -72,22 +79,203 @@ def _load_agent_membership(db: Session, company_id: str, membership_id: str) -> 
 
 
 def _load_profile(db: Session, membership: Membership) -> AgentProfile:
-    profile = db.scalar(
-        select(AgentProfile)
-        .where(AgentProfile.membership_id == membership.id)
-        .options(selectinload(AgentProfile.customers), selectinload(AgentProfile.transactions))
-    )
+    """Load only the profile row. Large customer/transaction collections are queried explicitly.
+
+    The old eager loading path fetched an agent's entire history even for profile edits and
+    customer creation. Keeping this function lightweight prevents unnecessary memory/query
+    work as an agent accumulates years of customers and transactions.
+    """
+    profile = db.scalar(select(AgentProfile).where(AgentProfile.membership_id == membership.id))
     if not profile:
         profile = ensure_agent_profile(db, membership)
         db.commit()
-        profile = db.scalar(
-            select(AgentProfile)
-            .where(AgentProfile.id == profile.id)
-            .options(selectinload(AgentProfile.customers), selectinload(AgentProfile.transactions))
-        )
     if not profile:
         raise AgentNotFoundError("Agent profile not found")
     return profile
+
+
+def _operational_customers_for_profile(
+    db: Session,
+    company_id: str,
+    profile_id: str,
+    *,
+    query: str | None = None,
+    page: int = 1,
+    page_size: int = 25,
+) -> tuple[list[AgentCustomer], int]:
+    filters = [
+        operational_customer_filter(company_id),
+        AgentCustomer.agent_profile_id == profile_id,
+    ]
+    term = (query or "").strip().lower()
+    if term:
+        like = f"%{term}%"
+        filters.append(or_(
+            func.lower(AgentCustomer.customer_name).like(like),
+            func.lower(AgentCustomer.consumer_number).like(like),
+            func.lower(AgentCustomer.phone).like(like),
+            func.lower(AgentCustomer.alternate_phone).like(like),
+            func.lower(AgentCustomer.email).like(like),
+            func.lower(AgentCustomer.project_name).like(like),
+        ))
+    total = int(db.scalar(
+        select(func.count(AgentCustomer.id)).where(*filters)
+    ) or 0)
+    rows = list(db.scalars(
+        select(AgentCustomer)
+        .where(*filters)
+        .order_by(AgentCustomer.customer_name.asc(), AgentCustomer.id.asc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    ).all())
+    return rows, total
+
+
+def _transaction_visibility_filters(company_id: str, profile_id: str):
+    return (
+        AgentTransaction.company_id == company_id,
+        AgentTransaction.agent_profile_id == profile_id,
+        or_(
+            AgentTransaction.project_id.is_(None),
+            AgentTransaction.project_id.in_(visible_project_ids(company_id)),
+        ),
+    )
+
+
+def _transaction_window(company_id: str, profile_id: str):
+    """Transaction rows with approval state and a balance delta calculated in SQL."""
+    posted_delta = case(
+        (
+            or_(TransactionApproval.id.is_(None), TransactionApproval.status == "approved"),
+            AgentTransaction.credit - AgentTransaction.debit,
+        ),
+        else_=0,
+    )
+    return (
+        select(
+            AgentTransaction.id.label("id"),
+            AgentTransaction.project_id.label("project_id"),
+            AgentTransaction.transaction_date.label("transaction_date"),
+            AgentTransaction.created_at.label("created_at"),
+            AgentTransaction.reference.label("reference"),
+            AgentTransaction.transaction_type.label("transaction_type"),
+            AgentTransaction.description.label("description"),
+            AgentTransaction.debit.label("debit"),
+            AgentTransaction.credit.label("credit"),
+            TransactionApproval.status.label("approval_status"),
+            TransactionApproval.decision_comment.label("approval_comment"),
+            func.sum(posted_delta).over(
+                order_by=(
+                    AgentTransaction.transaction_date.asc(),
+                    AgentTransaction.created_at.asc(),
+                    AgentTransaction.id.asc(),
+                ),
+                rows=(None, 0),
+            ).label("running_delta"),
+        )
+        .outerjoin(TransactionApproval, TransactionApproval.transaction_id == AgentTransaction.id)
+        .where(*_transaction_visibility_filters(company_id, profile_id))
+        .subquery()
+    )
+
+
+def _transaction_summary_from_row(row, opening_balance: Decimal) -> AgentTransactionSummary:
+    return AgentTransactionSummary(
+        id=row.id,
+        project_id=row.project_id,
+        transaction_date=row.transaction_date,
+        reference=row.reference,
+        transaction_type=row.transaction_type,
+        description=row.description,
+        debit=_money(row.debit),
+        credit=_money(row.credit),
+        running_balance=_money(opening_balance + Decimal(row.running_delta or 0)),
+        approval_status=row.approval_status or "approved",
+        approval_comment=row.approval_comment or "Legacy approved transaction",
+    )
+
+
+def _paged_transaction_summaries(
+    db: Session,
+    company_id: str,
+    profile_id: str,
+    opening_balance: Decimal,
+    *,
+    query: str | None = None,
+    page: int = 1,
+    page_size: int = 25,
+) -> tuple[list[AgentTransactionSummary], int]:
+    base = _transaction_window(company_id, profile_id)
+    search_filters = []
+    term = (query or "").strip().lower()
+    if term:
+        like = f"%{term}%"
+        search_filters.append(or_(
+            func.lower(base.c.reference).like(like),
+            func.lower(base.c.transaction_type).like(like),
+            func.lower(base.c.description).like(like),
+            func.lower(func.coalesce(base.c.approval_status, "approved")).like(like),
+        ))
+
+    total = int(db.scalar(
+        select(func.count()).select_from(base).where(*search_filters)
+    ) or 0)
+    rows = db.execute(
+        select(base)
+        .where(*search_filters)
+        .order_by(base.c.transaction_date.desc(), base.c.created_at.desc(), base.c.id.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    ).all()
+    summaries = [_transaction_summary_from_row(row, opening_balance) for row in rows]
+    return summaries, total
+
+
+def _single_transaction_summary(
+    db: Session,
+    company_id: str,
+    profile_id: str,
+    opening_balance: Decimal,
+    transaction_id: str,
+) -> AgentTransactionSummary:
+    base = _transaction_window(company_id, profile_id)
+    row = db.execute(select(base).where(base.c.id == transaction_id)).one_or_none()
+    if not row:
+        raise AgentNotFoundError("Agent transaction not found")
+    return _transaction_summary_from_row(row, opening_balance)
+
+
+def _agent_overview_aggregates(
+    db: Session,
+    company_id: str,
+    profile_id: str,
+) -> tuple[int, int, Decimal, Decimal, Decimal]:
+    customer_row = db.execute(
+        select(
+            func.count(AgentCustomer.id),
+            func.count(AgentCustomer.id).filter(AgentCustomer.status == "active"),
+            func.coalesce(func.sum(AgentCustomer.outstanding_balance), 0),
+        ).where(
+            operational_customer_filter(company_id),
+            AgentCustomer.agent_profile_id == profile_id,
+        )
+    ).one()
+    posted = or_(TransactionApproval.id.is_(None), TransactionApproval.status == "approved")
+    transaction_row = db.execute(
+        select(
+            func.coalesce(func.sum(case((posted, AgentTransaction.credit - AgentTransaction.debit), else_=0)), 0),
+            func.coalesce(func.sum(case((posted & (AgentTransaction.transaction_type == "commission"), AgentTransaction.credit - AgentTransaction.debit), else_=0)), 0),
+        )
+        .outerjoin(TransactionApproval, TransactionApproval.transaction_id == AgentTransaction.id)
+        .where(*_transaction_visibility_filters(company_id, profile_id))
+    ).one()
+    return (
+        int(customer_row[0] or 0),
+        int(customer_row[1] or 0),
+        Decimal(customer_row[2] or 0),
+        Decimal(transaction_row[0] or 0),
+        Decimal(transaction_row[1] or 0),
+    )
 
 
 def _can_view_all(actor: CurrentSession) -> bool:
@@ -171,33 +359,6 @@ def _approved_quotation_summary(quotation: CustomerQuotation | None) -> Quotatio
     )
 
 
-def _approval_map(db: Session, transactions: list[AgentTransaction]) -> dict[str, TransactionApproval]:
-    if not transactions:
-        return {}
-    approvals = list(db.scalars(select(TransactionApproval).where(
-        TransactionApproval.transaction_id.in_([transaction.id for transaction in transactions])
-    )).all())
-    return {approval.transaction_id: approval for approval in approvals}
-
-
-def _is_posted(transaction: AgentTransaction, approvals: dict[str, TransactionApproval]) -> bool:
-    approval = approvals.get(transaction.id)
-    return approval is None or approval.status == "approved"
-
-
-def _current_balance(db: Session, profile: AgentProfile, approvals: dict[str, TransactionApproval] | None = None) -> Decimal:
-    approval_by_transaction = approvals if approvals is not None else {}
-    live_total = sum(
-        (
-            Decimal(transaction.credit or 0) - Decimal(transaction.debit or 0)
-            for transaction in profile.transactions
-            if _is_posted(transaction, approval_by_transaction)
-        ),
-        Decimal("0.00"),
-    )
-    return Decimal(profile.opening_balance or 0) + live_total
-
-
 def list_agents(db: Session, actor: CurrentSession) -> list[AgentListItem]:
     company_id = actor.membership.company_id
     customer_counts = (
@@ -205,7 +366,7 @@ def list_agents(db: Session, actor: CurrentSession) -> list[AgentListItem]:
             AgentCustomer.agent_profile_id.label("profile_id"),
             func.count(AgentCustomer.id).label("customer_count"),
         )
-        .where(AgentCustomer.company_id == company_id)
+        .where(operational_customer_filter(company_id))
         .group_by(AgentCustomer.agent_profile_id)
         .subquery()
     )
@@ -232,7 +393,10 @@ def list_agents(db: Session, actor: CurrentSession) -> list[AgentListItem]:
             TransactionApproval,
             TransactionApproval.transaction_id == AgentTransaction.id,
         )
-        .where(AgentTransaction.company_id == company_id)
+        .where(
+            AgentTransaction.company_id == company_id,
+            or_(AgentTransaction.project_id.is_(None), AgentTransaction.project_id.in_(visible_project_ids(company_id))),
+        )
         .group_by(AgentTransaction.agent_profile_id)
         .subquery()
     )
@@ -267,11 +431,17 @@ def list_agents(db: Session, actor: CurrentSession) -> list[AgentListItem]:
 
     missing_membership_ids = [row.membership_id for row in rows if row.profile_id is None]
     if missing_membership_ids:
-        for membership in db.scalars(
-            select(Membership).where(Membership.id.in_(missing_membership_ids))
-        ).all():
-            ensure_agent_profile(db, membership)
-        db.commit()
+        # Repair legacy agents in one flush instead of issuing a profile lookup
+        # for every missing membership. A concurrent repair is harmless: the
+        # membership uniqueness constraint wins and we simply reload.
+        try:
+            db.add_all([
+                AgentProfile(company_id=company_id, membership_id=membership_id)
+                for membership_id in missing_membership_ids
+            ])
+            db.commit()
+        except IntegrityError:
+            db.rollback()
         return list_agents(db, actor)
 
     return [
@@ -298,14 +468,23 @@ def _customer_workflow_maps(
     if not customers:
         return {}, {}, {}
     customer_ids = [customer.id for customer in customers]
+    ranked_requests = (
+        select(
+            QuotationRequest.id.label("request_id"),
+            func.row_number().over(
+                partition_by=QuotationRequest.customer_id,
+                order_by=(QuotationRequest.created_at.desc(), QuotationRequest.id.desc()),
+            ).label("row_number"),
+        )
+        .where(QuotationRequest.customer_id.in_(customer_ids))
+        .subquery()
+    )
     requests = list(db.scalars(
         select(QuotationRequest)
-        .where(QuotationRequest.customer_id.in_(customer_ids))
-        .order_by(QuotationRequest.created_at.desc())
+        .join(ranked_requests, ranked_requests.c.request_id == QuotationRequest.id)
+        .where(ranked_requests.c.row_number == 1)
     ).all())
-    latest_request: dict[str, QuotationRequest] = {}
-    for request in requests:
-        latest_request.setdefault(request.customer_id, request)
+    latest_request = {request.customer_id: request for request in requests}
 
     quotations = list(db.scalars(select(CustomerQuotation).where(
         CustomerQuotation.request_id.in_([request.id for request in latest_request.values()])
@@ -318,56 +497,49 @@ def _customer_workflow_maps(
     return latest_request, quotation_by_request, project_by_quotation
 
 
-def get_agent_overview(db: Session, actor: CurrentSession, membership_id: str) -> AgentOverviewResponse:
+def get_agent_overview(
+    db: Session,
+    actor: CurrentSession,
+    membership_id: str,
+    *,
+    customer_page: int = 1,
+    customer_page_size: int = 25,
+    customer_query: str | None = None,
+    transaction_page: int = 1,
+    transaction_page_size: int = 25,
+    transaction_query: str | None = None,
+) -> AgentOverviewResponse:
     _assert_can_view(actor, membership_id)
     membership = _load_agent_membership(db, actor.membership.company_id, membership_id)
     profile = _load_profile(db, membership)
-
-    ordered_transactions = sorted(
-        profile.transactions,
-        key=lambda item: (item.transaction_date, item.created_at),
+    company_id = actor.membership.company_id
+    customer_count, active_customer_count, customer_outstanding, balance_delta, commission_total = _agent_overview_aggregates(
+        db, company_id, profile.id
     )
-    approvals = _approval_map(db, ordered_transactions)
-    running_balance = Decimal(profile.opening_balance or 0)
-    transaction_summaries: list[AgentTransactionSummary] = []
-    for transaction in ordered_transactions:
-        approval = approvals.get(transaction.id)
-        approval_status = approval.status if approval else "approved"
-        if approval_status == "approved":
-            running_balance += Decimal(transaction.credit or 0) - Decimal(transaction.debit or 0)
-        transaction_summaries.append(
-            AgentTransactionSummary(
-                id=transaction.id,
-                project_id=transaction.project_id,
-                transaction_date=transaction.transaction_date,
-                reference=transaction.reference,
-                transaction_type=transaction.transaction_type,
-                description=transaction.description,
-                debit=_money(transaction.debit),
-                credit=_money(transaction.credit),
-                running_balance=_money(running_balance),
-                approval_status=approval_status,
-                approval_comment=approval.decision_comment if approval else "Legacy approved transaction",
-            )
-        )
-
-    customers = sorted(profile.customers, key=lambda item: item.customer_name.lower())
+    transaction_summaries, transaction_total = _paged_transaction_summaries(
+        db,
+        company_id,
+        profile.id,
+        Decimal(profile.opening_balance or 0),
+        query=transaction_query,
+        page=transaction_page,
+        page_size=transaction_page_size,
+    )
+    customers, customer_total = _operational_customers_for_profile(
+        db,
+        company_id,
+        profile.id,
+        query=customer_query,
+        page=customer_page,
+        page_size=customer_page_size,
+    )
     latest_requests, quotations, projects = _customer_workflow_maps(db, customers)
     agent_edited_customer_ids = _agent_edited_customer_ids(
         db,
-        actor.membership.company_id,
+        company_id,
         [customer.id for customer in customers],
     )
-    current_balance = _current_balance(db, profile, approvals)
-    commission_total = sum(
-        (
-            Decimal(transaction.credit or 0) - Decimal(transaction.debit or 0)
-            for transaction in ordered_transactions
-            if transaction.transaction_type == "commission"
-            and _is_posted(transaction, approvals)
-        ),
-        Decimal("0.00"),
-    )
+    current_balance = Decimal(profile.opening_balance or 0) + balance_delta
     customer_summaries: list[AgentCustomerSummary] = []
     for customer in customers:
         request = latest_requests.get(customer.id)
@@ -426,12 +598,18 @@ def get_agent_overview(db: Session, actor: CurrentSession, membership_id: str) -
             opening_balance=_money(profile.opening_balance),
             current_balance=_money(current_balance),
         ),
-        customer_count=len(customers),
-        active_customer_count=sum(customer.status == "active" for customer in customers),
+        customer_count=customer_count,
+        active_customer_count=active_customer_count,
         commission_total=_money(commission_total),
-        customer_outstanding=_money(sum((Decimal(customer.outstanding_balance or 0) for customer in customers), Decimal("0.00"))),
+        customer_outstanding=_money(customer_outstanding),
         customers=customer_summaries,
-        transactions=list(reversed(transaction_summaries)),
+        transactions=transaction_summaries,
+        customer_page=customer_page,
+        customer_page_size=customer_page_size,
+        customer_total=customer_total,
+        transaction_page=transaction_page,
+        transaction_page_size=transaction_page_size,
+        transaction_total=transaction_total,
     )
 
 
@@ -521,7 +699,13 @@ def update_agent_customer(
 ) -> AgentOverviewResponse:
     membership = _load_agent_membership(db, actor.membership.company_id, membership_id)
     profile = _load_profile(db, membership)
-    customer = next((item for item in profile.customers if item.id == customer_id), None)
+    customer = db.scalar(
+        select(AgentCustomer).where(
+            operational_customer_filter(actor.membership.company_id),
+            AgentCustomer.agent_profile_id == profile.id,
+            AgentCustomer.id == customer_id,
+        )
+    )
     if not customer:
         raise AgentNotFoundError("Customer not found")
 
@@ -632,9 +816,13 @@ def create_agent_transaction(
     db.commit()
     transaction_id = transaction.id
     db.expire_all()
-
-    overview = get_agent_overview(db, actor, membership_id)
-    return next(item for item in overview.transactions if item.id == transaction_id)
+    return _single_transaction_summary(
+        db,
+        actor.membership.company_id,
+        profile.id,
+        Decimal(profile.opening_balance or 0),
+        transaction_id,
+    )
 
 
 def update_agent_transaction(
@@ -655,6 +843,10 @@ def update_agent_transaction(
         AgentTransaction.id == transaction_id,
         AgentTransaction.company_id == actor.membership.company_id,
         AgentTransaction.agent_profile_id == profile.id,
+        or_(
+            AgentTransaction.project_id.is_(None),
+            AgentTransaction.project_id.in_(visible_project_ids(actor.membership.company_id)),
+        ),
     ))
     if not transaction:
         raise AgentNotFoundError("Agent transaction not found")
@@ -664,20 +856,34 @@ def update_agent_transaction(
     ))
     if own_edit and not privileged_edit and approval and approval.status != "pending":
         raise AgentForbiddenError("Agents can only edit their pending transactions")
+    finalized = approval is None or approval.status != "pending"
+    if finalized and privileged_edit:
+        immutable_changed = any((
+            payload.transaction_date is not None and payload.transaction_date.date() != transaction.transaction_date.date(),
+            (payload.project_id or None) != (transaction.project_id or None),
+            payload.transaction_type != transaction.transaction_type,
+            Decimal(str(payload.debit)) != Decimal(transaction.debit or 0),
+            Decimal(str(payload.credit)) != Decimal(transaction.credit or 0),
+        ))
+        if immutable_changed:
+            raise AgentConflictError(
+                "Finalized agent transaction amounts, type, date, and project cannot be rewritten. "
+                "Only reference and description metadata may be corrected."
+            )
 
-    project = get_project(db, actor, payload.project_id) if payload.project_id else None
-    editable_fields = (
-        "transaction_date", "project_id", "reference", "transaction_type",
-        "description", "debit", "credit",
+    project = get_project(db, actor, payload.project_id) if payload.project_id and not finalized else None
+    editable_fields = ("reference", "description") if finalized else (
+        "transaction_date", "project_id", "reference", "transaction_type", "description", "debit", "credit",
     )
     before = {field: getattr(transaction, field) for field in editable_fields}
-    transaction.transaction_date = payload.transaction_date or transaction.transaction_date
-    transaction.project_id = project.id if project else None
     transaction.reference = payload.reference
-    transaction.transaction_type = payload.transaction_type
     transaction.description = payload.description
-    transaction.debit = Decimal(str(payload.debit))
-    transaction.credit = Decimal(str(payload.credit))
+    if not finalized:
+        transaction.transaction_date = payload.transaction_date or transaction.transaction_date
+        transaction.project_id = project.id if project else None
+        transaction.transaction_type = payload.transaction_type
+        transaction.debit = Decimal(str(payload.debit))
+        transaction.credit = Decimal(str(payload.credit))
     changes = {
         field: {"old": str(before[field]), "new": str(getattr(transaction, field))}
         for field in editable_fields
@@ -695,8 +901,13 @@ def update_agent_transaction(
     )
     db.commit()
     db.expire_all()
-    overview = get_agent_overview(db, actor, membership_id)
-    return next(item for item in overview.transactions if item.id == transaction_id)
+    return _single_transaction_summary(
+        db,
+        actor.membership.company_id,
+        profile.id,
+        Decimal(profile.opening_balance or 0),
+        transaction_id,
+    )
 
 
 def delete_agent_transaction(
@@ -716,6 +927,10 @@ def delete_agent_transaction(
         AgentTransaction.id == transaction_id,
         AgentTransaction.company_id == actor.membership.company_id,
         AgentTransaction.agent_profile_id == profile.id,
+        or_(
+            AgentTransaction.project_id.is_(None),
+            AgentTransaction.project_id.in_(visible_project_ids(actor.membership.company_id)),
+        ),
     ))
     if not transaction:
         raise AgentNotFoundError("Agent transaction not found")
@@ -723,6 +938,10 @@ def delete_agent_transaction(
         TransactionApproval.transaction_id == transaction.id,
         TransactionApproval.company_id == transaction.company_id,
     ))
+    if approval is None or approval.status != "pending":
+        raise AgentConflictError(
+            "Finalized agent transactions cannot be deleted. Keep the ledger history and use a controlled correction/reversal workflow."
+        )
     write_event(
         db,
         company_id=transaction.company_id,

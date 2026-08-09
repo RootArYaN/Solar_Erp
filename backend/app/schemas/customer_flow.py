@@ -54,6 +54,9 @@ class FlowCustomer(FlowEntity):
     lead_source: str = ""
     payment_mode: str = ""
     outstanding_balance: str = "0.00"
+    completed_at: datetime | None = None
+    archived_at: datetime | None = None
+    deleted_at: datetime | None = None
 
 
 class FlowSite(FlowEntity):
@@ -260,7 +263,10 @@ class UpdateCustomerRequest(BaseModel):
     electricity_provider: str = Field(default="", max_length=100)
     customer_type: str = Field(default="residential", pattern=r"^(residential|commercial|society|institutional)$")
     lead_source: str = Field(default="", max_length=80)
-    status: str = Field(default="active", max_length=32)
+    status: str = Field(
+        default="active",
+        pattern=r"^(lead|registered|quotation_requested|qualified|active|on_hold)$",
+    )
 
     @field_validator("full_name", "phone", "alternate_phone", "email", "billing_address", "site_address", "district", "state", "postal_code", "consumer_number", "electricity_provider", "lead_source", "status")
     @classmethod
@@ -280,9 +286,46 @@ class CustomerFlowSnapshot(BaseModel):
     payments: list[FlowPayment] = Field(default_factory=list)
     loan: FlowLoan | None = None
     activity: list[FlowActivity] = Field(default_factory=list)
+    total_received: str = "0.00"
+    total_refunded: str = "0.00"
 
 
 class CustomerFlowList(BaseModel):
     items: list[FlowCustomer]
     next_cursor: str | None = None
     sync_cursor: str
+    page: int = 1
+    page_size: int = 50
+    total: int = 0
+
+
+class CustomerLifecycleRequest(BaseModel):
+    reason: str = Field(default="", max_length=400)
+    force: bool = False
+
+    @field_validator("reason")
+    @classmethod
+    def clean_reason(cls, value: str) -> str:
+        return " ".join(value.split())
+
+
+class CustomerDependencyPreview(BaseModel):
+    customer_id: str
+    customer_name: str
+    status: str
+    outstanding_balance: str
+    projects: int = 0
+    open_projects: int = 0
+    quotation_requests: int = 0
+    quotations: int = 0
+    finance_transactions: int = 0
+    posted_finance_transactions: int = 0
+    bills: int = 0
+    open_bills: int = 0
+    inventory_movements: int = 0
+    documents: int = 0
+    audit_events: int = 0
+    can_complete: bool = False
+    completion_blockers: list[str] = Field(default_factory=list)
+    can_purge: bool = False
+    purge_blockers: list[str] = Field(default_factory=list)

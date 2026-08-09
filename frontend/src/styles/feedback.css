@@ -142,7 +142,6 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   outline: 3px solid rgba(211, 148, 27, .23);
   outline-offset: 2px;
 }
-.login-form { margin-top: 20px; }
 
 @keyframes toast-in {
   from { opacity: 0; transform: translate3d(18px, -6px, 0) scale(.98); }

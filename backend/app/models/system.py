@@ -65,6 +65,8 @@ class AuditEvent(Base):
         Index("ix_audit_events_project_created", "project_id", "created_at"),
         Index("ix_audit_events_customer_created", "customer_id", "created_at"),
         Index("ix_audit_events_entity_pair", "entity", "entity_id"),
+        Index("ix_audit_events_company_event_created", "company_id", "event", "created_at"),
+        Index("ix_audit_events_company_user_created", "company_id", "user_id", "created_at"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)

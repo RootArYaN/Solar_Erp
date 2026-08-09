@@ -16,7 +16,6 @@
 
 html {
   width: 100%;
-  min-width: 320px;
 }
 
 body.app-authenticated,
@@ -504,6 +503,75 @@ body.app-authenticated #root {
   flex: 1 1 auto;
   min-height: 0;
   margin: 0;
+}
+
+
+.workspace-page .customer-directory__pager {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 6px;
+  padding-top: 7px;
+  border-top: 1px solid rgba(35, 46, 61, .08);
+}
+
+.workspace-page .customer-directory__pager button {
+  min-width: 0;
+  min-height: 28px;
+  padding: 0 7px;
+  border: 1px solid #e0e4e8;
+  border-radius: 7px;
+  background: #fff;
+  color: #53606e;
+  font-size: 8px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.workspace-page .customer-directory__pager button:last-child { justify-self: stretch; }
+.workspace-page .customer-directory__pager button:disabled { opacity: .45; cursor: default; }
+.workspace-page .customer-directory__pager span { color: #7d8793; font-size: 8px; white-space: nowrap; }
+
+.workspace-page .customer-lifecycle-impact {
+  display: grid;
+  gap: 4px;
+  padding: 10px 11px;
+  border: 1px solid rgba(35, 46, 61, .1);
+  border-radius: 9px;
+  background: #f8f9fa;
+}
+
+.workspace-page .customer-lifecycle-impact strong {
+  color: #273443;
+  font-size: 10px;
+}
+
+.workspace-page .customer-lifecycle-impact p {
+  margin: 0;
+  color: #6f7a87;
+  font-size: 8.5px;
+  line-height: 1.45;
+}
+
+.workspace-page .erp-form label.inline-check {
+  display: flex;
+  grid-template-columns: none;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+}
+
+.workspace-page .erp-form label.inline-check input {
+  width: 16px;
+  min-height: 16px;
+  height: 16px;
+  margin: 0;
+  padding: 0;
+}
+
+.workspace-page .erp-form label.inline-check span {
+  font-size: 9px;
+  letter-spacing: 0;
 }
 
 .workspace-page .finance-tab-panel {
@@ -1439,27 +1507,6 @@ body.app-authenticated #root {
 
   .customer-workspace {
     padding: 11px;
-  }
-
-  .customer-workspace__header {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .customer-header-actions.ui-action-bar {
-    width: auto;
-    display: flex;
-    flex-wrap: nowrap;
-    gap: 6px;
-  }
-
-  .customer-header-actions.ui-action-bar > .ui-button {
-    width: 34px;
-    min-width: 34px;
-    min-height: 34px;
-    padding: 0;
   }
 
   .customer-title-block,
@@ -3187,19 +3234,6 @@ body.app-preview-mobile .document-checklist article {
   min-width: 0;
 }
 
-:is(.app-shell--view-mobile, body.app-preview-mobile) .inventory-history-panel > header {
-  align-items: stretch;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-}
-
-:is(.app-shell--view-mobile, body.app-preview-mobile) .inventory-history-tabs {
-  width: 100%;
-  margin-left: 0;
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  overflow: visible;
-}
 
 :is(.app-shell--view-mobile, body.app-preview-mobile) :is(.inventory-table, .inventory-table tbody, .inventory-table tr, .inventory-table td) {
   width: 100%;
@@ -3323,18 +3357,6 @@ body.app-preview-mobile .document-checklist article {
     align-items: stretch;
   }
   .inventory-items-panel .erp-toolbar > * { width: 100%; min-width: 0; }
-  .inventory-history-panel > header {
-    align-items: stretch;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .inventory-history-tabs {
-    width: 100%;
-    margin-left: 0;
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    overflow: visible;
-  }
   :is(.inventory-table, .inventory-table tbody, .inventory-table tr, .inventory-table td) {
     width: 100%;
     min-width: 0 !important;
@@ -3421,3 +3443,522 @@ body.app-preview-mobile .document-checklist article {
     flex: 0 0 auto;
   }
 }
+
+/* Customer header actions -------------------------------------------------
+   Keep lifecycle actions compact on desktop and phone previews. The former
+   native select inherited full form-control sizing and could push the header
+   outside the customer card. */
+.customer-action-menu {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.customer-action-menu__trigger.ui-button {
+  width: 36px;
+  min-width: 36px;
+  min-height: 36px;
+  padding: 0;
+}
+
+.customer-action-menu__panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 45;
+  width: max-content;
+  min-width: 156px;
+  max-width: min(220px, calc(100vw - 24px));
+  display: grid;
+  gap: 2px;
+  padding: 5px;
+  border: 1px solid rgba(35, 46, 61, .12);
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 14px 34px rgba(25, 36, 48, .16);
+}
+
+.customer-action-menu__panel button {
+  width: 100%;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #344252;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 720;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.customer-action-menu__panel button:hover,
+.customer-action-menu__panel button:focus-visible {
+  outline: 0;
+  background: #f4f6f7;
+}
+
+.customer-action-menu__panel button.is-danger {
+  color: #a33f3a;
+}
+
+.customer-action-menu__panel button.is-danger:hover,
+.customer-action-menu__panel button.is-danger:focus-visible {
+  background: #fff1f0;
+}
+
+/* Customer lifecycle dialog ----------------------------------------------
+   Dialogs render through a body portal, so these rules must not depend on a
+   .workspace-page ancestor. This keeps checkbox, impact text and footer from
+   falling back to browser/default ERP form layout. */
+.modal-layer .modal-card.customer-lifecycle-modal {
+  width: min(520px, 100%);
+}
+
+.customer-lifecycle-modal__body {
+  min-height: 0;
+  padding: 0;
+  overflow: auto;
+}
+
+.customer-lifecycle-form {
+  gap: 12px;
+  padding: 16px;
+}
+
+.customer-lifecycle-modal .customer-lifecycle-impact {
+  display: grid;
+  gap: 5px;
+  padding: 11px 12px;
+  border: 1px solid rgba(35, 46, 61, .1);
+  border-radius: 10px;
+  background: #f7f9fa;
+}
+
+.customer-lifecycle-modal .customer-lifecycle-impact strong {
+  color: #263442;
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+.customer-lifecycle-modal .customer-lifecycle-impact p {
+  margin: 0;
+  color: #687584;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.customer-lifecycle-modal .erp-form label.inline-check {
+  width: 100%;
+  min-height: 38px;
+  display: flex;
+  grid-template-columns: none;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 9px;
+  padding: 8px 10px;
+  border: 1px solid #e1e6ea;
+  border-radius: 9px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.customer-lifecycle-modal .erp-form label.inline-check input[type='checkbox'] {
+  width: 17px;
+  min-width: 17px;
+  height: 17px;
+  min-height: 17px;
+  margin: 0;
+  padding: 0;
+  flex: 0 0 auto;
+  accent-color: #cf8a0b;
+}
+
+.customer-lifecycle-modal .erp-form label.inline-check > span {
+  min-width: 0;
+  color: #4c5968;
+  font-size: 10px;
+  line-height: 1.3;
+  letter-spacing: 0;
+}
+
+.customer-lifecycle-modal .erp-form textarea {
+  min-height: 82px;
+  resize: vertical;
+}
+
+.customer-lifecycle-modal .erp-form-actions {
+  position: sticky;
+  bottom: -16px;
+  z-index: 2;
+  display: flex;
+  justify-content: flex-end;
+  margin: 0 -16px -16px;
+  padding: 11px 16px 16px;
+  border-top: 1px solid #eceef1;
+  background: rgba(251, 250, 247, .97);
+  backdrop-filter: blur(10px);
+}
+
+@media (max-width: 780px) {
+  .customer-action-menu__trigger.ui-button,
+  .app-shell--view-mobile .customer-action-menu__trigger.ui-button {
+    width: 34px;
+    min-width: 34px;
+    min-height: 34px;
+  }
+
+  .customer-action-menu__panel {
+    right: 0;
+    min-width: 150px;
+  }
+
+  .customer-lifecycle-form {
+    padding: 12px;
+  }
+
+  .customer-lifecycle-modal .modal-card__header {
+    min-height: 58px;
+    padding: 11px 12px;
+  }
+
+  .customer-lifecycle-modal .modal-card__header h2 {
+    font-size: 16px;
+  }
+
+  .customer-lifecycle-modal .modal-card__header p {
+    font-size: 10px;
+  }
+
+  .customer-lifecycle-modal .erp-form-actions,
+  body.app-preview-mobile .customer-lifecycle-modal .erp-form-actions {
+    bottom: -12px;
+    display: flex;
+    grid-template-columns: none;
+    margin: 0 -12px -12px;
+    padding: 10px 12px max(12px, env(safe-area-inset-bottom));
+  }
+
+  .customer-lifecycle-modal .erp-form-actions .ui-button,
+  body.app-preview-mobile .customer-lifecycle-modal .erp-form-actions .ui-button {
+    width: 100%;
+    min-width: 0;
+  }
+}
+
+/* Final customer mobile contract ----------------------------------------
+   These rules intentionally sit after legacy page-specific media blocks so
+   the phone layout has one authoritative width/overflow/action contract. */
+:is(.app-shell--view-mobile, body.app-preview-mobile) .workspace-page.customer-detail-page {
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
+  box-sizing: border-box;
+  overflow-x: hidden;
+}
+
+@media (max-width: 780px) {
+  .workspace-page.customer-detail-page {
+    width: 100%;
+    max-width: 100%;
+    margin: 0;
+    box-sizing: border-box;
+    overflow-x: hidden;
+  }
+}
+
+:is(.app-shell--view-mobile, body.app-preview-mobile) .customer-detail-layout,
+:is(.app-shell--view-mobile, body.app-preview-mobile) .customer-directory,
+:is(.app-shell--view-mobile, body.app-preview-mobile) .customer-workspace,
+:is(.app-shell--view-mobile, body.app-preview-mobile) .customer-workspace > *,
+:is(.app-shell--view-mobile, body.app-preview-mobile) .customer-tab-panel,
+:is(.app-shell--view-mobile, body.app-preview-mobile) .customer-summary-grid,
+:is(.app-shell--view-mobile, body.app-preview-mobile) .detail-grid {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+:is(.app-shell--view-mobile, body.app-preview-mobile) .customer-workspace {
+  overflow-x: hidden;
+}
+
+:is(.app-shell--view-mobile, body.app-preview-mobile) .customer-workspace__header {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+:is(.app-shell--view-mobile, body.app-preview-mobile) .customer-header-actions.ui-action-bar {
+  width: auto;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(3, 40px);
+  align-items: center;
+  justify-content: end;
+  gap: 6px;
+}
+
+:is(.app-shell--view-mobile, body.app-preview-mobile) .customer-header-actions.ui-action-bar > .ui-button,
+:is(.app-shell--view-mobile, body.app-preview-mobile) .customer-header-actions .customer-action-menu,
+:is(.app-shell--view-mobile, body.app-preview-mobile) .customer-header-actions .customer-action-menu__trigger.ui-button {
+  width: 40px;
+  min-width: 40px;
+  max-width: 40px;
+  height: 40px;
+  min-height: 40px;
+  padding: 0;
+}
+
+:is(.app-shell--view-mobile, body.app-preview-mobile) .customer-header-actions .customer-action-menu {
+  display: block;
+}
+
+:is(.app-shell--view-mobile, body.app-preview-mobile) .customer-header-actions .customer-action-menu__trigger.ui-button {
+  display: inline-flex;
+}
+
+:is(.app-shell--view-mobile, body.app-preview-mobile) .customer-title-block,
+:is(.app-shell--view-mobile, body.app-preview-mobile) .customer-title-content,
+:is(.app-shell--view-mobile, body.app-preview-mobile) .customer-title-contact,
+:is(.app-shell--view-mobile, body.app-preview-mobile) .customer-contact-item {
+  min-width: 0;
+  max-width: 100%;
+}
+
+:is(.app-shell--view-mobile, body.app-preview-mobile) .customer-title-contact {
+  overflow: hidden;
+}
+
+:is(.app-shell--view-mobile, body.app-preview-mobile) .customer-contact-item > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:is(.app-shell--view-mobile, body.app-preview-mobile) .customer-tab-panel .detail-grid {
+  grid-template-columns: minmax(0, 1fr) !important;
+  gap: 8px;
+}
+
+:is(.app-shell--view-mobile, body.app-preview-mobile) .customer-tab-panel .detail-field {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 10px 11px;
+}
+
+@media (max-width: 520px) {
+  .customer-title-contact {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 3px !important;
+  }
+}
+
+@media (max-width: 340px) {
+  .customer-workspace__header,
+  .app-shell--view-mobile .customer-workspace__header,
+  body.app-preview-mobile .customer-workspace__header {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+  }
+  .customer-header-actions.ui-action-bar,
+  .app-shell--view-mobile .customer-header-actions.ui-action-bar,
+  body.app-preview-mobile .customer-header-actions.ui-action-bar {
+    justify-self: end;
+  }
+}
+
+/* Inventory history ------------------------------------------------------
+   Keep the header compact, table as the only horizontal scroll surface and
+   pagination detached from generic form-footer rules. */
+.inventory-history-panel {
+  min-width: 0;
+  padding: 0;
+  overflow: hidden;
+}
+.inventory-history-panel > header {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  margin: 0;
+  padding: 12px 13px;
+  border-bottom: 1px solid rgba(35, 46, 61, .08);
+}
+.inventory-history-panel > header > div:first-child { min-width: 0; }
+.inventory-history-panel > header small {
+  display: block;
+  margin-top: 3px;
+  color: #84909d;
+  font-size: 9px;
+}
+.inventory-history-panel .erp-table-wrap {
+  width: 100%;
+  min-width: 0;
+  flex: 1 1 auto;
+  border: 0;
+  border-radius: 0;
+  overflow: auto;
+}
+.inventory-history-table { min-width: 900px; }
+.inventory-history-pagination { flex: 0 0 auto; }
+
+:is(.app-shell--view-mobile, body.app-preview-mobile) .inventory-history-panel {
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+@media (max-width: 780px) {
+  .inventory-history-panel {
+    width: 100%;
+    max-width: 100%;
+    overflow: hidden;
+  }
+}
+
+:is(.app-shell--view-mobile, body.app-preview-mobile) .inventory-history-panel > header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: stretch;
+  gap: 9px;
+  padding: 10px;
+}
+:is(.app-shell--view-mobile, body.app-preview-mobile) .inventory-history-tabs {
+  width: 100%;
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  overflow: visible;
+}
+:is(.app-shell--view-mobile, body.app-preview-mobile) .inventory-history-tabs button {
+  width: 100%;
+  min-width: 0;
+}
+:is(.app-shell--view-mobile, body.app-preview-mobile) .inventory-history-table {
+  min-width: 0;
+}
+:is(.app-shell--view-mobile, body.app-preview-mobile) .inventory-history-table tbody {
+  padding: 8px;
+}
+:is(.app-shell--view-mobile, body.app-preview-mobile) .inventory-history-table td[data-label='Actions'] .table-row-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  width: 100%;
+}
+:is(.app-shell--view-mobile, body.app-preview-mobile) .inventory-history-table td[data-label='Actions'] .table-row-actions button {
+  width: 100%;
+}
+
+@media (max-width: 780px) {
+  .inventory-history-panel > header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+    gap: 9px;
+    padding: 10px;
+  }
+  .inventory-history-tabs {
+    width: 100%;
+    margin: 0;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    overflow: visible;
+  }
+  .inventory-history-table { min-width: 0; }
+}
+
+/* Native phone viewport fallback. The app-shell preview class is not required
+   for the customer workspace to obey the same sizing contract. */
+@media (max-width: 780px) {
+  .customer-detail-layout,
+  .customer-directory,
+  .customer-workspace,
+  .customer-workspace > *,
+  .customer-tab-panel,
+  .customer-summary-grid,
+  .customer-tab-panel .detail-grid {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+
+  .customer-workspace { overflow-x: hidden; }
+
+  .customer-workspace__header {
+    width: 100%;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .customer-header-actions.ui-action-bar {
+    width: auto;
+    min-width: 0;
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: 40px;
+    grid-template-columns: none;
+    justify-content: end;
+    gap: 6px;
+  }
+
+  .customer-header-actions.ui-action-bar > .ui-button,
+  .customer-header-actions.ui-action-bar > .customer-action-menu,
+  .customer-header-actions.ui-action-bar .customer-action-menu__trigger.ui-button {
+    width: 40px;
+    min-width: 40px;
+    max-width: 40px;
+    height: 40px;
+    min-height: 40px;
+    padding: 0;
+  }
+
+  .customer-title-block,
+  .customer-title-content,
+  .customer-title-contact,
+  .customer-contact-item {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .customer-title-contact { overflow: hidden; }
+  .customer-contact-item > span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .customer-tab-panel .detail-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 8px;
+  }
+
+  .customer-tab-panel .detail-field {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+}
+
+/* Inventory item list metadata and pager are owned by the inventory workspace. */
+.inventory-items-meta {
+  flex: 0 0 auto;
+  padding: 0 13px 9px;
+  color: #7f8b99;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .04em;
+}
+.inventory-items-pagination { flex: 0 0 auto; }

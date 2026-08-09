@@ -151,6 +151,12 @@ export type AgentOverview = {
   customer_outstanding: number
   customers: AgentCustomer[]
   transactions: AgentTransaction[]
+  customer_page: number
+  customer_page_size: number
+  customer_total: number
+  transaction_page: number
+  transaction_page_size: number
+  transaction_total: number
 }
 
 export type UpdateAgentProfileInput = Pick<
@@ -338,13 +344,6 @@ export type AuditEvent = {
 export type AuditEventList = { data: AuditEvent[]; page: number; page_size: number; total: number }
 
 
-export type DocumentCustomerOption = {
-  id: string
-  customer_name: string
-  project_id: string | null
-  project_number: string | null
-  project_status: string | null
-}
 
 export type StoredFile = {
   id: string

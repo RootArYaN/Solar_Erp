@@ -1,3 +1,5 @@
+from datetime import date
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
@@ -17,6 +19,10 @@ def get_events(
     customer_id: str | None = Query(default=None, max_length=36),
     entity: str | None = Query(default=None, max_length=60),
     event: str | None = Query(default=None, max_length=100),
+    user_id: str | None = Query(default=None, max_length=36),
+    query: str | None = Query(default=None, max_length=160),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=settings.default_page_size, ge=1, le=settings.max_page_size),
     db: Session = Depends(get_db),
@@ -30,6 +36,10 @@ def get_events(
             customer_id=customer_id,
             entity=entity,
             event=event,
+            user_id=user_id,
+            query=query,
+            date_from=date_from,
+            date_to=date_to,
             page=page,
             page_size=page_size,
         )
