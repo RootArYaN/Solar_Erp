@@ -6,6 +6,7 @@ import {
   CircleDollarSign,
   Download,
   Edit3,
+  FilePlus2,
   FileText,
   Mail,
   Phone,
@@ -386,7 +387,6 @@ export function AgentOverviewPage({ session }: { session: Session }) {
               </div>
 
               <div className="agent-contact-list">
-                <a href={`mailto:${overview.profile.email}`}><Mail size={17} /><span><small>Email</small><strong>{overview.profile.email}</strong></span></a>
                 {overview.profile.phone && <a href={`tel:${overview.profile.phone}`}><Phone size={17} /><span><small>Phone</small><strong>{overview.profile.phone}</strong></span></a>}
               </div>
             </motion.article>
@@ -428,14 +428,13 @@ export function AgentOverviewPage({ session }: { session: Session }) {
               {filteredCustomers.length === 0 ? <div className="empty-state">No customers match this search.</div> : (
                 <><div className="agent-table-wrap">
                   <table className="agent-table customer-table">
-                    <thead><tr><th>Customer</th><th>Contact</th><th>Project</th><th>Workflow</th><th>Status</th><th className="numeric-cell">Outstanding</th><th>Action</th></tr></thead>
+                    <thead><tr><th>Customer</th><th>Contact</th><th>Project</th><th>Status</th><th className="numeric-cell">Outstanding</th><th>Action</th></tr></thead>
                     <tbody>
                       {filteredCustomers.map((customer) => (
                         <tr key={customer.id}>
                           <td data-label="Customer"><div className="customer-identity"><div className="customer-avatar">{customer.customer_name.slice(0, 1)}</div><span><strong>{customer.customer_name}</strong><small>{customer.consumer_number || customer.customer_type}</small></span></div></td>
                           <td data-label="Contact"><div className="table-contact"><strong>{customer.phone || '—'}</strong></div></td>
                           <td data-label="Project"><strong className="project-name">{customer.project_name ? projectDisplayName(customer.project_name, customer.customer_name) : 'Not assigned'}</strong></td>
-                          <td data-label="Workflow"><span className={`workflow-status workflow-status--${customer.quotation_status || customer.quotation_request_status || 'not_requested'}`}>{(customer.quotation_status || customer.quotation_request_status || 'not requested').replaceAll('_', ' ')}</span></td>
                           <td data-label="Status"><span className={`customer-status customer-status--${customer.status}`}>{customer.status.replaceAll('_', ' ')}</span></td>
                           <td data-label="Outstanding" className="numeric-cell"><strong>{currency.format(customer.outstanding_balance)}</strong></td>
                           <td data-label="Action"><div className="agent-customer-actions">
@@ -443,7 +442,7 @@ export function AgentOverviewPage({ session }: { session: Session }) {
                             {canOpenDocuments && customer.approved_quotation && customer.project_id && <button className="table-action-button table-action-button--neutral" type="button" onClick={() => navigate(`${WORKSPACE_ROUTE_ACCESS.documents.path}?customer=${encodeURIComponent(customer.id)}`)}><FileText size={12} /></button>}
                             {customer.can_edit && <button className="table-action-button table-action-button--neutral" type="button" onClick={() => setEditingCustomer(customer)}><Edit3 size={12} /></button>}
                             {canRequestQuotations && !['pending', 'quotation_ready', 'pending_approval', 'approved'].includes(customer.quotation_status || customer.quotation_request_status || '')
-                              ? <button className="table-action-button" type="button" onClick={() => setQuotationCustomer(customer)}>Request quotation</button>
+                              ? <button className="table-action-button quotation-request-button" type="button" onClick={() => setQuotationCustomer(customer)} aria-label={`Request quotation for ${customer.customer_name}`} title="Request quotation"><FilePlus2 size={14} /></button>
                               : !customer.approved_quotation && !customer.can_edit && <small>{customer.project_number ? 'Project created' : customer.quotation_request_status ? 'With admin' : '—'}</small>}
                           </div></td>
                         </tr>

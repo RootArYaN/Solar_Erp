@@ -75,7 +75,7 @@ export function QuotationPreviewDialog({
         <header className="quotation-document__header">
           <div className="quotation-document__brand">
             <span className="quotation-document__mark"><FileText size={20} /></span>
-            <div><strong>Solar ERP</strong><small>Solar EPC quotation</small></div>
+            <div><strong>Shree Enterprise</strong><small>Perfect Solar Quotation</small></div>
           </div>
           <span className={`quotation-document__status quotation-document__status--${quotation.status}`}>
             {quotation.status === 'approved' && <CheckCircle2 size={14} />}

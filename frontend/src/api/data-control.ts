@@ -16,6 +16,10 @@ export function restoreDeletedCustomer(customerId: string, reason = ''): Promise
   return apiRequest(`/customer-flow/customers/${apiSegment(customerId)}/restore`, { method: 'POST', body: { reason } })
 }
 
+export function purgeDeletedCustomer(customerId: string, reason: string): Promise<void> {
+  return apiRequest(`/customer-flow/customers/${apiSegment(customerId)}/purge`, { method: 'DELETE', body: { reason } })
+}
+
 export function getInventoryMovementHistory(status: 'corrected' | 'reversed', page = 1, pageSize = 50): Promise<InventoryMovementList> {
   const params = new URLSearchParams({ status, page: String(page), page_size: String(pageSize) })
   return apiRequest(`/inventory/movements?${params.toString()}`)

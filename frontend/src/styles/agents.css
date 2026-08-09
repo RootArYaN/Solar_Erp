@@ -78,10 +78,11 @@
 .customer-identity span, .table-contact, .transaction-detail > span:last-child { min-width: 0; display: grid; gap: 4px; }
 .customer-identity strong, .table-contact strong, .transaction-detail strong, .project-name { color: #26313d; font-size: 11px; }
 .customer-identity small, .table-contact small, .transaction-detail small { max-width: 280px; overflow: hidden; color: #838a93; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
-.customer-status { display: inline-flex; align-items: center; min-height: 25px; padding: 0 9px; border-radius: 999px; color: #53606b; background: #eef1f2; font-size: 9px; font-weight: 750; text-transform: capitalize; }
+.customer-status { display: inline-flex; width: fit-content; align-items: center; min-height: 21px; padding: 0 7px; border-radius: 999px; color: #53606b; background: #eef1f2; font-size: 8px; line-height: 1; font-weight: 750; white-space: nowrap; text-transform: capitalize; }
 .customer-status--active { color: #3b7146; background: #e9f6ec; }
 .customer-status--proposal { color: #765c24; background: #fbf1d8; }
 .customer-status--on_hold { color: #8a5350; background: #f7e9e8; }
+.quotation-request-button { width: 28px; height: 28px; display: inline-grid; place-items: center; padding: 0; }
 .agent-table code { padding: 4px 7px; border-radius: 6px; color: #586672; background: #f0f2f3; font-size: 9px; }
 .transaction-icon { width: 31px; height: 31px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 10px; }
 .transaction-icon--credit { color: #3f7d4c; background: #e9f6ec; }

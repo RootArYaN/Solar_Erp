@@ -25,7 +25,7 @@ def _assert_safe(database_url: str, confirmation: str) -> str:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Reset the isolated Solar ERP PostgreSQL test schema")
+    parser = argparse.ArgumentParser(description="Reset the isolated PostgreSQL test schema")
     parser.add_argument("--confirm", required=True, help="Exact test database name")
     args = parser.parse_args()
 

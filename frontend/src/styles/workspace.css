@@ -1401,8 +1401,12 @@ body.app-authenticated #root {
 }
 
 .app-shell--view-mobile .customer-directory__filters {
-  grid-template-columns: minmax(0, 1fr) 118px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: stretch;
+}
+
+.app-shell--view-mobile .customer-directory__search {
+  grid-column: 1 / -1;
 }
 
 .app-shell--view-mobile .customer-directory__list {
@@ -1492,8 +1496,12 @@ body.app-authenticated #root {
   }
 
   .customer-directory__filters {
-    grid-template-columns: minmax(0, 1fr) 118px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     align-items: stretch;
+  }
+
+  .customer-directory__search {
+    grid-column: 1 / -1;
   }
 
   .customer-directory__list {

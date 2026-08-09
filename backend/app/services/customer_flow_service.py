@@ -442,7 +442,10 @@ def get_snapshot(
     *,
     sections: set[str] | None = None,
 ) -> CustomerFlowSnapshot:
-    customer = _load_customer(db, actor, customer_id)
+    # Super Admin must be able to open a soft-deleted customer from the
+    # explicit Deleted directory in order to review, restore, or purge it.
+    # For every other actor, include_deleted remains fail-closed in the query.
+    customer = _load_customer(db, actor, customer_id, include_deleted=True)
     requested_sections = sections or {"overview"}
     # Keep the initial customer view compact. Full workflow history is requested
     # only by the projects/quotations tabs, while documents/payments/loan/audit

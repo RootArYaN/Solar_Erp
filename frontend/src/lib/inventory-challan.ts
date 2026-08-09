@@ -55,9 +55,9 @@ function layoutInput(row: InventoryMovement): DocumentPackInput {
 function layoutTemplate(companyName: string): DocumentPackTemplate {
   return {
     ...defaultDocumentPackTemplate,
-    company_name: companyName || 'Solar ERP',
-    brand_name: companyName || 'Solar ERP',
-    footer: 'Computer-generated inventory challan from Solar ERP.',
+    company_name: companyName || 'Shree EnterPrise',
+    brand_name: companyName || 'PerfectSolar',
+    footer: 'Computer-generated inventory challan.',
   }
 }
 

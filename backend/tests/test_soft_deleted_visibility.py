@@ -33,6 +33,13 @@ def test_visible_customer_query_excludes_all_soft_delete_markers():
     assert "agent_customers.company_id =" in sql
 
 
+def test_customer_snapshot_allows_explicit_super_admin_deleted_customer_access():
+    from app.services.customer_flow_service import get_snapshot
+
+    source = inspect.getsource(get_snapshot)
+    assert "_load_customer(db, actor, customer_id, include_deleted=True)" in source
+
+
 def test_visible_project_query_inherits_customer_visibility():
     sql = normalized_sql(visible_project_ids("company-1"))
     assert "customer_projects.customer_id in" in sql

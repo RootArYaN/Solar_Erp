@@ -89,6 +89,7 @@
 }
 
 .app-nav a {
+  position: relative;
   min-width: 0;
   min-height: 39px;
   display: flex;
@@ -147,10 +148,11 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgba(247, 204, 113, .18);
+  border: 1px solid rgba(16, 43, 65, .35);
   border-radius: 999px;
-  color: #f6cf7a;
-  background: rgba(241, 186, 80, .13);
+  color: #102b41;
+  background: #f4c764;
+  box-shadow: 0 2px 7px rgba(7, 24, 38, .28);
   font-size: 8px;
   font-weight: 850;
   line-height: 1;
@@ -228,13 +230,15 @@
 .app-shell--sidebar-collapsed .app-nav__label { display: none; }
 .app-shell--sidebar-collapsed .app-nav__notification {
   position: absolute;
-  transform: translate(12px, -11px);
-  width: 7px;
-  min-width: 7px;
-  height: 7px;
-  padding: 0;
-  border: 1px solid #183448;
-  font-size: 0;
+  top: 1px;
+  right: 1px;
+  width: auto;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 3px;
+  border: 2px solid #183448;
+  transform: none;
+  font-size: 7px;
 }
 .app-shell--sidebar-collapsed .sidebar-profile { flex-direction: column; margin-top: auto; padding-inline: 0; }
 .app-shell--sidebar-collapsed .sidebar-profile__copy { display: none; }

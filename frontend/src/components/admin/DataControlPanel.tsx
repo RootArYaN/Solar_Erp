@@ -1,9 +1,10 @@
 import { Activity, History, RefreshCw, RotateCcw, Search, Trash2, Wrench } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
-import { getAuditHistory, getDataHealth, getDeletedCustomers, getInventoryMovementHistory, restoreDeletedCustomer, type DataHealthSummary } from '../../api/data-control'
+import { getAuditHistory, getDataHealth, getDeletedCustomers, getInventoryMovementHistory, purgeDeletedCustomer, restoreDeletedCustomer, type DataHealthSummary } from '../../api/data-control'
 import type { Customer } from '../../contracts/domain-contracts'
 import type { InventoryMovement } from '../../erp-types'
 import type { AuditEvent } from '../../types'
+import { AlertDialog } from '../ui/AlertDialog'
 import { Button } from '../ui/Button'
 import { EmptyState, LoadingSkeleton } from '../ui/PageState'
 import { Field } from '../ui/Field'
@@ -12,6 +13,7 @@ import { useToast } from '../ui/ToastProvider'
 import { TabButton, TabStrip } from '../workspace'
 
 type DataTab = 'deleted' | 'corrections' | 'reversals' | 'audit' | 'health'
+type CustomerAction = { type: 'restore' | 'purge'; customer: Customer }
 
 const dateTime = new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium', timeStyle: 'short' })
 
@@ -31,6 +33,7 @@ export function DataControlPanel() {
   const pageSize = 50
   const [loading, setLoading] = useState(true)
   const [busyId, setBusyId] = useState('')
+  const [customerAction, setCustomerAction] = useState<CustomerAction | null>(null)
   const { toast } = useToast()
 
   const load = useCallback(async () => {
@@ -64,14 +67,21 @@ export function DataControlPanel() {
     return () => window.clearTimeout(timer)
   }, [load])
 
-  async function restore(customer: Customer) {
+  async function applyCustomerAction() {
+    if (!customerAction) return
+    const { customer, type } = customerAction
     setBusyId(customer.id)
     try {
-      await restoreDeletedCustomer(customer.id, 'Restored from Administration → Data Control')
+      if (type === 'restore') {
+        await restoreDeletedCustomer(customer.id, 'Restored from Administration → Data Control')
+      } else {
+        await purgeDeletedCustomer(customer.id, 'Permanently purged from Administration → Data Control')
+      }
+      setCustomerAction(null)
       await load()
-      toast({ message: `${customer.display_name} restored`, variant: 'success' })
+      toast({ message: `${customer.display_name} ${type === 'restore' ? 'restored' : 'permanently purged'}`, variant: 'success' })
     } catch (reason) {
-      toast({ message: reason instanceof Error ? reason.message : 'Could not restore customer', variant: 'error' })
+      toast({ message: reason instanceof Error ? reason.message : `Could not ${type} customer`, variant: 'error' })
     } finally {
       setBusyId('')
     }
@@ -93,7 +103,7 @@ export function DataControlPanel() {
 
       {loading ? <LoadingSkeleton rows={6} /> : tab === 'deleted' ? (
         deleted.length ? <div className="user-table-wrap"><table className="user-table"><thead><tr><th>Customer</th><th>Status</th><th>Balance</th><th>Deleted</th><th /></tr></thead><tbody>
-          {deleted.map((row) => <tr key={row.id}><td><strong>{row.display_name}</strong><small>{row.record_number}</small></td><td><span className="status-badge">Deleted</span></td><td>₹{Number(row.outstanding_balance || 0).toLocaleString('en-IN')}</td><td>{row.deleted_at ? dateTime.format(new Date(row.deleted_at)) : '—'}</td><td><Button size="compact" disabled={busyId === row.id} onClick={() => void restore(row)}>{busyId === row.id ? 'Restoring…' : 'Restore'}</Button></td></tr>)}
+          {deleted.map((row) => <tr key={row.id}><td><strong>{row.display_name}</strong><small>{row.record_number}</small></td><td><span className="status-badge">Deleted</span></td><td>₹{Number(row.outstanding_balance || 0).toLocaleString('en-IN')}</td><td>{row.deleted_at ? dateTime.format(new Date(row.deleted_at)) : '—'}</td><td><div className="row-actions"><Button size="icon" variant="ghost" disabled={busyId === row.id} onClick={() => setCustomerAction({ type: 'restore', customer: row })} aria-label={`Restore ${row.display_name}`} title="Restore customer"><RotateCcw size={16} /></Button><button type="button" className="danger-icon-button" disabled={busyId === row.id} onClick={() => setCustomerAction({ type: 'purge', customer: row })} aria-label={`Permanently purge ${row.display_name}`} title="Permanently purge customer"><Trash2 size={16} /></button></div></td></tr>)}
         </tbody></table></div> : <EmptyState title="No deleted customers" />
       ) : tab === 'audit' ? (
         events.length ? <div className="user-table-wrap"><table className="user-table"><thead><tr><th>Event</th><th>Entity</th><th>Actor</th><th>Date</th></tr></thead><tbody>
@@ -109,6 +119,19 @@ export function DataControlPanel() {
         </tbody></table></div>
       ) : <EmptyState title={tab === 'corrections' ? 'No corrected movements' : 'No reversed movements'} />}
       {tab !== 'health' && <Pagination page={page} pageSize={pageSize} total={total} loading={loading} onPageChange={setPage} />}
+      <AlertDialog
+        open={Boolean(customerAction)}
+        title={customerAction?.type === 'purge' ? 'Permanently purge this customer?' : 'Restore this customer?'}
+        description={customerAction ? customerAction.type === 'purge'
+          ? `${customerAction.customer.display_name} will be permanently removed. This cannot be undone, and the server will block the purge if historical dependencies exist.`
+          : `${customerAction.customer.display_name} will return to the active customer directory.` : undefined}
+        confirmLabel={customerAction?.type === 'purge' ? 'Permanently purge' : 'Restore customer'}
+        variant={customerAction?.type === 'purge' ? 'danger' : 'warning'}
+        icon={customerAction?.type === 'purge' ? 'delete' : 'reset'}
+        loading={Boolean(customerAction && busyId === customerAction.customer.id)}
+        onCancel={() => setCustomerAction(null)}
+        onConfirm={applyCustomerAction}
+      />
     </section>
   )
 }

@@ -39,7 +39,7 @@ import { label, money, revision } from './customer-workspace-utils'
 
 type Tab = 'overview' | 'projects' | 'timeline' | 'quotations' | 'documents' | 'payments' | 'loan' | 'activity'
 type PaymentFilter = 'all' | 'loan' | 'cash' | 'remaining'
-type StatusFilter = 'current' | 'completed' | 'archived'
+type StatusFilter = 'current' | 'completed' | 'archived' | 'deleted'
 type LifecycleAction = 'complete' | 'reactivate' | 'archive' | 'delete' | 'restore' | 'purge'
 
 
@@ -59,6 +59,7 @@ export function CustomerWorkspacePage({ session }: { session: Session }) {
   const [loading, setLoading] = useState(true)
   const [detailLoading, setDetailLoading] = useState(false)
   const [error, setError] = useState('')
+  const [detailError, setDetailError] = useState('')
   const [editOpen, setEditOpen] = useState(false)
   const [paymentOpen, setPaymentOpen] = useState(false)
   const [editingPayment, setEditingPayment] = useState<CustomerPayment | null>(null)
@@ -75,6 +76,7 @@ export function CustomerWorkspacePage({ session }: { session: Session }) {
   const [working, setWorking] = useState(false)
   const [lifecycleMenuOpen, setLifecycleMenuOpen] = useState(false)
   const lifecycleMenuRef = useRef<HTMLDivElement>(null)
+  const detailRequestRef = useRef(0)
   const [accounts, setAccounts] = useState<FinancialAccount[]>([])
   const [categories, setCategories] = useState<FinanceCategory[]>([])
   const { toast } = useToast()
@@ -118,15 +120,21 @@ export function CustomerWorkspacePage({ session }: { session: Session }) {
 
   async function loadSnapshot(customerId = selectedId, activeSection: Tab = tab) {
     if (!customerId) return
+    const requestId = ++detailRequestRef.current
     setDetailLoading(true)
-    setError('')
+    setDetailError('')
+    setSnapshot((current) => current?.customer.id === customerId ? current : null)
     try {
       const sections = activeSection === 'overview' ? ['overview'] : ['overview', activeSection]
-      setSnapshot(await repository.getSnapshot(customerId, sections))
+      const next = await repository.getSnapshot(customerId, sections)
+      if (requestId === detailRequestRef.current) setSnapshot(next)
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Could not load customer details')
+      if (requestId === detailRequestRef.current) {
+        setSnapshot(null)
+        setDetailError(reason instanceof Error ? reason.message : 'Could not load customer details')
+      }
     } finally {
-      setDetailLoading(false)
+      if (requestId === detailRequestRef.current) setDetailLoading(false)
     }
   }
 
@@ -134,7 +142,16 @@ export function CustomerWorkspacePage({ session }: { session: Session }) {
     const timer = window.setTimeout(() => { void loadCustomers() }, search.trim() ? 250 : 0)
     return () => window.clearTimeout(timer)
   }, [customerPage, search, statusFilter, paymentFilter])
-  useEffect(() => { if (selectedId) void loadSnapshot(selectedId, tab) }, [selectedId, tab])
+  useEffect(() => {
+    if (selectedId) {
+      void loadSnapshot(selectedId, tab)
+      return
+    }
+    detailRequestRef.current += 1
+    setSnapshot(null)
+    setDetailError('')
+    setDetailLoading(false)
+  }, [selectedId, tab])
   useEffect(() => {
     if (!paymentOpen) return
     void Promise.all([getFinancialAccounts(), getFinanceCategories()]).then(([nextAccounts, nextCategories]) => {
@@ -367,6 +384,7 @@ export function CustomerWorkspacePage({ session }: { session: Session }) {
               <option value="current">Current</option>
               <option value="completed">Completed</option>
               <option value="archived">Archived</option>
+              {session.user.is_super_admin && <option value="deleted">Deleted</option>}
             </select>
             <select aria-label="Filter customers by payment" value={paymentFilter} onChange={(event) => { setPaymentFilter(event.target.value as PaymentFilter); setCustomerPage(1) }}>
               <option value="all">All payments</option>
@@ -387,7 +405,7 @@ export function CustomerWorkspacePage({ session }: { session: Session }) {
         </aside>
 
         <main className="customer-workspace">
-          {detailLoading || !snapshot ? <LoadingSkeleton rows={7} /> : <>
+          {detailLoading ? <LoadingSkeleton rows={7} /> : detailError ? <ErrorState message={detailError} onRetry={() => void loadSnapshot()} /> : !snapshot ? <EmptyState title="Select a customer" /> : <>
             <header className="customer-workspace__header">
               <div className="customer-title-block">
                 <span className="customer-title-icon">{snapshot.customer.display_name.slice(0, 1)}</span>
