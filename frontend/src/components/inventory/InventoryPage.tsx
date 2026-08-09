@@ -8,7 +8,7 @@ import { getModuleAccess } from '../../lib/permissions'
 import type { Session } from '../../types'
 import { Modal } from '../admin/Modal'
 import { EntityEditDialog } from '../editing/EntityEditDialog'
-import { EmptyState, ErrorState, LoadingSkeleton, ReadOnlyNotice } from '../ui/PageState'
+import { EmptyState, ErrorState, LoadingSkeleton} from '../ui/PageState'
 import { Pagination } from '../ui/Pagination'
 import { useToast } from '../ui/ToastProvider'
 import { KpiGrid, TabButton, TabStrip, WorkspaceHeader, WorkspacePage } from '../workspace'
@@ -300,8 +300,6 @@ export function InventoryPage({ session }: { session: Session }) {
 
   return <WorkspacePage className="erp-page inventory-page">
     <WorkspaceHeader className="erp-page-head"><div><span>Operations</span><h1>Inventory</h1></div><div className="erp-head-actions inventory-head-actions"><button className="secondary-button" onClick={() => void load()}><RefreshCw size={15} /> Refresh</button>{access.canEdit && <button className="secondary-button inventory-action--inward" onClick={() => { setSelected(null); setMovementDirection('inward'); setModal('movement') }}><PackagePlus size={15} /> Inward</button>}{access.canEdit && <button className="secondary-button inventory-action--outward" onClick={() => { setSelected(null); setMovementDirection('outward'); setModal('movement') }}><PackagePlus size={15} /> Outward</button>}{access.canCreate && <button className="secondary-button" onClick={() => setModal('location')}><Warehouse size={15} /> Location</button>}{access.canCreate && <button className="primary-button" onClick={() => setModal('item')}><Plus size={15} /> Add item</button>}</div></WorkspaceHeader>
-    {access.readOnly && <ReadOnlyNotice />}
-
     <KpiGrid columns={4} phoneColumns={2} responsive className="erp-kpi-grid"><article><Boxes /><span>Active items</span><strong>{data.total_items}</strong><small>{number.format(data.total_quantity)} units on hand</small></article><article><AlertTriangle /><span>Low stock</span><strong>{data.low_stock_items}</strong><small>At or below reorder level</small></article><article><IndianRupee /><span>Stock value</span><strong>{money.format(data.stock_value)}</strong><small>Based on current unit cost</small></article><article><Warehouse /><span>Locations</span><strong>{data.locations.length}</strong><small>Active storage locations</small></article></KpiGrid>
 
     <TabStrip className="erp-tabs inventory-main-tabs" label="Inventory views">
