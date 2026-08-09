@@ -105,6 +105,7 @@ def get_inventory_movements(
     customer_id: str | None = Query(default=None, max_length=36),
     movement_type: str | None = Query(default=None, max_length=32),
     status: str | None = Query(default=None, max_length=24),
+    query: str | None = Query(default=None, alias='q', max_length=160),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=50, ge=1, le=100),
     db: Session = Depends(get_db),
@@ -117,6 +118,7 @@ def get_inventory_movements(
         customer_id=customer_id,
         movement_type=movement_type,
         status=status,
+        query=query,
         page=page,
         page_size=page_size,
     )

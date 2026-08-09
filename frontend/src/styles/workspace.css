@@ -1305,7 +1305,7 @@ body.app-authenticated #root {
 .customer-summary-grid .ui-kpi-card__value {
   display: -webkit-box;
   overflow: hidden;
-  font-size: clamp(10.5px, .75vw, 12px);
+  font-size: clamp(14px, 1vw, 16px);
   line-height: 1.14;
   letter-spacing: -.15px;
   overflow-wrap: anywhere;
@@ -1878,6 +1878,9 @@ body.app-authenticated #root {
 .movement-details legend{padding:0 6px;color:#667383;font-size:8px;font-weight:850;letter-spacing:.45px;text-transform:uppercase}
 .inventory-history-panel>header{flex:0 0 auto;min-width:0}
 .inventory-history-panel>header>div:first-child{min-width:0}
+.inventory-history-controls{min-width:0;display:flex;align-items:center;justify-content:flex-end;gap:8px}
+.inventory-history-search{width:min(280px,32vw);min-width:180px;height:36px;flex:0 1 280px}
+.inventory-history-search input{height:100%;min-height:0}
 .inventory-history-tabs{
   width:auto;
   max-width:100%;
@@ -3840,6 +3843,16 @@ body.app-preview-mobile .document-checklist article {
   gap: 9px;
   padding: 10px;
 }
+:is(.app-shell--view-mobile, body.app-preview-mobile) .inventory-history-controls {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+}
+:is(.app-shell--view-mobile, body.app-preview-mobile) .inventory-history-search {
+  width: 100%;
+  min-width: 0;
+}
 :is(.app-shell--view-mobile, body.app-preview-mobile) .inventory-history-tabs {
   width: 100%;
   margin: 0;
@@ -3859,7 +3872,9 @@ body.app-preview-mobile .document-checklist article {
 }
 :is(.app-shell--view-mobile, body.app-preview-mobile) .inventory-history-table td[data-label='Actions'] .table-row-actions {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(44px, 1fr);
+  grid-template-columns: none;
   width: 100%;
 }
 :is(.app-shell--view-mobile, body.app-preview-mobile) .inventory-history-table td[data-label='Actions'] .table-row-actions button {
@@ -3874,6 +3889,8 @@ body.app-preview-mobile .document-checklist article {
     gap: 9px;
     padding: 10px;
   }
+  .inventory-history-controls { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .inventory-history-search { width: 100%; min-width: 0; }
   .inventory-history-tabs {
     width: 100%;
     margin: 0;
@@ -3882,6 +3899,14 @@ body.app-preview-mobile .document-checklist article {
     overflow: visible;
   }
   .inventory-history-table { min-width: 0; }
+  .inventory-history-table td[data-label='Actions'] .table-row-actions {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(44px, 1fr);
+    grid-template-columns: none;
+    width: 100%;
+  }
+  .inventory-history-table td[data-label='Actions'] .table-row-actions button { width: 100%; }
 }
 
 /* Native phone viewport fallback. The app-shell preview class is not required

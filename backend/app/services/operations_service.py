@@ -421,6 +421,7 @@ def list_inventory_movements(
     customer_id: str | None = None,
     movement_type: str | None = None,
     status: str | None = None,
+    query: str | None = None,
     page: int = 1,
     page_size: int = 50,
 ) -> InventoryMovementList:
@@ -440,6 +441,43 @@ def list_inventory_movements(
         filters.append(InventoryMovement.movement_type == movement_type)
     if status:
         filters.append(InventoryMovement.status == status)
+    if query and (search_value := query.strip().lower()):
+        item_match = exists(
+            select(InventoryItem.id).where(
+                InventoryItem.id == InventoryMovement.item_id,
+                or_(
+                    func.lower(InventoryItem.name).contains(search_value, autoescape=True),
+                    func.lower(InventoryItem.sku).contains(search_value, autoescape=True),
+                    func.lower(InventoryItem.supplier_name).contains(search_value, autoescape=True),
+                ),
+            )
+        )
+        location_match = exists(
+            select(InventoryLocation.id).where(
+                or_(
+                    InventoryLocation.id == InventoryMovement.source_location_id,
+                    InventoryLocation.id == InventoryMovement.destination_location_id,
+                ),
+                or_(
+                    func.lower(InventoryLocation.name).contains(search_value, autoescape=True),
+                    func.lower(InventoryLocation.address).contains(search_value, autoescape=True),
+                ),
+            )
+        )
+        filters.append(or_(
+            func.lower(InventoryMovement.reference_number).contains(search_value, autoescape=True),
+            func.lower(InventoryMovement.supplier_name).contains(search_value, autoescape=True),
+            func.lower(InventoryMovement.transporter_name).contains(search_value, autoescape=True),
+            func.lower(InventoryMovement.vehicle_number).contains(search_value, autoescape=True),
+            func.lower(InventoryMovement.driver_name).contains(search_value, autoescape=True),
+            func.lower(InventoryMovement.driver_phone).contains(search_value, autoescape=True),
+            func.lower(InventoryMovement.eway_bill_number).contains(search_value, autoescape=True),
+            func.lower(InventoryMovement.source_location_manual).contains(search_value, autoescape=True),
+            func.lower(InventoryMovement.destination_location_manual).contains(search_value, autoescape=True),
+            func.lower(InventoryMovement.note).contains(search_value, autoescape=True),
+            item_match,
+            location_match,
+        ))
     total = int(db.scalar(select(func.count()).select_from(InventoryMovement).where(*filters)) or 0)
     rows = list(db.scalars(
         select(InventoryMovement)

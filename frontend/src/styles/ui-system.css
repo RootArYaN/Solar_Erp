@@ -493,3 +493,103 @@ body.app-preview-mobile .alert-dialog footer button {
     display: none;
   }
 }
+
+/* Quotation builder keeps line items compact and labelled on both the real
+   phone viewport and the super-admin phone preview. */
+body.app-preview-mobile .quotation-builder-modal .quotation-line:not(.quotation-line--header) {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--ui-control-border);
+  border-radius: 12px;
+  background: #fff;
+}
+
+body.app-preview-mobile .modal-card.quotation-builder-modal .quotation-line > .quotation-line__field--description,
+body.app-preview-mobile .quotation-builder-modal .quotation-line__actions {
+  grid-column: 1 / -1;
+}
+
+body.app-preview-mobile .quotation-builder-modal :is(.quotation-line__field > span, .quotation-line__actions > span) {
+  display: block;
+  color: #687482;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+body.app-preview-mobile .quotation-builder-modal .quotation-line__actions {
+  justify-content: space-between;
+  padding-top: 2px;
+}
+
+body.app-preview-mobile .quotation-builder-modal .quotation-line input {
+  height: var(--ui-touch-control-height);
+  font-size: 12px;
+}
+
+body.app-preview-mobile .quotation-builder-modal .quotation-builder-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding-bottom: max(12px, env(safe-area-inset-bottom));
+}
+
+body.app-preview-mobile .quotation-builder-modal .quotation-builder-actions button {
+  width: 100%;
+  min-width: 0;
+}
+
+body.app-preview-mobile .quotation-builder-modal .workflow-customer-strip {
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 3px;
+}
+
+@media (max-width: 780px) {
+  .quotation-builder-modal .quotation-line:not(.quotation-line--header) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    padding: 10px;
+    border: 1px solid var(--ui-control-border);
+    border-radius: 12px;
+    background: #fff;
+  }
+
+  .modal-layer .modal-card.quotation-builder-modal .quotation-line > .quotation-line__field--description,
+  .quotation-builder-modal .quotation-line__actions {
+    grid-column: 1 / -1;
+  }
+
+  .quotation-builder-modal :is(.quotation-line__field > span, .quotation-line__actions > span) {
+    display: block;
+    color: #687482;
+    font-size: 10px;
+    font-weight: 800;
+  }
+
+  .quotation-builder-modal .quotation-line__actions {
+    justify-content: space-between;
+    padding-top: 2px;
+  }
+
+  .quotation-builder-modal .quotation-line input {
+    height: var(--ui-touch-control-height);
+    font-size: 12px;
+  }
+
+  .quotation-builder-modal .quotation-builder-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding-bottom: max(12px, env(safe-area-inset-bottom));
+  }
+
+  .quotation-builder-modal .quotation-builder-actions button {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .quotation-builder-modal .workflow-customer-strip {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 3px;
+  }
+}

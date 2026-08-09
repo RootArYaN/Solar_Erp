@@ -19,10 +19,11 @@ export const updateInventoryLocation = (id: string, body: Record<string, unknown
 export const createInventoryMovementBatch = (body: Record<string, unknown>): Promise<InventoryMovement[]> => apiRequest('/inventory/movement-batches', { method: 'POST', body, idempotencyKey: createClientId() })
 
 export type InventoryMovementList = { data: InventoryMovement[]; page: number; page_size: number; total: number }
-export const getInventoryMovements = (options: { movementType?: string; status?: string; page?: number; pageSize?: number } = {}): Promise<InventoryMovementList> => {
+export const getInventoryMovements = (options: { movementType?: string; status?: string; query?: string; page?: number; pageSize?: number } = {}): Promise<InventoryMovementList> => {
   const params = new URLSearchParams({ page: String(options.page ?? 1), page_size: String(options.pageSize ?? 50) })
   if (options.movementType) params.set('movement_type', options.movementType)
   if (options.status) params.set('status', options.status)
+  if (options.query?.trim()) params.set('q', options.query.trim())
   return apiRequest(`/inventory/movements?${params.toString()}`)
 }
 export const reverseInventoryMovement = (id: string, reason: string): Promise<InventoryMovement> => apiRequest(`/inventory/movements/${apiSegment(id)}/reverse`, { method: 'POST', body: { reason } })

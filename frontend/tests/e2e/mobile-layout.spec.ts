@@ -7,6 +7,7 @@ const styleFiles = [
   'base.css',
   'ui-primitives.css',
   'erp-shared.css',
+  'shell.css',
   'shell-admin.css',
   'agents.css',
   'documents-posters.css',
@@ -109,6 +110,49 @@ for (const width of phoneWidths) {
     expect(pageBox!.x + pageBox!.width).toBeLessThanOrEqual(width + 1)
   })
 
+  test(`inventory history actions stay on one row at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 820 })
+    await page.setContent(`
+      <meta name="viewport" content="width=device-width, initial-scale=1" />
+      <main class="app-shell app-shell--view-mobile">
+        <section class="app-main"><div class="app-viewport"><div class="route-transition">
+          <section class="workspace-page erp-page inventory-page">
+            <section class="erp-panel inventory-history-panel">
+              <header><div><span>Inventory history</span><h2>Movement ledger</h2></div><div class="inventory-history-controls">
+                <label class="erp-search inventory-history-search"><span aria-hidden="true">⌕</span><input aria-label="Search inventory history" placeholder="Search item, challan, party or location" /></label>
+                <nav class="erp-tabs inventory-history-tabs"><button>all</button><button>inward</button><button>outward</button></nav>
+              </div></header>
+              <div class="erp-table-wrap"><table class="erp-table inventory-table inventory-history-table"><tbody>
+                <tr><td data-label="Status"><span class="soft-badge">Completed</span></td><td data-label="Actions"><div class="table-row-actions">
+                  <button class="secondary-button secondary-button--compact" aria-label="Download challan">↓</button>
+                  <button class="secondary-button secondary-button--compact" aria-label="Correct movement">⌕</button>
+                  <button class="secondary-button secondary-button--compact" aria-label="Reverse movement">↶</button>
+                </div></td></tr>
+              </tbody></table></div>
+            </section>
+          </section>
+        </div></div></section>
+      </main>
+    `)
+    await loadStyles(page)
+
+    const search = page.getByRole('textbox', { name: 'Search inventory history' })
+    const searchBox = await search.boundingBox()
+    const tabsBox = await page.locator('.inventory-history-tabs').boundingBox()
+    await expect(search).toBeVisible()
+    expect(searchBox).not.toBeNull()
+    expect(tabsBox).not.toBeNull()
+    expect(tabsBox!.y).toBeGreaterThanOrEqual(searchBox!.y + searchBox!.height)
+    expect(searchBox!.x + searchBox!.width).toBeLessThanOrEqual(width + 1)
+
+    const buttons = page.locator('.inventory-history-table .table-row-actions button')
+    await expect(buttons).toHaveCount(3)
+    const boxes = await buttons.evaluateAll((elements) => elements.map((element) => element.getBoundingClientRect()))
+    expect(new Set(boxes.map((box) => Math.round(box.top))).size).toBe(1)
+    expect(boxes.every((box) => box.width >= 44 && box.left >= 0 && box.right <= width + 1)).toBe(true)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true)
+  })
+
   test(`portal overlays and toast fit a ${width}px viewport`, async ({ page }) => {
     await page.setViewportSize({ width, height: 820 })
     await page.setContent(`
@@ -207,6 +251,62 @@ test('document preview title and zoom controls stay inline at 320px', async ({ p
   expect(headerBox!.height).toBeLessThanOrEqual(66)
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true)
 })
+
+for (const mode of [
+  { name: 'real phone', width: 375, preview: false },
+  { name: 'mobile preview', width: 1024, preview: true },
+]) {
+  test(`quotation builder stays compact in ${mode.name} mode`, async ({ page }) => {
+    await page.setViewportSize({ width: mode.width, height: 820 })
+    await page.setContent(`
+      <meta name="viewport" content="width=device-width, initial-scale=1" />
+      <div class="modal-layer"><section class="modal-card quotation-builder-modal">
+        <header class="modal-card__header"><div><h2>Generate quotation</h2></div><button class="icon-button" aria-label="Close dialog">×</button></header>
+        <div class="modal-card__body"><form class="admin-form quotation-builder">
+          <div class="workflow-customer-strip"><strong>Sample customer</strong><span>Agent · 3 kW</span></div>
+          <div class="admin-form__grid"><label class="field"><span>Quotation title</span><div class="field__control"><input value="3 kW solar EPC" /></div></label><label class="field"><span>Valid until</span><div class="field__control"><input type="date" value="2026-09-08" /></div></label></div>
+          <div class="quotation-lines"><div class="quotation-line quotation-line--header"><span>Description</span><span>Qty</span><span>Unit</span><span>Unit price</span><span>Tax %</span><span></span></div>
+            <div class="quotation-line">
+              <label class="quotation-line__field quotation-line__field--description"><span>Description</span><input value="Solar modules and inverter" /></label>
+              <label class="quotation-line__field"><span>Quantity</span><input value="1" /></label>
+              <label class="quotation-line__field"><span>Unit</span><input value="Lot" /></label>
+              <label class="quotation-line__field"><span>Unit price</span><input value="0" /></label>
+              <label class="quotation-line__field"><span>Tax %</span><input value="5" /></label>
+              <div class="quotation-line__actions"><span>Item 1</span><button class="icon-button" aria-label="Remove line 1">⌫</button></div>
+            </div>
+          </div>
+          <div class="quotation-builder-footer"><button class="secondary-button">Add line</button><div><span>Subtotal ₹0</span><span>Tax ₹0</span><strong>Total ₹0</strong></div></div>
+        </form></div>
+        <footer class="quotation-builder-actions"><button class="secondary-button">Cancel</button><button class="primary-button">Save for approval</button></footer>
+      </section></div>
+    `)
+    if (mode.preview) await page.locator('body').evaluate((body) => body.classList.add('app-preview-mobile'))
+    await loadStyles(page)
+
+    for (const label of ['Description', 'Quantity', 'Unit', 'Unit price', 'Tax %', 'Item 1']) {
+      await expect(page.getByText(label, { exact: true }).last()).toBeVisible()
+    }
+
+    const layout = await page.locator('.quotation-line:not(.quotation-line--header)').evaluate((line) => {
+      const fields = Array.from(line.querySelectorAll<HTMLElement>('.quotation-line__field')).map((field) => field.getBoundingClientRect().toJSON())
+      const actions = line.querySelector<HTMLElement>('.quotation-line__actions')!.getBoundingClientRect().toJSON()
+      return { fields, actions }
+    })
+    expect(layout.fields[1].top).toBe(layout.fields[2].top)
+    expect(layout.fields[3].top).toBe(layout.fields[4].top)
+    expect(layout.fields[1].top).toBeGreaterThan(layout.fields[0].top)
+    expect(layout.actions.top).toBeGreaterThan(layout.fields[3].top)
+
+    const modal = await page.locator('.quotation-builder-modal').boundingBox()
+    const footer = await page.locator('.quotation-builder-actions').boundingBox()
+    expect(modal).not.toBeNull()
+    expect(footer).not.toBeNull()
+    expect(footer!.y + footer!.height).toBeLessThanOrEqual(modal!.y + modal!.height + 1)
+    expect(footer!.x).toBeGreaterThanOrEqual(modal!.x)
+    expect(footer!.x + footer!.width).toBeLessThanOrEqual(modal!.x + modal!.width + 1)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true)
+  })
+}
 
 for (const width of [375, 1440]) {
   test(`customer summary typography remains readable at ${width}px`, async ({ page }) => {
@@ -319,15 +419,15 @@ for (const width of [375, 1440]) {
           <section class="workspace-page finance-page">
             <div class="finance-tab-panel finance-tab-panel--overview">
               <div class="finance-range-toolbar">
-                <label class="finance-date-field"><input type="date" value="2026-08-01" /></label>
-                <label class="finance-date-field"><input type="date" value="2026-08-31" /></label>
+                <label class="date-filter-control finance-date-field"><span class="date-filter-control__copy"><small>From</small><span class="date-filter-control__value">01/08/26</span></span><span aria-hidden="true">▣</span><input type="date" value="2026-08-01" /></label>
+                <label class="date-filter-control finance-date-field"><span class="date-filter-control__copy"><small>To</small><span class="date-filter-control__value">31/08/26</span></span><span aria-hidden="true">▣</span><input type="date" value="2026-08-31" /></label>
                 <button class="secondary-button finance-range-apply">Apply</button>
               </div>
             </div>
             <div class="finance-tab-panel finance-tab-panel--bills">
               <div class="finance-bills-toolbar">
-                <label class="finance-date-field"><input type="date" value="2026-08-01" /></label>
-                <label class="finance-date-field"><input type="date" value="2026-08-31" /></label>
+                <label class="date-filter-control finance-date-field"><span class="date-filter-control__copy"><small>From</small><span class="date-filter-control__value">01/08/26</span></span><span aria-hidden="true">▣</span><input type="date" value="2026-08-01" /></label>
+                <label class="date-filter-control finance-date-field"><span class="date-filter-control__copy"><small>To</small><span class="date-filter-control__value">31/08/26</span></span><span aria-hidden="true">▣</span><input type="date" value="2026-08-31" /></label>
                 <label class="finance-bill-type"><select><option>All bills</option></select></label>
                 <button class="secondary-button finance-bill-apply">Apply</button>
                 <button class="primary-button finance-bill-create">Create bill</button>
@@ -335,8 +435,8 @@ for (const width of [375, 1440]) {
             </div>
             <div class="finance-tab-panel finance-tab-panel--profitability">
               <div class="finance-range-toolbar">
-                <label class="finance-date-field"><input type="date" value="2026-08-01" /></label>
-                <label class="finance-date-field"><input type="date" value="2026-08-31" /></label>
+                <label class="date-filter-control finance-date-field"><span class="date-filter-control__copy"><small>From</small><span class="date-filter-control__value">01/08/26</span></span><span aria-hidden="true">▣</span><input type="date" value="2026-08-01" /></label>
+                <label class="date-filter-control finance-date-field"><span class="date-filter-control__copy"><small>To</small><span class="date-filter-control__value">31/08/26</span></span><span aria-hidden="true">▣</span><input type="date" value="2026-08-31" /></label>
                 <button class="secondary-button finance-range-apply">Apply</button>
               </div>
             </div>
