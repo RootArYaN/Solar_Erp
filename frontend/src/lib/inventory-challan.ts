@@ -3,18 +3,18 @@ import {
   buildPdfBlobFromStreams,
   DocumentPackPdfLayout,
   PDF_CONTENT_WIDTH,
+  type PdfCell,
 } from './document-pack/pdf'
 import { defaultDocumentPackTemplate } from './document-pack/template'
 import type { DocumentPackInput, DocumentPackTemplate } from './document-pack/types'
 
 const date = new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium' })
-const dateTime = new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium', timeStyle: 'short' })
 const number = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 3 })
 
-function displayDate(value: string | null | undefined, includeTime = false) {
+function displayDate(value: string | null | undefined) {
   if (!value) return '-'
   const parsed = new Date(value)
-  return Number.isNaN(parsed.getTime()) ? value : (includeTime ? dateTime : date).format(parsed)
+  return Number.isNaN(parsed.getTime()) ? value : date.format(parsed)
 }
 
 function place(row: InventoryMovement, side: 'source' | 'destination') {
@@ -31,7 +31,7 @@ function layoutInput(row: InventoryMovement): DocumentPackInput {
   return {
     customerName: row.partner_name || row.customer_name || '',
     customerNumber: '',
-    projectNumber: row.reference_number,
+    projectNumber: '',
     quotationNumber: '',
     address: '',
     district: '',
@@ -57,7 +57,7 @@ function layoutTemplate(companyName: string): DocumentPackTemplate {
     ...defaultDocumentPackTemplate,
     company_name: companyName || 'Shree EnterPrise',
     brand_name: companyName || 'Shree Enterprise',
-    footer: 'Computer-generated inventory challan.',
+    footer: 'Inventory challan · System generated',
   }
 }
 
@@ -70,50 +70,65 @@ export function createInventoryChallanPdf(rows: InventoryMovement[], companyName
   const first = rows[0]
   const layout = new DocumentPackPdfLayout(layoutInput(first), layoutTemplate(companyName))
   const movementLabel = first.movement_type.replaceAll('_', ' ')
+  const routes = rows.map((row) => `${place(row, 'source')} → ${place(row, 'destination')}`)
+  const sharedRoute = routes.every((route) => route === routes[0])
 
   layout.beginDocument('Inventory Challan', `${movementLabel.toUpperCase()} · ${first.reference_number}`)
-  layout.section('Challan details')
-  layout.kvTable([
-    ['Challan number', first.reference_number],
-    ['Challan date', displayDate(first.challan_date || first.created_at)],
-    ['Movement', movementLabel],
-    ['Status', first.status],
-    ['From', place(first, 'source')],
-    ['To', place(first, 'destination')],
-    ['Party / supplier', first.partner_name || first.customer_name || '-'],
-    ['Project / customer', [first.project_number, first.customer_name].filter(Boolean).join(' · ') || '-'],
-  ])
+  const detailRows: PdfCell[][] = [
+    [
+      { text: 'Challan', bold: true, fill: '#eef3f8' },
+      { text: first.reference_number },
+      { text: 'Date', bold: true, fill: '#eef3f8' },
+      { text: displayDate(first.challan_date || first.created_at) },
+    ],
+    [
+      { text: 'Movement', bold: true, fill: '#eef3f8' },
+      { text: movementLabel },
+      { text: 'Party', bold: true, fill: '#eef3f8' },
+      { text: first.partner_name || first.customer_name || '-' },
+    ],
+  ]
+  if (sharedRoute) {
+    detailRows.push([
+      { text: 'From', bold: true, fill: '#eef3f8' },
+      { text: place(first, 'source') },
+      { text: 'To', bold: true, fill: '#eef3f8' },
+      { text: place(first, 'destination') },
+    ])
+  }
+  layout.table(null, detailRows, [64, 170, 54, PDF_CONTENT_WIDTH - 288], { fontSize: 7.4, padding: 3.4 })
 
-  layout.section('Items')
-  layout.table(
-    [{ text: '#' }, { text: 'Item' }, { text: 'From' }, { text: 'To' }, { text: 'Quantity' }],
-    rows.map((row, index) => [
+  const itemHeaders: PdfCell[] = sharedRoute
+    ? [{ text: '#' }, { text: 'Item / SKU' }, { text: 'Quantity' }]
+    : [{ text: '#' }, { text: 'Item / SKU' }, { text: 'Route' }, { text: 'Quantity' }]
+  const itemRows = rows.map((row, index) => {
+    const common: PdfCell[] = [
       { text: String(index + 1), align: 'center' },
-      { text: `${row.item_name}${row.item_sku ? ` (${row.item_sku})` : ''}` },
-      { text: place(row, 'source') },
-      { text: place(row, 'destination') },
-      { text: `${number.format(row.quantity)}${row.item_unit ? ` ${row.item_unit}` : ''}`, bold: true, align: 'right' },
-    ]),
-    [24, 165, 110, 110, PDF_CONTENT_WIDTH - 409],
-    { fontSize: 7.5, padding: 4.5 },
+      { text: `${row.item_name}${row.item_sku ? ` · ${row.item_sku}` : ''}` },
+    ]
+    if (!sharedRoute) common.push({ text: `${place(row, 'source')} → ${place(row, 'destination')}` })
+    common.push({ text: `${number.format(row.quantity)}${row.item_unit ? ` ${row.item_unit}` : ''}`, bold: true, align: 'right' })
+    return common
+  })
+  layout.table(
+    itemHeaders,
+    itemRows,
+    sharedRoute ? [24, 380, PDF_CONTENT_WIDTH - 404] : [24, 205, 205, PDF_CONTENT_WIDTH - 434],
+    { fontSize: 7, headerFontSize: 7, padding: 3.1 },
   )
-  layout.paragraph(`Total: ${number.format(rows.reduce((sum, row) => sum + Number(row.quantity || 0), 0))} across ${rows.length} ${rows.length === 1 ? 'line' : 'lines'}.`, { bold: true, align: 'right' })
 
-  layout.section('Transport details')
-  layout.kvTable([
-    ['Transporter', first.transporter_name || '-'],
-    ['Vehicle number', first.vehicle_number || '-'],
-    ['Driver', [first.driver_name, first.driver_phone].filter(Boolean).join(' · ') || '-'],
-    ['E-way bill number', first.eway_bill_number || '-'],
-    ['Generated', displayDate(first.created_at, true)],
-    ['Prepared by', preparedBy || 'System user'],
-  ])
-  if (first.note) layout.note(first.note)
+  const transport = [
+    first.transporter_name && `Transporter: ${first.transporter_name}`,
+    first.vehicle_number && `Vehicle: ${first.vehicle_number}`,
+    first.driver_name && `Driver: ${[first.driver_name, first.driver_phone].filter(Boolean).join(' · ')}`,
+    first.eway_bill_number && `E-way bill: ${first.eway_bill_number}`,
+  ].filter(Boolean).join('   |   ')
+  if (transport) layout.paragraph(transport, { fontSize: 7.2 })
+  if (first.note) layout.paragraph(`Note: ${first.note}`, { fontSize: 7.2 })
 
-  layout.section('Acknowledgement')
   layout.twoBoxes([
-    { title: 'Issued by', lines: [companyName || 'Company', 'Name / signature: ____________________'] },
-    { title: 'Received by', lines: [first.partner_name || first.customer_name || 'Receiver', 'Name / signature: ____________________'] },
+    { title: 'Issued by', lines: [[companyName || 'Company', preparedBy].filter(Boolean).join(' · '), 'Signature: ____________________'] },
+    { title: 'Received by', lines: [first.partner_name || first.customer_name || 'Receiver', 'Signature: ____________________'] },
   ])
 
   return buildPdfBlobFromStreams(layout.finish(), 'ERP-INVENTORY-CHALLAN')

@@ -26,6 +26,7 @@ export const getInventoryMovements = (options: { movementType?: string; status?:
   if (options.query?.trim()) params.set('q', options.query.trim())
   return apiRequest(`/inventory/movements?${params.toString()}`)
 }
+export const getInventoryChallanMovements = (movementId: string): Promise<InventoryMovement[]> => apiRequest(`/inventory/movements/${apiSegment(movementId)}/challan`)
 export const reverseInventoryMovement = (id: string, reason: string): Promise<InventoryMovement> => apiRequest(`/inventory/movements/${apiSegment(id)}/reverse`, { method: 'POST', body: { reason } })
 export const correctInventoryMovement = (id: string, quantity: number, reason: string): Promise<InventoryMovement> => apiRequest(`/inventory/movements/${apiSegment(id)}/correct`, { method: 'POST', body: { quantity, reason } })
 export const getPricingBook = (): Promise<PricingBook> => apiRequest('/pricing')

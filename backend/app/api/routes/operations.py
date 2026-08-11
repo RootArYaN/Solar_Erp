@@ -124,6 +124,18 @@ def get_inventory_movements(
     )
 
 
+@router.get('/inventory/movements/{movement_id}/challan', response_model=list[InventoryMovementSummary])
+def get_inventory_movement_challan(
+    movement_id: str,
+    db: Session = Depends(get_db),
+    session: CurrentSession = Depends(require_any_permissions('inventory.view', 'inventory.manage')),
+):
+    try:
+        return operations_service.get_inventory_challan_movements(db, session, movement_id)
+    except OperationsServiceError as exc:
+        _raise(exc)
+
+
 @router.post('/inventory/movements/{movement_id}/reverse', response_model=InventoryMovementSummary, status_code=201)
 def reverse_inventory_movement(
     movement_id: str,

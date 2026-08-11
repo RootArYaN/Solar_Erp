@@ -21,18 +21,43 @@ function readBlob(blob: Blob) {
 }
 
 describe('inventory challan PDF', () => {
-  it('includes the challan, item, route and transport details', async () => {
-    const blob = createInventoryChallanPdf([movement], 'Solar EPC', 'Admin User')
+  it('includes every item from one challan in a compact document', async () => {
+    const secondMovement: InventoryMovement = {
+      ...movement,
+      id: 'movement-2',
+      item_id: 'item-2',
+      item_name: 'Solar inverter',
+      item_sku: 'INV-5K',
+      quantity: 1,
+    }
+    const blob = createInventoryChallanPdf([movement, secondMovement], 'Solar EPC', 'Admin User')
     expect(blob?.type).toBe('application/pdf')
     const source = await readBlob(blob as Blob)
     expect(source).toContain('%ERP-INVENTORY-CHALLAN')
     expect(source).toContain('CH-2026/001')
     expect(source).toContain('Solar panel')
+    expect(source).toContain('Solar inverter')
     expect(source).toContain('Customer site')
     expect(source).toContain('GJ01AB1234')
+    expect(source).not.toContain('TRANSPORT DETAILS')
+    expect(source).not.toContain('Generated')
   })
 
   it('creates a filesystem-safe filename', () => {
     expect(inventoryChallanFileName('CH-2026/001')).toBe('CH-2026-001.pdf')
+  })
+
+  it('keeps thirty short inventory lines on one page', async () => {
+    const rows = Array.from({ length: 30 }, (_, index): InventoryMovement => ({
+      ...movement,
+      id: `movement-${index + 1}`,
+      item_id: `item-${index + 1}`,
+      item_name: `Inventory item ${index + 1}`,
+      item_sku: `SKU-${index + 1}`,
+      quantity: index + 1,
+    }))
+
+    const source = await readBlob(createInventoryChallanPdf(rows, 'Solar EPC', 'Admin User') as Blob)
+    expect(source.match(/\/Type \/Page\b/g)).toHaveLength(1)
   })
 })

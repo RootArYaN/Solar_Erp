@@ -494,6 +494,48 @@ def list_inventory_movements(
     )
 
 
+def get_inventory_challan_movements(
+    db: Session,
+    actor: CurrentSession,
+    movement_id: str,
+) -> list[InventoryMovementSummary]:
+    scope_filter = operational_reference_filter(
+        actor.membership.company_id,
+        customer_column=InventoryMovement.customer_id,
+        project_column=InventoryMovement.project_id,
+    )
+    movement = db.scalar(
+        select(InventoryMovement).where(
+            InventoryMovement.id == movement_id,
+            InventoryMovement.company_id == actor.membership.company_id,
+            scope_filter,
+        )
+    )
+    if not movement:
+        raise OperationsNotFoundError('Inventory movement not found')
+
+    if movement.movement_group_id:
+        challan_filter = InventoryMovement.movement_group_id == movement.movement_group_id
+    elif movement.challan_id:
+        challan_filter = InventoryMovement.challan_id == movement.challan_id
+    elif movement.reference_number:
+        # Legacy individual movements may only have the printed challan number.
+        challan_filter = InventoryMovement.reference_number == movement.reference_number
+    else:
+        challan_filter = InventoryMovement.id == movement.id
+
+    rows = list(db.scalars(
+        select(InventoryMovement)
+        .where(
+            InventoryMovement.company_id == actor.membership.company_id,
+            scope_filter,
+            challan_filter,
+        )
+        .order_by(InventoryMovement.created_at.asc(), InventoryMovement.id.asc())
+    ).all())
+    return _movement_summaries(db, rows)
+
+
 def create_location(db: Session, actor: CurrentSession, payload: CreateInventoryLocationRequest) -> InventoryLocationSummary:
     row = InventoryLocation(company_id=actor.membership.company_id, name=payload.name.strip(), location_type=payload.location_type.strip(), address=payload.address.strip())
     db.add(row)

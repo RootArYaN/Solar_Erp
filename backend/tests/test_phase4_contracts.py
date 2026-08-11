@@ -19,6 +19,7 @@ def test_openapi_contains_expected_api_surface():
     assert '/api/v1/auth/login' in paths
     assert '/api/v1/auth/refresh' in paths
     assert '/api/v1/auth/logout' in paths
+    assert '/api/v1/inventory/movements/{movement_id}/challan' in paths
 
 
 def test_production_docs_are_not_part_of_api_contract():
