@@ -57,6 +57,7 @@ class FlowCustomer(FlowEntity):
     completed_at: datetime | None = None
     archived_at: datetime | None = None
     deleted_at: datetime | None = None
+    deleted_actor_name: str = ""
 
 
 class FlowSite(FlowEntity):

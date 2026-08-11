@@ -65,6 +65,7 @@ class InventoryMovementSummary(BaseModel):
     reversed_movement_id: str | None = None
     correction_of_movement_id: str | None = None
     reason: str = ''
+    actor_name: str = 'System'
     is_reversed: bool = False
     corrected_quantity: float | None = None
     related_movement_id: str | None = None

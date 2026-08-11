@@ -6,7 +6,7 @@ import json
 from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import exists, func, or_, select
 from sqlalchemy.orm import Session
 
 
@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from app.api.deps import CurrentSession
 
 from app.core.request_context import request_id_var
+from app.models.auth import User
 from app.models.system import AuditEvent
 from app.schemas.audit import AuditEventList, AuditEventSummary
 from app.services.access_service import AccessError, get_customer, get_project
@@ -23,6 +24,16 @@ class AuditServiceError(Exception):
     def __init__(self, message: str, status_code: int = 400):
         super().__init__(message)
         self.status_code = status_code
+
+
+def _audit_actor_names(db: Session, rows: list[AuditEvent]) -> dict[str, str]:
+    user_ids = {row.user_id for row in rows if row.user_id}
+    if not user_ids:
+        return {}
+    return {
+        user.id: user.full_name
+        for user in db.scalars(select(User).where(User.id.in_(user_ids))).all()
+    }
 
 
 def write_event(
@@ -99,6 +110,14 @@ def list_events(
             func.lower(AuditEvent.entity).like(like),
             func.lower(AuditEvent.entity_id).like(like),
             func.lower(AuditEvent.user_role).like(like),
+            exists(select(User.id).where(
+                User.id == AuditEvent.user_id,
+                or_(
+                    func.lower(User.full_name).like(like),
+                    func.lower(User.username).like(like),
+                    func.lower(User.email).like(like),
+                ),
+            )),
         ))
 
     total = db.scalar(select(func.count()).select_from(AuditEvent).where(*filters)) or 0
@@ -110,6 +129,7 @@ def list_events(
         .limit(page_size)
     ).all())
 
+    actor_names = _audit_actor_names(db, rows)
     data: list[AuditEventSummary] = []
     for row in rows:
         try:
@@ -125,6 +145,7 @@ def list_events(
             customer_id=row.customer_id,
             user_id=row.user_id,
             user_role=row.user_role,
+            actor_name=actor_names.get(row.user_id, "System"),
             changes=changes if isinstance(changes, dict) else {},
             request_id=row.request_id,
             created_at=row.created_at,

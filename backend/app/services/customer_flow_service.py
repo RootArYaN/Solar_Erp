@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import CurrentSession
 from app.models.agent import AgentCustomer, AgentProfile
+from app.models.auth import Membership, User
 from app.models.finance import Bill, CustomerLoan, FinanceTransaction, FinancialAccount
 from app.models.operations import GeneratedDocumentPack, InventoryMovement
 from app.models.system import AuditEvent, StoredFile
@@ -120,6 +121,7 @@ def _customer_summary(
     customer: AgentCustomer,
     payment_mode: str = "",
     profile: AgentProfile | None = None,
+    deleted_actor_name: str = "",
 ) -> FlowCustomer:
     site_address = customer.site_address or customer.address
     billing_address = customer.billing_address or site_address
@@ -147,6 +149,7 @@ def _customer_summary(
         completed_at=customer.completed_at,
         archived_at=customer.archived_at,
         deleted_at=customer.deleted_at,
+        deleted_actor_name=deleted_actor_name,
     )
 
 
@@ -417,6 +420,17 @@ def list_customers(
         profile.id: profile
         for profile in db.scalars(select(AgentProfile).where(AgentProfile.id.in_(profile_ids))).all()
     } if profile_ids else {}
+    deleted_membership_ids = {
+        customer.deleted_by for customer in customers if include_deleted and customer.deleted_by
+    }
+    deleted_actor_names = {
+        membership_id: full_name
+        for membership_id, full_name in db.execute(
+            select(Membership.id, User.full_name)
+            .join(User, User.id == Membership.user_id)
+            .where(Membership.id.in_(deleted_membership_ids))
+        ).all()
+    } if deleted_membership_ids else {}
     sync_cursor = max((customer.updated_at for customer in customers), default=datetime.now(UTC)).isoformat()
     return CustomerFlowList(
         items=[
@@ -424,6 +438,7 @@ def list_customers(
                 customer,
                 payment_modes.get(customer.id, ''),
                 profiles.get(customer.agent_profile_id),
+                deleted_actor_names.get(customer.deleted_by, ''),
             )
             for customer in customers
         ],

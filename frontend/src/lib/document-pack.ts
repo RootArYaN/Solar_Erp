@@ -1,5 +1,5 @@
 export type { DocumentPackInput, DocumentPackTab, DocumentPackTemplate } from './document-pack/types'
-export { documentTabs, defaultDocumentPackTemplate, normalizeDocumentPackTemplate } from './document-pack/template'
+export { DEFAULT_DOCUMENT_COMPANY_NAME, documentTabs, defaultDocumentPackTemplate, normalizeDocumentPackTemplate } from './document-pack/template'
 export { documentPackFilePrefix, renderDocumentHtml, renderFullDocumentHtml, validateDocumentPack } from './document-pack/html'
 export { createDocumentPackPdf, downloadDocumentPackPdf } from './document-pack/pdf'
 export { downloadDocumentWord, downloadQuotationCsv, printDocumentPack } from './document-pack/exporters'

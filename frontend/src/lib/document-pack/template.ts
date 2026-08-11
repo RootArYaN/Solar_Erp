@@ -1,5 +1,7 @@
 import type { DocumentPackTab, DocumentPackTemplate } from './types'
 
+export const DEFAULT_DOCUMENT_COMPANY_NAME = 'Shree Enterprise'
+
 export const documentTabs: Array<{ key: Exclude<DocumentPackTab, 'full'>; label: string; file: string }> = [
   { key: 'feasibility', label: 'Feasibility Report', file: '1_Feasibility_Report' },
   { key: 'estimate', label: 'Bank Estimate', file: '2_Bank_Estimate' },
@@ -69,8 +71,8 @@ export const secondPartyActivities = [
 ]
 
 export const defaultDocumentPackTemplate: DocumentPackTemplate = {
-  company_name: '',
-  brand_name: '',
+  company_name: DEFAULT_DOCUMENT_COMPANY_NAME,
+  brand_name: DEFAULT_DOCUMENT_COMPANY_NAME,
   address: '',
   gstin: '',
   phone: '',

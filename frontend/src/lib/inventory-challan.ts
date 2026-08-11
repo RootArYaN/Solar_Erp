@@ -5,7 +5,7 @@ import {
   PDF_CONTENT_WIDTH,
   type PdfCell,
 } from './document-pack/pdf'
-import { defaultDocumentPackTemplate } from './document-pack/template'
+import { DEFAULT_DOCUMENT_COMPANY_NAME, defaultDocumentPackTemplate } from './document-pack/template'
 import type { DocumentPackInput, DocumentPackTemplate } from './document-pack/types'
 
 const date = new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium' })
@@ -21,6 +21,21 @@ function place(row: InventoryMovement, side: 'source' | 'destination') {
   return side === 'source'
     ? row.source_location_name || row.source_location_manual || '-'
     : row.destination_location_name || row.destination_location_manual || '-'
+}
+
+export function inventoryChallanRoute(row: InventoryMovement) {
+  if (row.movement_type === 'outward') {
+    return { from: DEFAULT_DOCUMENT_COMPANY_NAME, to: place(row, 'destination') }
+  }
+  if (row.movement_type === 'inward') {
+    return { from: place(row, 'source'), to: DEFAULT_DOCUMENT_COMPANY_NAME }
+  }
+  return { from: place(row, 'source'), to: place(row, 'destination') }
+}
+
+function challanPlace(row: InventoryMovement, side: 'source' | 'destination') {
+  const route = inventoryChallanRoute(row)
+  return side === 'source' ? route.from : route.to
 }
 
 function safeFilePart(value: string) {
@@ -52,11 +67,11 @@ function layoutInput(row: InventoryMovement): DocumentPackInput {
   }
 }
 
-function layoutTemplate(companyName: string): DocumentPackTemplate {
+function layoutTemplate(): DocumentPackTemplate {
   return {
     ...defaultDocumentPackTemplate,
-    company_name: companyName || 'Shree EnterPrise',
-    brand_name: companyName || 'Shree Enterprise',
+    company_name: DEFAULT_DOCUMENT_COMPANY_NAME,
+    brand_name: DEFAULT_DOCUMENT_COMPANY_NAME,
     footer: 'Inventory challan · System generated',
   }
 }
@@ -65,12 +80,12 @@ export function inventoryChallanFileName(referenceNumber: string) {
   return `${safeFilePart(referenceNumber) || 'inventory-challan'}.pdf`
 }
 
-export function createInventoryChallanPdf(rows: InventoryMovement[], companyName: string, preparedBy = '') {
+export function createInventoryChallanPdf(rows: InventoryMovement[], _companyName: string, preparedBy = '') {
   if (!rows.length) return null
   const first = rows[0]
-  const layout = new DocumentPackPdfLayout(layoutInput(first), layoutTemplate(companyName))
+  const layout = new DocumentPackPdfLayout(layoutInput(first), layoutTemplate())
   const movementLabel = first.movement_type.replaceAll('_', ' ')
-  const routes = rows.map((row) => `${place(row, 'source')} → ${place(row, 'destination')}`)
+  const routes = rows.map((row) => `${challanPlace(row, 'source')} → ${challanPlace(row, 'destination')}`)
   const sharedRoute = routes.every((route) => route === routes[0])
 
   layout.beginDocument('Inventory Challan', `${movementLabel.toUpperCase()} · ${first.reference_number}`)
@@ -91,9 +106,9 @@ export function createInventoryChallanPdf(rows: InventoryMovement[], companyName
   if (sharedRoute) {
     detailRows.push([
       { text: 'From', bold: true, fill: '#eef3f8' },
-      { text: place(first, 'source') },
+      { text: challanPlace(first, 'source') },
       { text: 'To', bold: true, fill: '#eef3f8' },
-      { text: place(first, 'destination') },
+      { text: challanPlace(first, 'destination') },
     ])
   }
   layout.table(null, detailRows, [64, 170, 54, PDF_CONTENT_WIDTH - 288], { fontSize: 7.4, padding: 3.4 })
@@ -106,7 +121,7 @@ export function createInventoryChallanPdf(rows: InventoryMovement[], companyName
       { text: String(index + 1), align: 'center' },
       { text: `${row.item_name}${row.item_sku ? ` · ${row.item_sku}` : ''}` },
     ]
-    if (!sharedRoute) common.push({ text: `${place(row, 'source')} → ${place(row, 'destination')}` })
+    if (!sharedRoute) common.push({ text: `${challanPlace(row, 'source')} → ${challanPlace(row, 'destination')}` })
     common.push({ text: `${number.format(row.quantity)}${row.item_unit ? ` ${row.item_unit}` : ''}`, bold: true, align: 'right' })
     return common
   })
@@ -127,7 +142,7 @@ export function createInventoryChallanPdf(rows: InventoryMovement[], companyName
   if (first.note) layout.paragraph(`Note: ${first.note}`, { fontSize: 7.2 })
 
   layout.twoBoxes([
-    { title: 'Issued by', lines: [[companyName || 'Company', preparedBy].filter(Boolean).join(' · '), 'Signature: ____________________'] },
+    { title: 'Issued by', lines: [[DEFAULT_DOCUMENT_COMPANY_NAME, preparedBy].filter(Boolean).join(' · '), 'Signature: ____________________'] },
     { title: 'Received by', lines: [first.partner_name || first.customer_name || 'Receiver', 'Signature: ____________________'] },
   ])
 

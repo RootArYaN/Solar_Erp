@@ -13,6 +13,7 @@ class AuditEventSummary(BaseModel):
     customer_id: str | None
     user_id: str | None
     user_role: str
+    actor_name: str = "System"
     changes: dict[str, Any]
     request_id: str
     created_at: datetime

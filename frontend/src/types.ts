@@ -337,6 +337,7 @@ export type AuditEvent = {
   customer_id: string | null
   user_id: string | null
   user_role: string
+  actor_name?: string
   changes: Record<string, unknown>
   request_id: string
   created_at: string

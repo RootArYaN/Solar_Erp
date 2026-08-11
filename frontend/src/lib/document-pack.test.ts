@@ -39,6 +39,13 @@ function readBlob(blob: Blob) {
 }
 
 describe('document pack template content', () => {
+  it('defaults the displayed company and brand to Shree Enterprise', () => {
+    const template = normalizeDocumentPackTemplate({})
+    expect(template.company_name).toBe('Shree Enterprise')
+    expect(template.brand_name).toBe('Shree Enterprise')
+    expect(renderDocumentHtml('quotation', input, template)).toContain('Shree Enterprise')
+  })
+
   it('uses saved document wording, specifications, and signature settings', () => {
     const template = normalizeDocumentPackTemplate({
       company_name: 'Solar EPC',

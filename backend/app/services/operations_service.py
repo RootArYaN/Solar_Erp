@@ -22,6 +22,7 @@ if TYPE_CHECKING:
 
 from app.core.concurrency import RecordConflictError, verify_version
 from app.models.agent import AgentCustomer
+from app.models.auth import Membership, User
 from app.models.operations import (
     DocumentTemplate,
     GeneratedDocumentPack,
@@ -33,7 +34,7 @@ from app.models.operations import (
     PricingBook,
     PricingItem,
 )
-from app.models.system import StoredFile
+from app.models.system import AuditEvent, StoredFile
 from app.models.workflow import CustomerProject, CustomerQuotation
 from app.schemas.operations import (
     CreateInventoryMovementBatchRequest,
@@ -74,6 +75,9 @@ class OperationsNotFoundError(OperationsServiceError):
 
 class OperationsConflictError(OperationsServiceError):
     status_code = 409
+
+
+DEFAULT_DOCUMENT_COMPANY_NAME = 'Shree Enterprise'
 
 
 def _customer_document_slot(row: StoredFile) -> str:
@@ -571,6 +575,48 @@ def _balance(db: Session, company_id: str, item_id: str, location_id: str, creat
     return row
 
 
+def _movement_actor_names(db: Session, rows: list[InventoryMovement]) -> dict[str, str]:
+    row_ids = {row.id for row in rows}
+    company_ids = {row.company_id for row in rows}
+    action_events = list(db.scalars(
+        select(AuditEvent)
+        .where(
+            AuditEvent.company_id.in_(company_ids),
+            AuditEvent.entity == 'inventory_movement',
+            AuditEvent.entity_id.in_(row_ids),
+            AuditEvent.event.in_(('inventory.movement_corrected', 'inventory.movement_reversed')),
+        )
+        .order_by(AuditEvent.created_at.desc())
+    ).all()) if row_ids else []
+    action_by_movement: dict[str, AuditEvent] = {}
+    for event in action_events:
+        action_by_movement.setdefault(event.entity_id, event)
+
+    membership_ids = {row.created_by for row in rows if row.created_by}
+    memberships = {
+        membership.id: membership
+        for membership in db.scalars(select(Membership).where(Membership.id.in_(membership_ids))).all()
+    } if membership_ids else {}
+    user_ids = {event.user_id for event in action_events if event.user_id}
+    user_ids.update(
+        membership.user_id
+        for membership in memberships.values()
+        if membership.user_id
+    )
+    users = {
+        user.id: user.full_name
+        for user in db.scalars(select(User).where(User.id.in_(user_ids))).all()
+    } if user_ids else {}
+
+    result: dict[str, str] = {}
+    for row in rows:
+        action = action_by_movement.get(row.id)
+        membership = memberships.get(row.created_by)
+        user_id = action.user_id if action and action.user_id else membership.user_id if membership else None
+        result[row.id] = users.get(user_id, 'System')
+    return result
+
+
 def _movement_summaries(db: Session, rows: list[InventoryMovement]) -> list[InventoryMovementSummary]:
     row_ids = {row.id for row in rows}
     reversal_rows = list(db.scalars(
@@ -590,6 +636,7 @@ def _movement_summaries(db: Session, rows: list[InventoryMovement]) -> list[Inve
     locations = {row.id: row for row in db.scalars(select(InventoryLocation).where(InventoryLocation.id.in_(location_ids))).all()} if location_ids else {}
     projects = {row.id: row for row in db.scalars(select(CustomerProject).where(CustomerProject.id.in_(project_ids))).all()} if project_ids else {}
     customers = {row.id: row for row in db.scalars(select(AgentCustomer).where(AgentCustomer.id.in_(customer_ids))).all()} if customer_ids else {}
+    actor_names = _movement_actor_names(db, rows)
     result = []
     for row in rows:
         result.append(InventoryMovementSummary(
@@ -624,6 +671,7 @@ def _movement_summaries(db: Session, rows: list[InventoryMovement]) -> list[Inve
             reversed_movement_id=row.reversed_movement_id,
             correction_of_movement_id=row.correction_of_movement_id,
             reason=row.reason,
+            actor_name=actor_names.get(row.id, 'System'),
             is_reversed=row.id in reversed_ids,
             corrected_quantity=_f(correction_by_original[row.id].quantity) if row.id in correction_by_original else None,
             related_movement_id=(
@@ -1100,12 +1148,21 @@ def set_poster_status(db: Session, actor: CurrentSession, poster_id: str, status
 
 
 def _default_document_template_settings(actor: CurrentSession, template_type: str) -> dict[str, str]:
-    company_name = actor.membership.company.name
     return {
-        'company_name': company_name, 'brand_name': company_name, 'address': '', 'gstin': '',
+        'company_name': DEFAULT_DOCUMENT_COMPANY_NAME, 'brand_name': DEFAULT_DOCUMENT_COMPANY_NAME, 'address': '', 'gstin': '',
         'phone': '', 'email': '', 'bank_details': '', 'quotation_notes': '',
         'agreement_wording': '', 'footer': '', 'terms': '',
     }
+
+
+def _normalize_document_template_identity(settings: dict[str, object], actor: CurrentSession) -> dict[str, object]:
+    normalized = dict(settings)
+    legacy_default = actor.membership.company.name.strip()
+    for key in ('company_name', 'brand_name'):
+        value = normalized.get(key)
+        if not isinstance(value, str) or not value.strip() or value.strip() == legacy_default:
+            normalized[key] = DEFAULT_DOCUMENT_COMPANY_NAME
+    return normalized
 
 
 def get_template(db: Session, actor: CurrentSession, template_type: str)->DocumentTemplateSummary:
@@ -1117,6 +1174,7 @@ def get_template(db: Session, actor: CurrentSession, template_type: str)->Docume
     except json.JSONDecodeError: settings={}
     if not isinstance(settings, dict):
         settings = {}
+    settings = _normalize_document_template_identity(settings, actor)
     return DocumentTemplateSummary(id=row.id,template_type=row.template_type,name=row.name,settings=settings,is_active=row.is_active,updated_at=row.updated_at)
 
 
@@ -1124,7 +1182,8 @@ def save_template(db: Session, actor: CurrentSession, template_type: str, payloa
     row=db.scalar(select(DocumentTemplate).where(DocumentTemplate.company_id==actor.membership.company_id,DocumentTemplate.template_type==template_type))
     if not row:
         row=DocumentTemplate(company_id=actor.membership.company_id,template_type=template_type,name=payload.name,settings_json='{}',is_active=True,updated_by=actor.membership.id); db.add(row)
-    row.name=payload.name; row.settings_json=json.dumps(payload.settings,separators=(',',':')); row.updated_by=actor.membership.id
+    normalized_settings = _normalize_document_template_identity(payload.settings, actor)
+    row.name=payload.name; row.settings_json=json.dumps(normalized_settings,separators=(',',':')); row.updated_by=actor.membership.id
     db.flush(); write_event(db,company_id=row.company_id,event='document_template.updated',entity='document_template',entity_id=row.id,actor=actor,changes={'template_type':template_type}); db.commit(); return get_template(db,actor,template_type)
 
 

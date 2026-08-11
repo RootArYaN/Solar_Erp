@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { InventoryMovement } from '../erp-types'
-import { createInventoryChallanPdf, inventoryChallanFileName } from './inventory-challan'
+import { createInventoryChallanPdf, inventoryChallanFileName, inventoryChallanRoute } from './inventory-challan'
 
 const movement: InventoryMovement = {
   id: 'movement-1', item_id: 'item-1', item_name: 'Solar panel', item_sku: 'PV-550', item_unit: 'Nos',
@@ -38,6 +38,8 @@ describe('inventory challan PDF', () => {
     expect(source).toContain('Solar panel')
     expect(source).toContain('Solar inverter')
     expect(source).toContain('Customer site')
+    expect(source).toContain('Shree Enterprise')
+    expect(source).not.toContain('Main warehouse')
     expect(source).toContain('GJ01AB1234')
     expect(source).not.toContain('TRANSPORT DETAILS')
     expect(source).not.toContain('Generated')
@@ -45,6 +47,26 @@ describe('inventory challan PDF', () => {
 
   it('creates a filesystem-safe filename', () => {
     expect(inventoryChallanFileName('CH-2026/001')).toBe('CH-2026-001.pdf')
+  })
+
+  it('uses Shree Enterprise on the correct side of inward and outward challans', () => {
+    expect(inventoryChallanRoute(movement)).toEqual({
+      from: 'Shree Enterprise',
+      to: 'Customer site',
+    })
+    expect(inventoryChallanRoute({
+      ...movement,
+      movement_type: 'inward',
+      source_location_id: null,
+      source_location_name: '',
+      source_location_manual: 'Panel supplier',
+      destination_location_id: 'warehouse-1',
+      destination_location_name: 'Main warehouse',
+      destination_location_manual: '',
+    })).toEqual({
+      from: 'Panel supplier',
+      to: 'Shree Enterprise',
+    })
   })
 
   it('keeps thirty short inventory lines on one page', async () => {

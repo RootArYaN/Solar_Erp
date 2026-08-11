@@ -198,6 +198,7 @@ export type InventoryMovement = {
   reversed_movement_id?: string | null
   correction_of_movement_id?: string | null
   reason?: string
+  actor_name?: string
   is_reversed?: boolean
   corrected_quantity?: number | null
   related_movement_id?: string | null

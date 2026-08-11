@@ -59,6 +59,7 @@ export type Customer = EntityBase & {
   completed_at?: UTCTimestamp | null
   archived_at?: UTCTimestamp | null
   deleted_at?: UTCTimestamp | null
+  deleted_actor_name?: string
 }
 
 export type SiteStatus = 'survey_pending' | 'surveyed' | 'quotation_ready' | 'approved' | 'converted'
